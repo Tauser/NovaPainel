@@ -1,0 +1,12 @@
+{
+  "id": "sonoff_sala",
+  "name": "Sala",
+  "kind": "sonoff",
+  "online": true,
+  "channels": [
+    { "id": 1, "name": "Luz Principal", "on": true },
+    { "id": 2, "name": "Sanca", "on": false },
+    { "id": 3, "name": "Spot", "on": true }
+  ],
+  "lastSeen": 1781820060000
+}

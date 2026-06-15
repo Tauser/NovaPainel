@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novapainel.local/schemas/notification.schema.json",
+  "title": "Notification",
+  "description": "Notificacao do sistema ou do usuario.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "level", "category", "title", "timestamp"],
+  "properties": {
+    "id": { "type": "integer", "description": "Identificador incremental." },
+    "level": { "type": "string", "enum": ["INFO", "SUCCESS", "WARNING", "DANGER", "SILENT"] },
+    "category": { "type": "string", "enum": ["system", "agenda", "alarm", "market", "weather", "device", "network"] },
+    "title": { "type": "string" },
+    "body": { "type": "string", "default": "" },
+    "read": { "type": "boolean", "default": false },
+    "timestamp": { "type": "integer", "description": "Unix epoch em milissegundos." }
+  }
+}

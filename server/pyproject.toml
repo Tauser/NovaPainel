@@ -1,0 +1,16 @@
+[project]
+name = "novapainel-server"
+version = "0.0.1"
+description = "NovaPainel optional/future server (placeholder). The firmware does not depend on it."
+requires-python = ">=3.10"
+dependencies = []  # intentionally empty - no FastAPI/etc. yet
+
+[project.scripts]
+novapainel-server = "novapainel_server.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

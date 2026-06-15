@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novapainel.local/schemas/device_state.schema.json",
+  "title": "DeviceState",
+  "description": "Estado de um dispositivo controlavel. Contrato FUTURO (Sonoff/automacao - roadmap). Sem implementacao no MVP.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "online"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "kind": { "type": "string", "enum": ["sonoff", "tv", "sensor", "generic"] },
+    "online": { "type": "boolean" },
+    "channels": {
+      "type": "array",
+      "description": "Canais (ex.: Sonoff TX3C tem 3).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "on"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "on": { "type": "boolean" }
+        }
+      }
+    },
+    "lastSeen": { "type": "integer", "description": "Unix epoch em milissegundos." }
+  }
+}

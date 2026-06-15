@@ -1,0 +1,21 @@
+# ESP-IDF / firmware build artifacts
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+**/build/
+
+# Python
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.egg-info/
+
+# OS / editores
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log

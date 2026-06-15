@@ -1,0 +1,18 @@
+# NovaPainel firmware - default sdkconfig.
+# Preliminary values; final tuning happens after Fase 0 hardware bring-up.
+
+# Target is set via `idf.py set-target esp32p4`.
+
+# Give the main task a comfortable stack for C++ / std::function usage.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# C++: keep RTTI off (smaller). Exceptions left at IDF default (off) - the code
+# uses Result<T>/Status instead of throwing.
+CONFIG_COMPILER_CXX_RTTI=n
+
+# Custom partition table (see partitions.csv). Marked preliminary in HARDWARE.md.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Default log level INFO.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

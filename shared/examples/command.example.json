@@ -1,0 +1,8 @@
+{
+  "id": "8f2b1c10-0e3a-4a2e-9b1a-7c5d2e4f6a01",
+  "type": "system",
+  "target": "ui",
+  "action": "setScreen",
+  "params": { "screen": "Home" },
+  "timestamp": 1781820060000
+}

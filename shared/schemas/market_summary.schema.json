@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novapainel.local/schemas/market_summary.schema.json",
+  "title": "MarketSummary",
+  "description": "Snapshot de mercado exibido na Home e na tela Mercado.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["btcUsd", "usdBrl", "btcChange24h", "timestamp"],
+  "properties": {
+    "btcUsd": { "type": "number", "description": "Preco do BTC em USD." },
+    "usdBrl": { "type": "number", "description": "Cotacao USD/BRL." },
+    "btcChange24h": { "type": "number", "description": "Variacao percentual do BTC em 24h." },
+    "currency": { "type": "string", "default": "usd", "description": "Moeda base do snapshot." },
+    "source": { "type": "string", "enum": ["coingecko", "mock", "cache"], "description": "Origem dos dados." },
+    "stale": { "type": "boolean", "default": false, "description": "true quando servido do cache." },
+    "timestamp": { "type": "integer", "description": "Unix epoch em milissegundos." }
+  }
+}

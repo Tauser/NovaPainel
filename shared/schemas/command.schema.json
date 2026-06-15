@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novapainel.local/schemas/command.schema.json",
+  "title": "Command",
+  "description": "Comando emitido pela UI ou pelo server para um alvo (sistema, cena ou dispositivo). Parte do contrato e de roadmap futuro.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "target", "action", "timestamp"],
+  "properties": {
+    "id": { "type": "string", "description": "UUID/identificador unico do comando." },
+    "type": { "type": "string", "enum": ["system", "ui", "scene", "device"] },
+    "target": { "type": "string", "description": "Identificador do alvo (ex.: device id, scene id)." },
+    "action": { "type": "string", "description": "Acao a executar (ex.: turnOn, turnOff, toggle, setScreen)." },
+    "params": { "type": "object", "description": "Parametros opcionais da acao.", "additionalProperties": true },
+    "timestamp": { "type": "integer", "description": "Unix epoch em milissegundos." }
+  }
+}
