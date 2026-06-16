@@ -1,14 +1,13 @@
 # NovaPainel - Roadmap
 
-> Estado atual: **Fase 1 concluída** (organização do monorepo) e **Fase 2 em
-> andamento** (firmware core com mocks). LVGL, BSP real, rede e APIs reais ainda
-> não implementados, por decisão.
+> Estado atual: **Fase 2 concluída** (firmware core com mocks). LVGL, BSP real,
+> rede e APIs reais ainda não implementados, por decisão.
 
 ```text
 Fase 0  - Risk Gates de hardware (C6/ESP-Hosted, SDIO, Wi-Fi, HTTPS, NTP,
           WebSocket, SD+Wi-Fi, PSRAM, display/touch, RTC, partições)
 Fase 1  - Organização do monorepo                                  [feito]
-Fase 2  - Firmware core com mocks                                  [em andamento]
+Fase 2  - Firmware core com mocks                                  [feito]
 Fase 3  - Board real / BSP
 Fase 4  - Display/touch/LVGL real
 Fase 5  - Wi-Fi/NTP/HTTPS/CoinGecko snapshot

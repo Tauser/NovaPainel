@@ -27,7 +27,17 @@ void ClockService::tick(uint32_t now_ms) {
     if (now_ms - last_tick_ms_ < 1000u) return;  // advance once per second
     last_tick_ms_ += 1000u;
 
-    if (++clock_.second >= 60) { clock_.second = 0; if (++clock_.minute >= 60) { clock_.minute = 0; ++clock_.hour %= 24; } }
+    if (++clock_.second >= 60) {
+        clock_.second = 0;
+        if (++clock_.minute >= 60) {
+            clock_.minute = 0;
+            if (++clock_.hour >= 24) {
+                clock_.hour = 0;
+                ++clock_.day;
+                clock_.weekday = (clock_.weekday + 1) % 7;
+            }
+        }
+    }
     clock_.last_update_ms = now_ms;
     store_.set_clock(clock_);
 }

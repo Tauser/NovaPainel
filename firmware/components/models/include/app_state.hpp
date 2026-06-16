@@ -36,14 +36,18 @@ struct ClockState {
     uint32_t last_update_ms{0};
 };
 
+// Origin of a market snapshot. Matches shared/schemas/market_summary.json "source".
+enum class DataSource { Live, Cache, Mock };
+
 // Market snapshot shown on Home / Market. Matches shared/schemas/market_summary.
 struct MarketSummary {
-    double   btc_usd{0.0};
-    double   usd_brl{0.0};
-    double   btc_change_24h{0.0};   // percent
-    bool     valid{false};
-    bool     stale{false};          // true when served from cache
-    uint32_t last_update_ms{0};
+    double     btc_usd{0.0};
+    double     usd_brl{0.0};
+    double     btc_change_24h{0.0};   // percent
+    bool       valid{false};
+    bool       stale{false};          // true when served from cache
+    DataSource source{DataSource::Mock};
+    uint32_t   last_update_ms{0};
 };
 
 // Hardware / runtime readiness flags. Filled by the Board + core during boot.

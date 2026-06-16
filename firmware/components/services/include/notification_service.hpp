@@ -24,6 +24,7 @@ struct Notification {
     NotificationCategory category{NotificationCategory::System};
     std::string          title;
     std::string          body;
+    bool                 read{false};
     uint32_t             created_ms{0};
 };
 

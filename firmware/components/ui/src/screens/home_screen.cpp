@@ -28,8 +28,11 @@ void HomeScreen::render(const AppState& s) {
              c.hour, c.minute, c.second, weekday_name(c.weekday), c.day,
              c.month, c.year, c.synced ? "" : "   [hora nao sincronizada]");
     if (m.valid) {
+        const char* src = (m.source == DataSource::Cache) ? "  [cache]"
+                        : (m.source == DataSource::Mock)  ? "  [mock]"
+                        : "";
         ESP_LOGI(kTag, "| BTC: $%.0f  (%+.1f%% 24h)%s", m.btc_usd,
-                 m.btc_change_24h, m.stale ? "  [cache]" : "");
+                 m.btc_change_24h, src);
         ESP_LOGI(kTag, "| USD/BRL: R$ %.2f", m.usd_brl);
     } else {
         ESP_LOGI(kTag, "| Mercado: sem dados ainda");

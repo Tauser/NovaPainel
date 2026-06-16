@@ -4,7 +4,7 @@
 // the StateStore. MVP uses MockMarketProvider; later swapped for CoinGecko REST.
 #pragma once
 
-#include "mock_market_provider.hpp"
+#include "i_market_provider.hpp"
 #include "request_orchestrator.hpp"
 #include "service.hpp"
 #include "state_store.hpp"

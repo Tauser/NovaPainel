@@ -10,6 +10,12 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # uses Result<T>/Status instead of throwing.
 CONFIG_COMPILER_CXX_RTTI=n
 
+# Flash size: partition table requires ~4.1 MB (factory 3 MB + storage 1 MB).
+# ESP32-P4 dev kit ships with 8 MB minimum; update to 16 MB if the real board
+# has a larger chip (confirm in Fase 0 hardware bring-up).
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
 # Custom partition table (see partitions.csv). Marked preliminary in HARDWARE.md.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
