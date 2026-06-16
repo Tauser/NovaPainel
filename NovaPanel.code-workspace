@@ -1,0 +1,38 @@
+{
+  "folders": [
+    {
+      "name": "NovaPanel Firmware (ESP-IDF)",
+      "path": "firmware"
+    },
+    {
+      "name": "NovaPanel Monorepo",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "idf.currentSetup": "C:\\esp\\v5.5.4\\esp-idf",
+    "idf.customExtraVars": {
+      "IDF_TARGET": "esp32p4"
+    },
+    "idf.openOcdConfigs": [
+      "board/esp32p4-builtin.cfg"
+    ],
+    "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+    "clangd.arguments": [
+      "--background-index",
+      "--query-driver=**",
+      "--compile-commands-dir=${workspaceFolder:NovaPanel Firmware (ESP-IDF)}\\build"
+    ],
+    "files.exclude": {
+      "**/.cache": true,
+      "**/build": true,
+      "**/__pycache__": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "espressif.esp-idf-extension",
+      "llvm-vs-code-extensions.vscode-clangd"
+    ]
+  }
+}

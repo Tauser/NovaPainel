@@ -48,6 +48,20 @@ idf.py build
 
 Requer ESP-IDF com suporte a ESP32-P4. Ver `firmware/README.md`.
 
+## VS Code
+
+Para trabalhar no monorepo sem quebrar a extensao ESP-IDF, abra o workspace:
+
+```text
+NovaPanel.code-workspace
+```
+
+Ele mostra a raiz do projeto e tambem `firmware/` como pasta separada. Use a
+pasta **NovaPanel Firmware (ESP-IDF)** para comandos da extensao ESP-IDF
+(build, flash, monitor, target e OpenOCD). Essa pasta fica primeiro no
+workspace de proposito, pois alguns atalhos da extensao ESP-IDF usam a primeira
+pasta como projeto ativo. O target do firmware e `esp32p4`.
+
 ## Licença
 
 A definir.

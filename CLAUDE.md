@@ -1,9 +1,15 @@
 # CLAUDE.md - NovaPainel
 
-Guia para o Claude Code (e humanos) trabalhando neste repositório. Para
-**escopo, requisitos e decisões**, a fonte de verdade é `docs/` — leia
-`docs/PLANEJAMENTO.md` (base v3) e `docs/DECISIONS.md` (ADRs) antes de mudanças
-relevantes. Este arquivo cobre **como** trabalhar no código.
+Guia para o Claude Code (e humanos) trabalhando neste repositório. Este arquivo
+cobre **como** trabalhar no código.
+
+**Ponto de entrada obrigatório para agentes:** leia `AGENTS.md` (skill routing)
+e `skills/novapanel-firmware-workflow/SKILL.md` (workflow padrão e docs a ler)
+antes de qualquer mudança. Para **escopo, requisitos e decisões**, a fonte de
+verdade é `docs/` — leia `docs/PLANEJAMENTO.md` (base v3), `docs/ARCHITECTURE.md`,
+`docs/ROADMAP.md` e `docs/DECISIONS.md` (ADRs) antes de mudanças relevantes.
+Consulte `docs/HARDWARE.md` sempre que hardware, BSP, display, Wi-Fi ou ESP-Hosted
+estiverem envolvidos.
 
 ## O que é o projeto
 
@@ -18,7 +24,7 @@ docs/      documentação canônica (v3) + ADRs
 tools/     scripts (ex.: tools/scripts/host_check.sh)
 ```
 
-Estado atual: **esqueleto com mocks**. Sem LVGL real, BSP, rede ou APIs reais.
+Estado atual: **Fase 2 fechada** (firmware core com mocks). Sem LVGL real, BSP, rede ou APIs reais.
 
 ## Regras de arquitetura (não-negociáveis)
 
@@ -90,12 +96,14 @@ Use o host_check após qualquer mudança em `core/`, `models/`, `services/`,
 
 ## Como adicionar coisas (atalhos)
 
-Existem skills de projeto em `.claude/skills/` para as tarefas comuns:
+Skills de projeto ficam em `skills/` (fonte versionada, veja `AGENTS.md` para
+o mapeamento completo tarefa→skill). As mais usadas:
 
-- `add-service`  — novo Service (header+src+CMake+wiring no app_main)
-- `add-provider` — novo provider atrás de uma interface
-- `new-adr`      — registrar uma ADR em docs/DECISIONS.md
-- `host-check`   — rodar a validação host-compile
+- `novapanel-add-service`  — novo Service (header+src+CMake+wiring no app_main)
+- `novapanel-add-provider` — novo provider atrás de uma interface
+- `novapanel-add-state-model` — novo estado/modelo em `models/`
+- `novapanel-new-adr`      — registrar uma ADR em docs/DECISIONS.md
+- `novapanel-host-check`   — rodar a validação host-compile
 
 Ao adicionar um componente novo, lembre de: criar `include/` + `src/`, atualizar
 o `CMakeLists.txt` do componente (e o `REQUIRES`), e registrar/instanciar no

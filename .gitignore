@@ -16,6 +16,9 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+.claude/
+firmware/.claude/
+firmware/.cache/
 
 # Logs
 *.log
