@@ -25,6 +25,7 @@ venv/
 .claude/
 firmware/.claude/
 firmware/.cache/
+**/.cache/
 
 # Logs
 *.log
