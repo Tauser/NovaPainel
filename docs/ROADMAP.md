@@ -68,10 +68,12 @@ Fase 15 - futuro: server opcional/NoiseBot
   `AppState`, só falta o screen builder - ADR-0017).
 - **Fase 5:** trocar `MockMarketProvider` por `CoinGeckoProvider` (REST, 60s,
   6 req/min, cache, batch). Adicionar provider de clima (ex.: Open-Meteo) e fonte
-  USD/BRL dedicada (atrás da mesma `IMarketProvider`/interface de câmbio). Tela
-  de setup/provisionamento de Wi-Fi entra aqui: UI publica intenção via
-  `EventBus`, um `SetupService` é o único a chamar `esp_wifi_connect`/persistir
-  credencial em NVS (ADR-0017 + ADR-0011) - UI nunca chama Wi-Fi direto.
+  USD/BRL dedicada (atrás da mesma `IMarketProvider`/interface de câmbio). Wizard
+  de onboarding inicial entra aqui (nome de exibição + provisionamento de
+  Wi-Fi, extensível a mais passos): UI publica intenção via `EventBus`, um
+  `SetupService` é o único a persistir em NVS e chamar `esp_wifi_connect`
+  (ADR-0017 + ADR-0011) - UI nunca persiste nem chama Wi-Fi direto. Mesmo
+  `SetupService`/eventos são reusados depois pela tela de Configurações.
 
 ## Detalhe das fases de hardening (pós-hardware provado)
 

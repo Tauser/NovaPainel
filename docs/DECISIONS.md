@@ -140,29 +140,43 @@ código real de hardware acabe "contaminando" `app_main.cpp` e quebrando o
 host check, que é o jeito rápido do time validar lógica de wiring sem
 ESP-IDF instalado.
 
-## ADR-0017 - Tela de boot e tela de setup inicial (Wi-Fi)
+## ADR-0017 - Tela de boot e wizard de onboarding inicial
 **Decisão:**
 - **Boot/splash:** não precisa de decisão nova. `AppState::current_screen` já
   nasce em `ScreenId::Boot` (era só não-renderizado até agora). Na Fase 4,
   basta adicionar um screen builder para `Boot` igual ao de `Home` - nenhuma
   mudança estrutural.
-- **Setup inicial (provisionamento de Wi-Fi):** a tela **nunca** chama
-  `esp_wifi_*` direto. Fluxo obrigatório: tela publica uma intenção no
-  `EventBus` (ex.: `EventType::WifiCredentialsSubmitted` com SSID/senha no
-  payload) → um `SetupService` (novo, ou método dedicado dentro do serviço de
-  rede que a Fase 5 introduzir) é o único a chamar
-  `esp_wifi_set_config`/`esp_wifi_connect` e a persistir a credencial em NVS
-  → o resultado (sucesso/falha/IP) volta via `StateStore`/`SystemStatus` e a
-  tela só lê, nunca bloqueia esperando a resposta. Mesma regra de toda a UI
-  (ADR arquitetural já vigente): UI não faz request direto, só
-  `StateStore`/`EventBus`.
-- **Armazenamento da credencial:** NVS, conforme ADR-0011 (sem cripto
-  própria; builds PROD habilitam NVS Encryption nativa; dev pode deixar
-  desativado). Nenhuma decisão nova aqui - é só lembrete de que esse dado
-  específico cai direto na regra que ADR-0011 já cobre.
-**Motivo:** a tela de setup é o primeiro lugar do produto onde a UI teria
-um motivo "razoável" de chamar rede direto (é o fluxo nativo de qualquer
-wizard de Wi-Fi). Decidir agora, antes da Fase 5 implementar, evita que a
-exceção pareça aceitável e vire precedente para outras telas furarem a
-regra de UI sem request. A tela de Boot não tinha esse risco - só ficou
-registrada aqui pra fechar a dúvida junto.
+- **Wizard de onboarding inicial (multi-step):** roda no primeiro boot (sem
+  config salva) e cobre, no mínimo, dois passos hoje conhecidos - **nome de
+  exibição do usuário** ("como quer ser chamado") e **provisionamento de
+  Wi-Fi** - extensível a mais passos depois sem mudar a regra abaixo.
+  - A tela **nunca** persiste nem chama hardware/rede direto, em nenhum
+    passo. Fluxo obrigatório: tela publica uma intenção no `EventBus` (ex.:
+    `EventType::OnboardingStepSubmitted` ou eventos dedicados por passo,
+    como `WifiCredentialsSubmitted`/`DisplayNameSubmitted`) → um
+    `SetupService` (novo) é o único a persistir em NVS e, no passo de Wi-Fi,
+    chamar `esp_wifi_set_config`/`esp_wifi_connect` → o resultado
+    (sucesso/falha/IP, nome salvo) volta via `StateStore` e a tela só lê,
+    nunca bloqueia esperando resposta.
+  - Passos não-Wi-Fi (nome de exibição, e quaisquer outros que entrarem
+    depois) são só leitura/escrita de NVS via `SetupService` - mais simples
+    que o passo de Wi-Fi, mas seguem a mesma regra de UI sem request direto
+    (ADR arquitetural já vigente: UI não faz request direto, só
+    `StateStore`/`EventBus`).
+  - O mesmo `SetupService` (ou os mesmos eventos) deve ser reusável pela
+    futura tela de Configurações (`screen_config.c` na referência de
+    design), não só pelo wizard de primeiro boot - editar Wi-Fi ou nome
+    depois não é um fluxo separado.
+- **Armazenamento:** NVS, conforme ADR-0011 (sem cripto própria; builds PROD
+  habilitam NVS Encryption nativa; dev pode deixar desativado). Vale tanto
+  para a credencial de Wi-Fi quanto para o nome de exibição e qualquer outro
+  dado de preferência que o wizard vier a coletar.
+**Motivo:** o wizard é o primeiro lugar do produto onde a UI teria um motivo
+"razoável" de persistir ou chamar rede direto - é o fluxo nativo de
+qualquer onboarding. Decidir a regra agora, antes da Fase 4/5 implementar
+qualquer passo, evita que a exceção pareça aceitável e vire precedente para
+outras telas (a própria tela de Configurações, mais adiante) furarem a
+regra de UI sem request. Tratar como "wizard multi-step" desde já (em vez
+de só "tela de Wi-Fi") evita reabrir esta decisão a cada novo passo
+adicionado. A tela de Boot não tinha esse risco - só ficou registrada aqui
+pra fechar a dúvida junto.
