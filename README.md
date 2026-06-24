@@ -1,4 +1,4 @@
-# NovaPainel
+acab# NovaPainel
 
 Smart display **local / offline-first** baseado em **ESP32-P4** (ESP-IDF + C++),
 organizado como monorepo. O firmware é o núcleo do produto; o server é opcional e

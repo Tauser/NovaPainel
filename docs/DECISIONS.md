@@ -56,3 +56,65 @@ sincronizado até o NTP.
 antes de qualquer feature pesada; definir a partição e o processo de atualização
 do C6.
 **Motivo:** a conectividade do P4 depende inteiramente do C6.
+
+## ADR-0011 - Segurança projetada desde o layout (estende ADR-0008)
+**Decisão:** o layout de partição (`firmware/partitions.csv`) deve ser definido já
+assumindo **Flash Encryption + Secure Boot v2 (com anti-rollback)** e **NVS
+Encryption nativa do ESP-IDF**, mesmo que o build de desenvolvimento mantenha
+essas proteções desativadas. Em produção, segredos (Wi-Fi, API keys, tokens) ficam
+em NVS cifrada; builds PROD habilitam Secure Boot v2 e Flash Encryption. Não
+implementar criptografia própria (ex.: AES-GCM manual) para segredos — usar os
+mecanismos da plataforma. Proteção de segredo em logs/coredump é disciplina
+separada: nunca logar segredo e cifrar/desabilitar coredump em PROD.
+**Motivo:** habilitar Flash Encryption e Secure Boot depois muda o layout de
+partição e a gestão de chaves (eFuses são mão única), forçando retrabalho. Cripto
+própria é mais arriscada e redundante frente à NVS Encryption nativa. Cifrar NVS
+não impede vazamento por log — são problemas distintos. Gatilho de reavaliação do
+modelo de ameaça: quando entrar automação/controle físico (a superfície deixa de
+ser somente leitura).
+
+## ADR-0012 - Resiliência de rede: circuit breaker e backpressure no Orchestrator
+**Decisão:** o `RequestOrchestrator` (ADR-0004) ganha, por domínio, um **circuit
+breaker** (closed/open/half-open) com **backoff exponencial + jitter** e
+**backpressure** (profundidade de fila limitada, política drop-oldest). Retry é
+**finito** (nunca infinito); ao abrir o circuito, o domínio degrada para cache e
+tenta reconectar em segundo plano sem bloquear a UI.
+**Motivo:** um provider lento ou fora do ar não pode derrubar o sistema nem
+estourar CPU/cota. Mantém o offline-first concreto (ADR-0002): dado stale exibido
+em vez de travar. Implementado dentro do orquestrador que já é a porta única de
+saída, sem nova camada.
+
+## ADR-0013 - Modelo de tasks e fila assíncrona para a UI
+**Decisão:** o caminho de atualização de UI (`EventBus` → `UiDispatcher` →
+`lvgl_task`) usa **fila FreeRTOS assíncrona com coalescing**, drenada apenas pela
+`lvgl_task`. Um service lento nunca bloqueia o render. Eventos internos
+service→service simples podem permanecer síncronos; a regra inviolável é "render
+nunca bloqueado por service". Pinagem de cores explícita no P4 dual-core
+(`lvgl_task` em um core; rede/serviços no outro), com stack size e watchdog por
+task documentados. Não se promete "zero malloc": framebuffers e buffers grandes
+conhecidos são pré-alocados no boot em PSRAM via `heap_caps_malloc(MALLOC_CAP_SPIRAM)`
+e o LVGL recebe um pool fixo; dirty rectangles usam a API **nativa** do LVGL.
+**Motivo:** LVGL não é thread-safe (ADR-0007) e EventBus síncrono na task do
+publisher convida priority inversion e travamento da UI. Pré-alocar buffers
+grandes evita fragmentação sob carga contínua, mas o LVGL faz malloc interno —
+"zero malloc" seria irreal. Reusar o dirty-tracking nativo evita reinventar e
+mantém o código testável.
+
+## ADR-0014 - Observabilidade de campo (coredump + diagnóstico)
+**Decisão:** reservar **partição de coredump** e persistir crash dumps; a tela de
+sistema/status expõe motivo do último reset, contador de reboots e idade do último
+dado por domínio (stale indicator). Builds PROD reduzem logs a warnings críticos
+acionáveis; debug verboso fica fora de PROD.
+**Motivo:** sem crash dump persistido e contexto de reset, depurar uma falha na
+casa do usuário é às cegas. Indicar dado stale é parte do contrato de UX degradada
+do offline-first, não enfeite.
+
+## ADR-0015 - Integridade do cache offline e filesystem
+**Decisão:** o cache local usa **LittleFS** (wear leveling), com **escrita atômica**
+(grava em temporário e renomeia) e **versionamento de schema** do cache e da NVS,
+com migração no boot. Não usar SPIFFS para dados que precisam sobreviver a queda de
+energia.
+**Motivo:** o offline-first depende do cache sobreviver a corte de energia e a
+upgrades de firmware. SPIFFS não tem wear leveling robusto; sem escrita atômica e
+versionamento, um OTA que muda um struct corrompe dado antigo e pode brickar a
+configuração.

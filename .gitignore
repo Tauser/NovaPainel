@@ -3,6 +3,12 @@ firmware/build/
 firmware/sdkconfig
 firmware/sdkconfig.old
 **/build/
+# generated sdkconfig everywhere (e.g. firmware/experiments/*/sdkconfig); keep sdkconfig.defaults
+**/sdkconfig
+**/sdkconfig.old
+# managed components pulled by the IDF component manager
+**/managed_components/
+**/dependencies.lock
 
 # Python
 **/__pycache__/
