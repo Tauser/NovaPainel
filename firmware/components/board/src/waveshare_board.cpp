@@ -46,6 +46,11 @@ bool bring_up_display_and_touch() {
         ESP_LOGE(kTag, "bsp_display_start_with_config failed");
         return false;
     }
+    // The BSP's hardcoded panel mirroring (bsp_display_lcd_init) renders
+    // upside down on this physical unit - confirmed by eye on the real
+    // display (Fase 4). Correct it via LVGL's own rotation instead of
+    // patching the BSP.
+    bsp_display_rotate(disp, LV_DISPLAY_ROTATION_180);
     if (bsp_display_backlight_on() != ESP_OK) {
         ESP_LOGE(kTag, "backlight on failed");
         return false;
