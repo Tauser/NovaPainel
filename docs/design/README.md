@@ -5,25 +5,23 @@ produto**. Nada aqui é compilado pelo build do firmware.
 
 ## `lvgl_export_reference/`
 
-Export gerado (LVGL v8.3) com as 9 telas do protótipo do NovaPainel: Home,
-Agenda, Mercado, Casa, Alarmes, Clima, Timer, Config, Notif. Layout, cores
-(`novapanel_theme.h`) e composição de widgets são bom material de partida
-para a Fase 4 em diante.
+Export gerado em **LVGL v9.5.x** (atualizado em 2026-06-24; a versão
+anterior era v8.3, regenerada porque o projeto resolveu LVGL 9.5.0 via o
+BSP oficial Waveshare - confirmado no build da Fase 3) com as 9 telas do
+protótipo do NovaPainel: Home, Agenda, Mercado, Casa, Alarmes, Clima, Timer,
+Config, Notif. Layout, cores (`novapanel_theme.h`) e composição de widgets
+são bom material de partida para a Fase 4 em diante. Já usa a API v9
+(`lv_layer_t` no candlestick de `screen_mercado.c`, `round_start/end` no arc
+de `screen_timer.c` - ver o `README.md` interno da pasta para o mapeamento
+completo v8->v9).
 
-**Não colar direto em `firmware/components/ui/`.** Duas adaptações são
-necessárias antes de qualquer tela daqui virar código real:
-
-1. **LVGL v8.3 -> v9.5** - o projeto resolveu LVGL 9.5.0 via o BSP oficial
-   Waveshare (confirmado no build da Fase 3). A API de widgets
-   (`lv_obj_create`, `lv_obj_set_flex_flow`, `lv_obj_set_style_*`,
-   `lv_label_create`) é estável entre as duas versões, mas precisa de
-   checagem ponto a ponto - não é drop-in.
-2. **Arquitetura** - o export usa um `np_state_t` global e as telas
-   leem/escrevem esse estado direto. O NovaPainel usa `StateStore` +
-   `EventBus` + `UiDispatcher` (ADR-0007/0013): só a `lvgl_task` toca
-   objetos LVGL, e a UI nunca guarda estado próprio - ela lê do
-   `StateStore`. Cada tela portada precisa trocar o acesso a `np_state`
-   por leitura do `AppState`/`SystemStatus` reais.
+**Ainda não colar direto em `firmware/components/ui/`.** A versão de API
+já bate; falta só a adaptação de arquitetura: o export usa um `np_state_t`
+global e as telas leem/escrevem esse estado direto. O NovaPainel usa
+`StateStore` + `EventBus` + `UiDispatcher` (ADR-0007/0013): só a
+`lvgl_task` toca objetos LVGL, e a UI nunca guarda estado próprio - ela lê
+do `StateStore`. Cada tela portada precisa trocar o acesso a `np_state`
+por leitura do `AppState`/`SystemStatus` reais.
 
 ## Escopo (decisão registrada em 2026-06-24)
 

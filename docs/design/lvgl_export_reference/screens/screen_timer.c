@@ -1,11 +1,16 @@
 /* ================================================================
- * SCREEN: Timer (Pomodoro)
- * Centre layout: arc ring · preset chips · play/reset buttons
+ * SCREEN: Timer (Pomodoro) — LVGL v9.5
+ *
+ * v9 changes:
+ *   • lv_button_create() instead of lv_btn_create()
+ *   • lv_obj_set_style_flex_grow() instead of lv_obj_set_flex_grow()
+ *   • lv_obj_set_style_arc_rounded() split into:
+ *       lv_obj_set_style_arc_round_start(arc, true, LV_PART_INDICATOR)
+ *       lv_obj_set_style_arc_round_end(arc, true, LV_PART_INDICATOR)
  * ================================================================ */
 #include "../novapanel.h"
 #include <stdio.h>
 
-/* forward decls for callbacks */
 static lv_obj_t *g_arc   = NULL;
 static lv_obj_t *g_label = NULL;
 static lv_obj_t *g_btn   = NULL;
@@ -16,19 +21,13 @@ static void preset_cb(lv_event_t *e)
     np_state.timer_sec   = sec;
     np_state.timer_total = sec;
     np_state.timer_running = false;
-
-    /* update arc */
-    if (g_arc) lv_arc_set_value(g_arc, 100);
-
-    /* update label */
+    if (g_arc)   lv_arc_set_value(g_arc, 100);
     if (g_label) {
         char buf[8];
         lv_snprintf(buf, sizeof(buf), "%02d:%02d",
                     (int)(sec / 60), (int)(sec % 60));
         lv_label_set_text(g_label, buf);
     }
-
-    /* update button text */
     if (g_btn) lv_label_set_text(lv_obj_get_child(g_btn, 0), "Iniciar");
 }
 
@@ -44,7 +43,7 @@ static void reset_cb(lv_event_t *e)
 {
     np_state.timer_running = false;
     np_state.timer_sec = np_state.timer_total;
-    if (g_arc)   lv_arc_set_value(g_arc, 100);
+    if (g_arc) lv_arc_set_value(g_arc, 100);
     if (g_label) {
         char buf[8];
         lv_snprintf(buf, sizeof(buf), "%02d:%02d",
@@ -67,7 +66,7 @@ void np_screen_timer(lv_obj_t *parent)
     lv_obj_set_style_pad_row(scr, 22, 0);
     np_screens[NP_SCR_TIMER] = scr;
 
-    /* ── Arc ring (200 × 200) ── */
+    /* ── Arc ring ── */
     lv_obj_t *arc_wrap = lv_obj_create(scr);
     lv_obj_set_size(arc_wrap, 200, 200);
     np_obj_clear_style(arc_wrap);
@@ -78,17 +77,18 @@ void np_screen_timer(lv_obj_t *parent)
     lv_arc_set_rotation(arc, 270);
     lv_arc_set_bg_angles(arc, 0, 360);
     lv_arc_set_range(arc, 0, 100);
-    lv_arc_set_value(arc, 100);          /* full = 25 min remaining */
+    lv_arc_set_value(arc, 100);
     lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
 
-    /* arc track (background) */
-    lv_obj_set_style_arc_color(arc, NP_C_BORDER,  LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc, 10,            LV_PART_MAIN);
-    /* arc indicator (foreground) */
-    lv_obj_set_style_arc_color(arc, NP_C_ACCENT,  LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc, 10,            LV_PART_INDICATOR);
-    lv_obj_set_style_arc_rounded(arc, true,        LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc, NP_C_BORDER, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, 10,          LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, NP_C_ACCENT, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 10,          LV_PART_INDICATOR);
+
+    /* v9: arc_rounded split into round_start + round_end */
+    lv_obj_set_style_arc_round_start(arc, true, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_round_end(arc,   true, LV_PART_INDICATOR);
 
     g_arc = arc;
 
@@ -120,7 +120,7 @@ void np_screen_timer(lv_obj_t *parent)
         { "1h",      3600 },
     };
     for (int i = 0; i < 4; i++) {
-        lv_obj_t *ch = lv_btn_create(presets);
+        lv_obj_t *ch = lv_button_create(presets);  /* v9 */
         lv_obj_set_height(ch, 36);
         lv_obj_set_width(ch, LV_SIZE_CONTENT);
         bool active = (chips[i].sec == np_state.timer_total);
@@ -132,7 +132,7 @@ void np_screen_timer(lv_obj_t *parent)
         lv_obj_set_style_pad_hor(ch, 16, 0);
         lv_obj_t *cl = np_label(ch, chips[i].label, NP_F_SM,
                                 active ? NP_C_ACCENT : NP_C_TEXT_DIM);
-        lv_obj_center(cl);
+        lv_obj_align(cl, LV_ALIGN_CENTER, 0, 0);
         lv_obj_add_event_cb(ch, preset_cb, LV_EVENT_CLICKED,
                             (void *)(uintptr_t)chips[i].sec);
     }
@@ -146,19 +146,17 @@ void np_screen_timer(lv_obj_t *parent)
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(ctrl, 10, 0);
 
-    /* play/pause */
-    g_btn = lv_btn_create(ctrl);
+    g_btn = lv_button_create(ctrl);  /* v9 */
     lv_obj_set_size(g_btn, LV_SIZE_CONTENT, 48);
     lv_obj_set_style_bg_color(g_btn,     NP_C_ACCENT, 0);
     lv_obj_set_style_radius(g_btn,       NP_R_BTN, 0);
     lv_obj_set_style_shadow_width(g_btn, 0, 0);
     lv_obj_set_style_pad_hor(g_btn, 32, 0);
     lv_obj_t *btn_lbl = np_label(g_btn, "Iniciar", NP_F_MD, NP_C_DARK_FG);
-    lv_obj_center(btn_lbl);
+    lv_obj_align(btn_lbl, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_event_cb(g_btn, toggle_cb, LV_EVENT_CLICKED, NULL);
 
-    /* reset */
-    lv_obj_t *rst = lv_btn_create(ctrl);
+    lv_obj_t *rst = lv_button_create(ctrl);  /* v9 */
     lv_obj_set_size(rst, 48, 48);
     lv_obj_set_style_bg_color(rst,     NP_C_CARD, 0);
     lv_obj_set_style_border_color(rst, NP_C_BORDER, 0);
@@ -166,6 +164,6 @@ void np_screen_timer(lv_obj_t *parent)
     lv_obj_set_style_radius(rst,       NP_R_BTN, 0);
     lv_obj_set_style_shadow_width(rst, 0, 0);
     lv_obj_t *rst_ic = np_label(rst, LV_SYMBOL_REFRESH, NP_F_LG, NP_C_TEXT_DIM);
-    lv_obj_center(rst_ic);
+    lv_obj_align(rst_ic, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_event_cb(rst, reset_cb, LV_EVENT_CLICKED, NULL);
 }

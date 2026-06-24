@@ -147,22 +147,28 @@ ESP-IDF instalado.
   basta adicionar um screen builder para `Boot` igual ao de `Home` - nenhuma
   mudança estrutural.
 - **Wizard de onboarding inicial (multi-step):** roda no primeiro boot (sem
-  config salva) e cobre, no mínimo, dois passos hoje conhecidos - **nome de
-  exibição do usuário** ("como quer ser chamado") e **provisionamento de
-  Wi-Fi** - extensível a mais passos depois sem mudar a regra abaixo.
+  config salva) e cobre, no mínimo, os passos hoje conhecidos -
+  **nome de exibição** ("como quer ser chamado"), **provisionamento de
+  Wi-Fi**, **fuso horário**, **formato de hora** (12h/24h) e **tema**
+  (claro/escuro/automático) - extensível a mais passos depois sem mudar a
+  regra abaixo.
   - A tela **nunca** persiste nem chama hardware/rede direto, em nenhum
     passo. Fluxo obrigatório: tela publica uma intenção no `EventBus` (ex.:
     `EventType::OnboardingStepSubmitted` ou eventos dedicados por passo,
-    como `WifiCredentialsSubmitted`/`DisplayNameSubmitted`) → um
-    `SetupService` (novo) é o único a persistir em NVS e, no passo de Wi-Fi,
-    chamar `esp_wifi_set_config`/`esp_wifi_connect` → o resultado
-    (sucesso/falha/IP, nome salvo) volta via `StateStore` e a tela só lê,
-    nunca bloqueia esperando resposta.
-  - Passos não-Wi-Fi (nome de exibição, e quaisquer outros que entrarem
-    depois) são só leitura/escrita de NVS via `SetupService` - mais simples
-    que o passo de Wi-Fi, mas seguem a mesma regra de UI sem request direto
-    (ADR arquitetural já vigente: UI não faz request direto, só
-    `StateStore`/`EventBus`).
+    como `WifiCredentialsSubmitted`/`DisplayNameSubmitted`/
+    `PreferencesSubmitted`) → um `SetupService` (novo) é o único a
+    persistir em NVS e, no passo de Wi-Fi, chamar
+    `esp_wifi_set_config`/`esp_wifi_connect` → o resultado
+    (sucesso/falha/IP, preferências salvas) volta via `StateStore` e a tela
+    só lê, nunca bloqueia esperando resposta.
+  - Passos não-Wi-Fi (nome, fuso, formato de hora, tema, e quaisquer outros
+    que entrarem depois) são só leitura/escrita de NVS via `SetupService` -
+    mais simples que o passo de Wi-Fi, mas seguem a mesma regra de UI sem
+    request direto (ADR arquitetural já vigente: UI não faz request direto,
+    só `StateStore`/`EventBus`). Modelo de dados (ex.: um `UserPreferences`
+    em `models/`, com `display_name`, `timezone`, `time_format_24h`,
+    `theme`) é detalhe de implementação da Fase 4/5, não desta ADR -
+    `ClockService` passa a ler fuso/formato dali em vez de hardcoded.
   - O mesmo `SetupService` (ou os mesmos eventos) deve ser reusável pela
     futura tela de Configurações (`screen_config.c` na referência de
     design), não só pelo wizard de primeiro boot - editar Wi-Fi ou nome

@@ -1,11 +1,10 @@
 /* ================================================================
- * SCREEN: Clima (Weather)
- * Layout — 3 columns:
- *   Left  220px : Current conditions + sunrise/sunset
- *   Centre flex : Hourly forecast + 5-day forecast
- *   Right  200px: Detail stats + source
+ * SCREEN: Clima — LVGL v9.5
+ *   • lv_button_create() instead of lv_btn_create()
+ *   • lv_obj_set_style_flex_grow() instead of lv_obj_set_flex_grow()
  * ================================================================ */
 #include "../novapanel.h"
+#include <stdio.h>
 
 void np_screen_clima(lv_obj_t *parent)
 {
@@ -19,38 +18,34 @@ void np_screen_clima(lv_obj_t *parent)
     lv_obj_set_style_pad_column(scr, 12, 0);
     np_screens[NP_SCR_CLIMA] = scr;
 
-    /* ══ LEFT ══ */
+    /* ══ LEFT: current conditions ══ */
     lv_obj_t *left = np_card(scr);
     lv_obj_set_size(left, 220, lv_pct(100));
     lv_obj_set_style_pad_all(left, 18, 0);
     lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(left,
-        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
     np_label(left, "SÃO PAULO, SP", NP_F_XS, NP_C_TEXT_MUTED);
 
-    /* big temp */
     lv_obj_t *big = lv_obj_create(left);
     np_obj_clear_style(big);
     lv_obj_set_size(big, lv_pct(100), 0);
-    lv_obj_set_flex_grow(big, 1);
+    lv_obj_set_style_flex_grow(big, 1, 0);  /* v9 */
     lv_obj_set_flex_flow(big, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(big,
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(big, 6, 0);
 
-    np_label(big, "24°",             NP_F_HERO,  NP_C_TEXT);
-    np_label(big, "Parcial nublado", NP_F_SM,    NP_C_TEXT_DIM);
+    np_label(big, "24°",             NP_F_HERO, NP_C_TEXT);
+    np_label(big, "Parcial nublado", NP_F_SM,   NP_C_TEXT_DIM);
 
     lv_obj_t *mm = np_row(big);
     lv_obj_set_size(mm, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_column(mm, 12, 0);
-    np_label(mm, LV_SYMBOL_UP" 27°", NP_F_SM, NP_C_BLUE);
+    np_label(mm, LV_SYMBOL_UP" 27°",   NP_F_SM, NP_C_BLUE);
     np_label(mm, LV_SYMBOL_DOWN" 18°", NP_F_SM, lv_color_hex(0x5A6478));
 
     np_label(big, "Sensação 26°", NP_F_XS, lv_color_hex(0x5A6478));
 
-    /* sunrise / sunset */
     lv_obj_t *sun_row = np_row(left);
     lv_obj_set_flex_align(sun_row,
         LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -75,15 +70,15 @@ void np_screen_clima(lv_obj_t *parent)
         np_label(sc, suns[i].lbl,  NP_F_XS, NP_C_TEXT_MUTED);
     }
 
-    /* ══ CENTRE ══ */
+    /* ══ CENTRE: forecasts ══ */
     lv_obj_t *mid = lv_obj_create(scr);
     np_obj_clear_style(mid);
-    lv_obj_set_flex_grow(mid, 1);
+    lv_obj_set_style_flex_grow(mid, 1, 0);  /* v9 */
     lv_obj_set_height(mid, lv_pct(100));
     lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(mid, 12, 0);
 
-    /* hourly card */
+    /* hourly */
     lv_obj_t *hr = np_card(mid);
     lv_obj_set_size(hr, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_pad_all(hr, 14, 0);
@@ -96,14 +91,10 @@ void np_screen_clima(lv_obj_t *parent)
 
     static const struct { const char *h; const char *t; uint32_t tc; int precip; }
     hourly[] = {
-        { "10h","25°",0xE8A83C,5  },
-        { "11h","26°",0xE8A83C,10 },
-        { "12h","27°",0xE8A83C,3  },
-        { "13h","26°",0xE8EAF2,15 },
-        { "14h","25°",0xE8EAF2,40 },
-        { "15h","23°",0x4F7ECB,60 },
-        { "16h","22°",0x4F7ECB,55 },
-        { "17h","21°",0x4F7ECB,20 },
+        {"10h","25°",0xE8A83C,5 },{"11h","26°",0xE8A83C,10},
+        {"12h","27°",0xE8A83C,3 },{"13h","26°",0xE8EAF2,15},
+        {"14h","25°",0xE8EAF2,40},{"15h","23°",0x4F7ECB,60},
+        {"16h","22°",0x4F7ECB,55},{"17h","21°",0x4F7ECB,20},
     };
     for (int i = 0; i < 8; i++) {
         lv_obj_t *hc = np_col(hr_row);
@@ -114,36 +105,33 @@ void np_screen_clima(lv_obj_t *parent)
         np_label(hc, hourly[i].h, NP_F_XS, lv_color_hex(0x5A6478));
         np_label(hc, hourly[i].t, NP_F_MD, lv_color_hex(hourly[i].tc));
 
-        /* precip bar */
         lv_obj_t *bar = lv_bar_create(hc);
         lv_obj_set_size(bar, 6, 32);
         lv_bar_set_range(bar, 0, 100);
         lv_bar_set_value(bar, hourly[i].precip, LV_ANIM_OFF);
-        lv_bar_set_start_value(bar, 0, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(bar, NP_C_BORDER, LV_PART_MAIN);
         lv_obj_set_style_bg_color(bar, NP_C_BLUE,   LV_PART_INDICATOR);
         lv_obj_set_style_radius(bar, 3, LV_PART_MAIN);
         lv_obj_set_style_radius(bar, 3, LV_PART_INDICATOR);
 
-        char pct[8];
-        lv_snprintf(pct, sizeof(pct), "%d%%", hourly[i].precip);
+        char pct[8]; lv_snprintf(pct, sizeof(pct), "%d%%", hourly[i].precip);
         np_label(hc, pct, NP_F_XS, NP_C_BLUE);
     }
 
-    /* 5-day card */
+    /* 5-day */
     lv_obj_t *fd = np_card(mid);
     lv_obj_set_size(fd, lv_pct(100), 0);
-    lv_obj_set_flex_grow(fd, 1);
+    lv_obj_set_style_flex_grow(fd, 1, 0);  /* v9 */
     lv_obj_set_style_pad_all(fd, 14, 0);
     np_label(fd, "PRÓXIMOS 5 DIAS", NP_F_XS, NP_C_TEXT_MUTED);
 
     static const struct { const char *day; const char *cond; int prec; int mn; int mx; }
     days5[] = {
-        { "Qua", "Parcial nublado", 10, 18, 27 },
-        { "Qui", "Ensolarado",       5, 17, 29 },
-        { "Sex", "Chuva fraca",     70, 16, 22 },
-        { "Sáb", "Nublado",         45, 15, 21 },
-        { "Dom", "Ensolarado",       5, 16, 28 },
+        {"Qua","Parcial nublado",10,18,27},
+        {"Qui","Ensolarado",      5,17,29},
+        {"Sex","Chuva fraca",    70,16,22},
+        {"Sáb","Nublado",        45,15,21},
+        {"Dom","Ensolarado",      5,16,28},
     };
     for (int i = 0; i < 5; i++) {
         lv_obj_t *dr = np_row(fd);
@@ -157,8 +145,9 @@ void np_screen_clima(lv_obj_t *parent)
 
         lv_obj_t *day_l = np_label(dr, days5[i].day, NP_F_SM, NP_C_TEXT_MED);
         lv_obj_set_width(day_l, 32);
-        lv_obj_t *cond = np_label(dr, days5[i].cond, NP_F_XS, lv_color_hex(0x7A8298));
-        lv_obj_set_flex_grow(cond, 1);
+        lv_obj_t *cond = np_label(dr, days5[i].cond, NP_F_XS,
+                                  lv_color_hex(0x7A8298));
+        lv_obj_set_style_flex_grow(cond, 1, 0);  /* v9 */
 
         char pp[8]; lv_snprintf(pp, sizeof(pp), "%d%%", days5[i].prec);
         np_label(dr, pp, NP_F_XS, lv_color_hex(0x5A6478));
@@ -170,30 +159,29 @@ void np_screen_clima(lv_obj_t *parent)
         np_label(dr, mx, NP_F_SM, NP_C_ACCENT);
     }
 
-    /* ══ RIGHT ══ */
+    /* ══ RIGHT: detail stats ══ */
     lv_obj_t *right = lv_obj_create(scr);
     np_obj_clear_style(right);
     lv_obj_set_size(right, 200, lv_pct(100));
     lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(right, 10, 0);
 
-    /* detail card */
     lv_obj_t *det = np_card(right);
     lv_obj_set_size(det, lv_pct(100), 0);
-    lv_obj_set_flex_grow(det, 1);
+    lv_obj_set_style_flex_grow(det, 1, 0);  /* v9 */
     lv_obj_set_style_pad_all(det, 14, 0);
     np_label(det, "DETALHES", NP_F_XS, NP_C_TEXT_MUTED);
 
     static const struct { const char *k; const char *v; uint32_t vc; }
     details[] = {
-        { "Vento",       "12 km/h NE", 0xE8EAF2 },
-        { "Umidade",     "54%",         0x4F7ECB },
-        { "Pressão",     "1013 hPa",    0xE8EAF2 },
-        { "Ponto orv.",  "14°",         0xE8EAF2 },
-        { "Visibilidade","10 km",        0xE8EAF2 },
-        { "Nuvens",      "42%",          0x7A8298 },
-        { "Índice UV",   "5 — Mod.",    0xE8A83C },
-        { "Precip. hoje","0 mm",         0x4F7ECB },
+        {"Vento",       "12 km/h NE", 0xE8EAF2},
+        {"Umidade",     "54%",         0x4F7ECB},
+        {"Pressão",     "1013 hPa",    0xE8EAF2},
+        {"Ponto orv.",  "14°",         0xE8EAF2},
+        {"Visibilidade","10 km",        0xE8EAF2},
+        {"Nuvens",      "42%",          0x7A8298},
+        {"Índice UV",   "5 — Mod.",    0xE8A83C},
+        {"Precip. hoje","0 mm",         0x4F7ECB},
     };
     for (int i = 0; i < 8; i++) {
         lv_obj_t *dr = np_row(det);
@@ -204,12 +192,12 @@ void np_screen_clima(lv_obj_t *parent)
         np_label(dr, details[i].v, NP_F_SM, lv_color_hex(details[i].vc));
     }
 
-    /* source card */
     lv_obj_t *src = np_card(right);
     lv_obj_set_size(src, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_pad_all(src, 12, 0);
-    np_label(src, "FONTE", NP_F_XS, NP_C_TEXT_MUTED);
-    lv_obj_t *sl = np_label(src, "Open-Meteo · cache", NP_F_SM, lv_color_hex(0x7A8298));
+    np_label(src, "FONTE",            NP_F_XS, NP_C_TEXT_MUTED);
+    lv_obj_t *sl = np_label(src, "Open-Meteo · cache", NP_F_SM,
+                            lv_color_hex(0x7A8298));
     lv_obj_set_style_margin_top(sl, 8, 0);
     np_label(src, "Atualizado 09:42", NP_F_XS, lv_color_hex(0x363C52));
 }

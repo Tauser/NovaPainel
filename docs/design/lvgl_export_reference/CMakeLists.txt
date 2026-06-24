@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 
 # ================================================================
 # NOVAPANEL — ESP-IDF Component CMakeLists
-# Place this folder as a component under your ESP-IDF project:
+# LVGL v9.5  |  ESP32-P4
+#
+# Place this folder as a component:
 #   <project>/components/novapanel/
 # ================================================================
 
