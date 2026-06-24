@@ -118,3 +118,24 @@ energia.
 upgrades de firmware. SPIFFS não tem wear leveling robusto; sem escrita atômica e
 versionamento, um OTA que muda um struct corrompe dado antigo e pode brickar a
 configuração.
+
+## ADR-0016 - WaveshareBoard real (Fase 3) e semântica de network_ready
+**Decisão:** `firmware/components/board/` ganha `WaveshareBoard : IBoard`,
+implementação real usando o BSP oficial `waveshare/esp32_p4_wifi6_touch_lcd_7b`
+(EK79007 + GT911, validados em Fase 0). Fica no mesmo componente que
+`MockBoard` (mesmo padrão de `providers/`), mas o header
+(`waveshare_board.hpp`) não inclui nenhum header real de ESP-IDF/BSP — só a
+implementação (`.cpp`) faz isso. Isso mantém `app_main.cpp` host-checkável
+mesmo usando o board real; `tools/scripts/host_check.sh` pula explicitamente
+`waveshare_board.cpp` (hardware-only, sem shim).
+`BoardStatus::network_ready` significa **link ESP-Hosted/SDIO com o C6 ativo**,
+não associação Wi-Fi a um AP real. `WaveshareBoard::bring_up()` chama
+`esp_wifi_init/set_mode/start()` (que já sobe o transporte SDIO, confirmado em
+Fase 0 Gate 9) mas nunca define SSID/senha nem chama `esp_wifi_connect()`.
+**Motivo:** conectar a uma rede real com credenciais é decisão de serviço
+(Fase 5, `MarketService`/Wi-Fi), não de bring-up de hardware. Separar os dois
+mantém a Fase 3 escopada (board real != rede real) e evita acoplar o `IBoard`
+a configuração de usuário. A separação header/implementação evita que todo
+código real de hardware acabe "contaminando" `app_main.cpp` e quebrando o
+host check, que é o jeito rápido do time validar lógica de wiring sem
+ESP-IDF instalado.

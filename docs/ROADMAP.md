@@ -1,7 +1,10 @@
 # NovaPainel - Roadmap
 
-> Estado atual: **Fase 2 concluída** (firmware core com mocks). LVGL, BSP real,
-> rede e APIs reais ainda não implementados, por decisão.
+> Estado atual: **Fase 3 em andamento** - `WaveshareBoard` real (display
+> EK79007 + touch GT911 via BSP oficial, link SDIO ao C6) substituiu
+> `MockBoard` em `firmware/main/app_main.cpp`, validado na placa física
+> (ADR-0016). LVGL, Wi-Fi/APIs reais ainda não implementados, por decisão
+> (Fases 4/5).
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -17,7 +20,7 @@ Fase 0  - Risk Gates de hardware (C6/ESP-Hosted, SDIO, Wi-Fi+display simultâneo
           brownout/térmica)                                        [bloqueia tudo]
 Fase 1  - Organização do monorepo                                  [feito]
 Fase 2  - Firmware core com mocks                                  [feito]
-Fase 3  - Board real / BSP
+Fase 3  - Board real / BSP                                          [em andamento]
 Fase 4  - Display/touch/LVGL real (buffers PSRAM pré-alocados, dirty rect nativo)
 Fase 5  - Wi-Fi/NTP/HTTPS/CoinGecko snapshot
 Fase 6  - Home MVP com cache (LittleFS, escrita atômica, dado stale visível)
@@ -50,8 +53,14 @@ Fase 15 - futuro: server opcional/NoiseBot
   `RequestOrchestrator`, `UiDispatcher`), serviços mock (`ClockService`,
   `MarketService`, `NotificationService`), `MockBoard`, `MockMarketProvider`,
   `HomeScreen` por logs. Objetivo: validar o fluxo de dados ponta a ponta.
-- **Fase 3:** substituir `MockBoard` pelo BSP Waveshare; só então confiar nos
-  flags de `SystemStatus`.
+- **Fase 3 (em andamento):** substituir `MockBoard` pelo BSP Waveshare. Feito:
+  `WaveshareBoard` real (display EK79007 + touch GT911 via
+  `waveshare/esp32_p4_wifi6_touch_lcd_7b`, link ESP-Hosted/SDIO ao C6 sem
+  associar a um AP - ADR-0016) já roda em `firmware/main/app_main.cpp` e foi
+  validado na placa física (`board=1 display=1 touch=1 net=1` em
+  `SystemStatus`). Falta: SD card real (Gate 7 já validado no experimento,
+  ainda não portado pro board), e qualquer hardening adicional antes de
+  confiar 100% nos flags em produção.
 - **Fase 4:** integrar LVGL real; `UiDispatcher::process_pending()` passa a rodar
   na `lvgl_task` (fila assíncrona com coalescing, ADR-0013); `HomeScreen::render`
   passa de logs para widgets. Framebuffers pré-alocados em PSRAM no boot; dirty

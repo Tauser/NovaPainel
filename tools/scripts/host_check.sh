@@ -9,6 +9,12 @@
 # It does NOT replace `idf.py build`; it is a fast pre-flight for the
 # platform-independent logic in core/, models/, services/, providers/, utils/.
 #
+# Some .cpp files are inherently hardware-only (real BSP/Wi-Fi/display
+# drivers with no host shim, e.g. WaveshareBoard) and are skipped - see
+# SKIP_FILES below. Their headers (e.g. waveshare_board.hpp) stay
+# dependency-free on purpose so files that include them (app_main.cpp) are
+# still host-checkable.
+#
 # Usage:
 #   bash tools/scripts/host_check.sh
 #   bash tools/scripts/host_check.sh --app   # also syntax-check main/app_main.cpp
@@ -67,6 +73,18 @@ SH
 INC=("-I$SHIM")
 for d in "$COMP"/*/include; do INC+=("-I$d"); done
 
+# ---- files that need real ESP-IDF/BSP headers with no host shim ----
+SKIP_FILES=(
+  "waveshare_board.cpp"  # real display/touch BSP + Wi-Fi - hardware only
+)
+is_skipped() {
+  local base="$(basename "$1")"
+  for skip in "${SKIP_FILES[@]}"; do
+    [ "$base" = "$skip" ] && return 0
+  done
+  return 1
+}
+
 echo "NovaPainel host_check"
 echo "  compiler : $($CXX --version | head -1)"
 echo "  std      : $STD"
@@ -86,6 +104,10 @@ for src in \
   "$COMP"/ui/src/*.cpp ; do
   [ -f "$src" ] || continue
   rel="${src#$ROOT/}"
+  if is_skipped "$src"; then
+    printf "  SKIP  %s (hardware-only, no host shim)\n" "$rel"
+    continue
+  fi
   if "$CXX" -std="$STD" -Wall -Wextra -c "${INC[@]}" "$src" -o "$OBJ/$(echo "$rel" | tr '/' '_').o" 2>"$WORK/err.txt"; then
     printf "  OK    %s\n" "$rel"
   else

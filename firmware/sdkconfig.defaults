@@ -10,11 +10,24 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # uses Result<T>/Status instead of throwing.
 CONFIG_COMPILER_CXX_RTTI=n
 
-# Flash size: partition table requires ~4.1 MB (factory 3 MB + storage 1 MB).
-# ESP32-P4 dev kit ships with 8 MB minimum; update to 16 MB if the real board
-# has a larger chip (confirm in Fase 0 hardware bring-up).
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+# Flash size: confirmed in Fase 0 (Gate 3) - the real board (Waveshare
+# ESP32-P4-WIFI6-Touch-LCD-7B) has 32MB NOR flash, not the 8MB dev-kit
+# default. Partition table (factory 3MB + storage 1MB) fits comfortably.
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="32MB"
+
+# Chip revision: confirmed in Fase 0 (Gate 1) - the real board's ESP32-P4
+# silicon is revision v1.3, not the v3.x production revision IDF assumes by
+# default. v0.x/v1.x and v3.x have a documented hardware difference and are
+# mutually exclusive build configs (see esp_hw_support Kconfig.hw_support).
+# Without this the bootloader rejects the chip at boot.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# PSRAM (Gate 4): the real board has 32MB stacked PSRAM, required by the BSP
+# for the display's MIPI-DSI framebuffer (Fase 3) - without this,
+# bsp_display_new() fails with ESP_ERR_NO_MEM creating the DPI panel.
+CONFIG_SPIRAM=y
 
 # Custom partition table (see partitions.csv). Marked preliminary in HARDWARE.md.
 CONFIG_PARTITION_TABLE_CUSTOM=y

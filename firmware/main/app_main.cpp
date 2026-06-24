@@ -1,6 +1,8 @@
 // NovaPainel - main/app_main.cpp
-// Firmware entry point. Wires the skeleton together with MOCKS only:
-//   - no LVGL, no real display/touch driver, no real network/APIs.
+// Firmware entry point. Board bring-up is REAL (Fase 3, WaveshareBoard:
+// display/touch via the official BSP, ESP-Hosted/SDIO transport to the C6 -
+// see docs/FASE0-CHECKLIST.md). The rest is still MOCK: no LVGL yet (Fase 4),
+// no Wi-Fi AP association or real market data (Fase 5).
 // It demonstrates the data flow that the real product keeps:
 //   Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> (lvgl_task)
 //
@@ -20,7 +22,7 @@
 #include "request_orchestrator.hpp"
 #include "ui_dispatcher.hpp"
 
-#include "mock_board.hpp"
+#include "waveshare_board.hpp"
 #include "mock_market_provider.hpp"
 
 #include "clock_service.hpp"
@@ -40,7 +42,7 @@ uint32_t now_ms() {
 extern "C" void app_main(void) {
     using namespace nova;
 
-    ESP_LOGI(kTag, "==== NovaPainel firmware skeleton (mocks only) ====");
+    ESP_LOGI(kTag, "==== NovaPainel firmware (Fase 3: real board bring-up) ====");
 
     // ---- Core wiring ----
     EventBus            bus;
@@ -48,8 +50,8 @@ extern "C" void app_main(void) {
     UiDispatcher        ui_dispatcher(bus);
     RequestOrchestrator orchestrator;
 
-    // ---- Hardware abstraction (mock) ----
-    MockBoard board;
+    // ---- Hardware abstraction (real, Fase 3) ----
+    WaveshareBoard board;
 
     // ---- Providers (mock) ----
     MockMarketProvider market_provider;

@@ -33,12 +33,14 @@ Provider → Service → StateStore → EventBus → UiDispatcher → lvgl_task 
 ## Camadas (componentes do firmware)
 
 ```text
-main/                      app_main: wiring + loop (mock)
+main/                      app_main: wiring + loop (board real, resto mock)
 components/
 ├─ core/                   EventBus, StateStore, Service/ServiceManager,
 │                          RequestOrchestrator, UiDispatcher
 ├─ models/                 AppState e structs de dados (sem lógica/IO)
-├─ board/                  HAL (IBoard) + MockBoard
+├─ board/                  HAL (IBoard) + MockBoard + WaveshareBoard (real,
+│                          Fase 3 - ADR-0016; display/touch via BSP oficial,
+│                          rede só sobe o link SDIO ao C6, sem AP ainda)
 ├─ providers/              IMarketProvider + MockMarketProvider
 ├─ services/               ClockService, MarketService, NotificationService
 ├─ ui/                     HomeScreen (logs hoje; LVGL depois)
