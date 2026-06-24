@@ -51,11 +51,15 @@ struct MarketSummary {
 };
 
 // Hardware / runtime readiness flags. Filled by the Board + core during boot.
+// sd_ready is the raw SDMMC card mount (board/hardware layer, Fase 3).
+// cache_ready is the LittleFS cache abstraction on top of it (Fase 6,
+// ADR-0015) - they are intentionally separate flags.
 struct SystemStatus {
     bool board_ready{false};
     bool display_ready{false};
     bool touch_ready{false};
     bool network_ready{false};
+    bool sd_ready{false};
     bool cache_ready{false};
 };
 

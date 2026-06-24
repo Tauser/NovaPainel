@@ -37,9 +37,9 @@ void HomeScreen::render(const AppState& s) {
     } else {
         ESP_LOGI(kTag, "| Mercado: sem dados ainda");
     }
-    ESP_LOGI(kTag, "| Sistema: board=%d display=%d touch=%d net=%d cache=%d",
+    ESP_LOGI(kTag, "| Sistema: board=%d display=%d touch=%d net=%d sd=%d cache=%d",
              sys.board_ready, sys.display_ready, sys.touch_ready,
-             sys.network_ready, sys.cache_ready);
+             sys.network_ready, sys.sd_ready, sys.cache_ready);
     ESP_LOGI(kTag, "+--------------------------------------------------------+");
 }
 

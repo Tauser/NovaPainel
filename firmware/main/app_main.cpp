@@ -80,7 +80,8 @@ extern "C" void app_main(void) {
     sys.display_ready = bs.display_ready;
     sys.touch_ready   = bs.touch_ready;
     sys.network_ready = bs.network_ready;
-    sys.cache_ready   = false;  // no SD/cache layer yet
+    sys.sd_ready      = bs.sd_ready;
+    sys.cache_ready   = false;  // LittleFS cache layer not built yet (Fase 6)
     store.set_system_status(sys);
 
     // ---- Init + start services ----

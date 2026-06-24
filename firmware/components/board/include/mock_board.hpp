@@ -15,6 +15,7 @@ struct BoardStatus {
     bool display_ready{false};
     bool touch_ready{false};
     bool network_ready{false};
+    bool sd_ready{false};
 };
 
 class IBoard {

@@ -18,6 +18,12 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_touch.h"
 
+#include "driver/gpio.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdmmc_host.h"
+#include "esp_vfs_fat.h"
+#include "esp_ldo_regulator.h"
+
 namespace nova {
 
 namespace {
@@ -59,6 +65,67 @@ bool bring_up_display_and_touch() {
         return false;
     }
     ESP_LOGI(kTag, "touch (GT911) ready");
+    return true;
+}
+
+// Pins confirmed via the official BSP - docs/HARDWARE.md /
+// docs/waveshare_esp32_p4_wifi6_touch_lcd_7b_hardware.md.
+constexpr gpio_num_t kSdClk = GPIO_NUM_43;
+constexpr gpio_num_t kSdCmd = GPIO_NUM_44;
+constexpr gpio_num_t kSdD0  = GPIO_NUM_39;
+constexpr gpio_num_t kSdD1  = GPIO_NUM_40;
+constexpr gpio_num_t kSdD2  = GPIO_NUM_41;
+constexpr gpio_num_t kSdD3  = GPIO_NUM_42;
+constexpr const char* kSdMountPoint = "/sdcard";
+
+// Per docs/HARDWARE.md (Gate 7 finding), the SD slot is powered from the
+// P4's internal LDO, channel 4 ("VO4") - same idea as the MIPI-DSI PHY
+// needing LDO channel 3 (handled internally by bsp_display_new). Without
+// this the card never responds (sdmmc_init_ocr times out) even when
+// physically inserted.
+constexpr int kSdLdoChannel = 4;
+constexpr int kSdLdoMillivolts = 3300;
+
+bool bring_up_sd_card() {
+    esp_ldo_channel_handle_t ldo = nullptr;
+    esp_ldo_channel_config_t ldo_cfg = {
+        .chan_id = kSdLdoChannel,
+        .voltage_mv = kSdLdoMillivolts,
+    };
+    esp_err_t ldo_err = esp_ldo_acquire_channel(&ldo_cfg, &ldo);
+    if (ldo_err != ESP_OK) {
+        ESP_LOGW(kTag, "SD LDO channel %d enable failed: %s - trying mount anyway",
+                 kSdLdoChannel, esp_err_to_name(ldo_err));
+    }
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot = SDMMC_HOST_SLOT_0;
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.clk = kSdClk;
+    slot_config.cmd = kSdCmd;
+    slot_config.d0  = kSdD0;
+    slot_config.d1  = kSdD1;
+    slot_config.d2  = kSdD2;
+    slot_config.d3  = kSdD3;
+    slot_config.width = 4;
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 4,
+        .allocation_unit_size = 16 * 1024,
+    };
+
+    sdmmc_card_t* card = nullptr;
+    esp_err_t err = esp_vfs_fat_sdmmc_mount(kSdMountPoint, &host, &slot_config,
+                                             &mount_config, &card);
+    if (err != ESP_OK) {
+        ESP_LOGW(kTag, "SD mount failed: %s (no card inserted? - degrades gracefully)",
+                 esp_err_to_name(err));
+        return false;
+    }
+    ESP_LOGI(kTag, "SD card mounted at %s", kSdMountPoint);
     return true;
 }
 
@@ -112,9 +179,14 @@ BoardStatus WaveshareBoard::bring_up() {
     status_.network_ready = bring_up_network_transport();
     status_.board_ready = display_and_touch_ok && status_.network_ready;
 
-    ESP_LOGI(kTag, "bring-up complete: board=%d display=%d touch=%d network=%d",
+    // SD card is allowed to be absent/fail without blocking board_ready -
+    // it degrades gracefully (no card inserted is a normal, expected case;
+    // see docs/HARDWARE.md Gate 7).
+    status_.sd_ready = bring_up_sd_card();
+
+    ESP_LOGI(kTag, "bring-up complete: board=%d display=%d touch=%d network=%d sd=%d",
              status_.board_ready, status_.display_ready, status_.touch_ready,
-             status_.network_ready);
+             status_.network_ready, status_.sd_ready);
     return status_;
 }
 
