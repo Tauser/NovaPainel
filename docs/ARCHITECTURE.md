@@ -13,9 +13,10 @@ Provider → Service → StateStore → EventBus → UiDispatcher → lvgl_task 
 - **StateStore** guarda o estado único da aplicação (`AppState`). Toda mutação
   publica um evento no `EventBus`.
 - **EventBus** entrega eventos de forma síncrona, na task de quem publicou.
-- **UiDispatcher** assina os eventos relevantes para UI, enfileira e drena na
-  futura `lvgl_task`.
-- **UI** (LVGL, futuro) lê do `StateStore` e desenha.
+- **UiDispatcher** assina os eventos relevantes para UI, enfileira e drena sob
+  o lock do board (`IBoard::lock`/`unlock`) - a `lvgl_task` real é a do BSP
+  (`bsp_display_start()`, Fase 4/ADR-0018), não uma task própria do firmware.
+- **UI** (LVGL real desde a Fase 4) lê do `StateStore` e desenha.
 
 ## Regras de arquitetura
 
@@ -23,11 +24,11 @@ Provider → Service → StateStore → EventBus → UiDispatcher → lvgl_task 
 - A UI não faz request direto.
 - Services não mexem diretamente na UI.
 - Tudo passa por StateStore/EventBus.
-- UiDispatcher é obrigatório para marshaling futuro para a lvgl_task.
+- UiDispatcher drena sob IBoard::lock()/unlock() antes de tocar LVGL (ADR-0018).
 - RequestOrchestrator controla prioridade, frequência e rate limit.
-- Board abstrai o hardware real (HAL).
+- Board abstrai o hardware real (HAL), incluindo o lock de LVGL.
 - Providers abstraem APIs externas.
-- Nenhuma task além da lvgl_task pode alterar objetos LVGL.
+- Nenhuma task fora da lvgl_task do BSP pode alterar objetos LVGL sem o lock.
 ```
 
 ## Camadas (componentes do firmware)
@@ -43,7 +44,7 @@ components/
 │                          rede só sobe o link SDIO ao C6, sem AP ainda)
 ├─ providers/              IMarketProvider + MockMarketProvider
 ├─ services/               ClockService, MarketService, NotificationService
-├─ ui/                     HomeScreen (logs hoje; LVGL depois)
+├─ ui/                     HomeScreen (LVGL real, Fase 4 - relógio+mercado+status)
 └─ utils/                  Result<T> / Status
 ```
 
@@ -61,9 +62,9 @@ lvgl_task
 Screen.render()
 ```
 
-No esqueleto atual não há LVGL: `UiDispatcher::process_pending()` coalesce os
-eventos pendentes e chama um `render` que imprime a Home via logs. O contrato
-(quem pode tocar a UI e quando) já é o definitivo.
+`UiDispatcher::process_pending()` coalesce os eventos pendentes e chama o
+`render` callback (definido em `app_main.cpp`) sob `board.lock()`/`unlock()`,
+que `HomeScreen::render` usa para construir/atualizar widgets LVGL reais.
 
 ## RequestOrchestrator (ADR-0004)
 

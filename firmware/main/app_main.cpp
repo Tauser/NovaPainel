@@ -1,15 +1,19 @@
 // NovaPainel - main/app_main.cpp
-// Firmware entry point. Board bring-up is REAL (Fase 3, WaveshareBoard:
-// display/touch via the official BSP, ESP-Hosted/SDIO transport to the C6 -
-// see docs/FASE0-CHECKLIST.md). The rest is still MOCK: no LVGL yet (Fase 4),
-// no Wi-Fi AP association or real market data (Fase 5).
+// Firmware entry point. Board bring-up is REAL (Fase 3, WaveshareBoard) and
+// the Home screen renders REAL LVGL widgets (Fase 4). Wi-Fi AP association
+// and real market data are still MOCK (Fase 5).
 // It demonstrates the data flow that the real product keeps:
-//   Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> (lvgl_task)
+//   Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task
 //
 // Boot order (per docs/ARCHITECTURE.md):
 //   EventBus -> StateStore -> UiDispatcher -> RequestOrchestrator -> Board
 //   -> providers -> services -> register -> board bring-up -> init -> start
-//   -> HomeScreen (logs).
+//   -> HomeScreen (LVGL).
+//
+// LVGL is not thread-safe (ADR-0007/0013). The real board's own LVGL port
+// task is the only task that calls lv_timer_handler(); any other code that
+// touches lv_obj_* (here, the render callback driven by UiDispatcher) must
+// hold board.lock()/unlock() first - see IBoard::lock in mock_board.hpp.
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -66,11 +70,15 @@ extern "C" void app_main(void) {
     services.add(&market_service);
     services.add(&notification_service);
 
-    // ---- UI (log-only). Bound through the dispatcher so rendering is always
-    //      marshaled - never called directly from a service. ----
+    // ---- UI (real LVGL widgets, Fase 4). Bound through the dispatcher so
+    //      rendering is always marshaled - never called directly from a
+    //      service - and always under the board's LVGL lock. ----
     HomeScreen home;
-    ui_dispatcher.bind_render([&home, &store](const UiEvent&) {
-        home.render(store.state());
+    ui_dispatcher.bind_render([&home, &store, &board](const UiEvent&) {
+        if (board.lock(100)) {  // 100ms, in real ms (not ticks) - see IBoard::lock
+            home.render(store.state());
+            board.unlock();
+        }
     });
 
     // ---- Board bring-up -> publish system status ----
@@ -97,12 +105,14 @@ extern "C" void app_main(void) {
     store.set_screen(ScreenId::Home);
     bus.publish(EventType::BootCompleted);
 
-    ESP_LOGI(kTag, "entering main loop (mock). Real lvgl_task replaces this later.");
+    ESP_LOGI(kTag, "entering main loop. LVGL itself runs on the board's own lvgl_task.");
 
     // ---- Cooperative main loop ----
-    // NOTE: in the real firmware, rendering happens on a dedicated lvgl_task and
-    // services run on their own tasks. Here a single loop ticks services and
-    // drains the UiDispatcher to keep the skeleton dependency-free.
+    // NOTE: the real LVGL task (inside the BSP's esp_lvgl_port) calls
+    // lv_timer_handler() on its own; this loop just ticks services and drains
+    // the UiDispatcher into HomeScreen::render() under the board's LVGL lock
+    // (see bind_render above). Services running on their own tasks remains
+    // future work; this single loop keeps the skeleton dependency-free.
     const TickType_t loop_delay = pdMS_TO_TICKS(1000);
     uint32_t last_render_ms = 0;
     for (;;) {

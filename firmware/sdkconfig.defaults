@@ -4,7 +4,9 @@
 # Target is set via `idf.py set-target esp32p4`.
 
 # Give the main task a comfortable stack for C++ / std::function usage.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# 6144 (not 8192) to match what Fase 0's gate15 harness validated - see the
+# esp_startup_start_app finding below.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 
 # C++: keep RTTI off (smaller). Exceptions left at IDF default (off) - the code
 # uses Result<T>/Status instead of throwing.
@@ -35,3 +37,33 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # Default log level INFO.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# LVGL (Fase 4): font sizes used by HomeScreen, matching the design reference
+# in docs/design/lvgl_export_reference/novapanel_theme.h.
+CONFIG_LV_FONT_MONTSERRAT_10=y
+CONFIG_LV_FONT_MONTSERRAT_12=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+
+# ESP-Hosted SDIO queue size (Fase 4 finding): default 20/20 needs a
+# contiguous ~47KB block of MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA memory for
+# sdio_mempool_create() (block_size 1536 * (rx_q_size + 11)). This exact
+# mitigation is documented upstream in
+# espressif__esp_hosted/docs/performance_optimization.md ("Reduce memory
+# footprint for resource-constrained applications"). Queue depth is a
+# throughput knob (Fase 10), not a correctness requirement now.
+CONFIG_ESP_HOSTED_SDIO_TX_Q_SIZE=10
+CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=10
+
+# LVGL malloc source (Fase 4 root-cause finding): LV_USE_BUILTIN_MALLOC (the
+# default) reserves a STATIC 64KB pool (work_mem_int, lv_mem_core_builtin.c)
+# in internal RAM, present from boot regardless of actual LVGL usage. This
+# alone is most of the ~123KB .bss growth that shrank the early/pre-scheduler
+# internal-DMA pool enough to make esp_hosted's own constructor-time SDIO
+# init (which runs before app_main, before main_task is even created) fail
+# main task creation itself (esp_startup_start_app assert). Switching to the
+# standard C malloc/free turns this into on-demand dynamic allocation
+# instead of a fixed upfront reservation.
+CONFIG_LV_USE_CLIB_MALLOC=y

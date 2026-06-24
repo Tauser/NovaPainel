@@ -186,3 +186,47 @@ regra de UI sem request. Tratar como "wizard multi-step" desde já (em vez
 de só "tela de Wi-Fi") evita reabrir esta decisão a cada novo passo
 adicionado. A tela de Boot não tinha esse risco - só ficou registrada aqui
 pra fechar a dúvida junto.
+
+## ADR-0018 - LVGL real via bsp_display_start() e IBoard::lock()/unlock()
+**Decisão:** `WaveshareBoard` usa `bsp_display_start()` (a função tudo-em-um
+do BSP oficial) em vez de `bsp_display_new()`/`bsp_touch_new()` separados
+(usados no harness da Fase 0). `bsp_display_start()` já inicializa o LVGL,
+registra o touch GT911 como input device automaticamente e sobe a própria
+task de LVGL do BSP - o firmware não precisa de uma `lvgl_task` própria.
+Como LVGL não é thread-safe, qualquer código fora dessa task que toque
+`lv_obj_*` precisa do mutex do BSP (`bsp_display_lock`/`unlock`).
+`IBoard` ganhou `lock(uint32_t timeout_ms)`/`unlock()` (primitivos, sem tipo
+do LVGL/BSP no header) para expor esse mutex sem vazar dependência real -
+`MockBoard` implementa como no-op, `WaveshareBoard` chama o BSP.
+`app_main.cpp` envolve a chamada de `ui_dispatcher.process_pending()`
+(que aciona `HomeScreen::render`) com `board.lock()`/`unlock()`.
+`HomeScreen` ficou escopada ao que `AppState` tem hoje (relógio + mercado +
+status) - sem clima/agenda/player/cenas do protótipo de referência, que
+dependem de providers/services que ainda não existem.
+
+**Achado real (causa raiz de um boot-loop):** ao linkar o BSP gráfico
+completo (LVGL + `esp_lvgl_port` + `esp_lcd_ek79007` + `esp_lcd_touch_gt911`
++ `esp_codec_dev`), o `.bss` do firmware cresceu ~123KB sobre o harness da
+Fase 0. O maior contribuinte (64KB) é o alocador padrão do LVGL
+(`LV_USE_BUILTIN_MALLOC`), que reserva um array estático (`work_mem_int`,
+`lv_mem_core_builtin.c`) em RAM interna **desde o boot**, independente de
+LVGL estar em uso. Isso reduziu a região de RAM interna/DMA disponível bem
+no início do boot, exatamente quando o construtor do ESP-Hosted
+(`__attribute__((constructor))`, roda **antes do `app_main`**, antes até da
+criação da própria main task) tenta alocar seu mempool SDIO + 4 threads -
+causando primeiro `assert failed: sdio_mempool_create` e, mesmo reduzindo as
+filas do SDIO (`CONFIG_ESP_HOSTED_SDIO_TX/RX_Q_SIZE=10`, mitigação
+documentada no próprio `esp_hosted`), ainda sobrava pouca margem e a criação
+da main task em si falhava (`esp_startup_start_app` assert). Trocar para
+`CONFIG_LV_USE_CLIB_MALLOC=y` (LVGL usa malloc/free padrão, alocação
+dinâmica sob demanda, não uma reserva fixa de 64KB) resolveu - confirmado
+via `riscv32-esp-elf-size` (`.bss` caiu exatamente ~64KB) e validado na
+placa física sem reset.
+**Motivo:** o tamanho do buffer de display (full-frame/double-buffer em
+PSRAM, tentado primeiro) e a ordem de bring-up (display vs. rede) foram
+descartados como causa - ambos teoricamente plausíveis, ambos testados e
+sem efeito, porque o problema real acontecia **antes** de qualquer código
+do app rodar. Medir `.bss` direto (`riscv32-esp-elf-size` + `nm
+--size-sort`) achou a causa real em minutos onde reordenar código não
+ajudava; documentar isso evita repetir a mesma investigação se outro
+componente futuro reintroduzir uma reserva estática grande.

@@ -25,6 +25,11 @@ public:
     BoardStatus bring_up() override;
     BoardStatus status() const override { return status_; }
 
+    // Real BSP/LVGL mutex - the official BSP runs its own LVGL port task;
+    // any other code touching lv_obj_* must hold this first.
+    bool lock(uint32_t timeout_ms) override;
+    void unlock() override;
+
 private:
     BoardStatus status_{};
 };

@@ -1,10 +1,9 @@
 # NovaPainel - Roadmap
 
-> Estado atual: **Fase 3 concluída** - `WaveshareBoard` real (display EK79007
-> + touch GT911 via BSP oficial, SD card real, link SDIO ao C6) substituiu
-> `MockBoard` em `firmware/main/app_main.cpp`, validado na placa física
-> (ADR-0016). LVGL, Wi-Fi/APIs reais ainda não implementados, por decisão
-> (Fases 4/5).
+> Estado atual: **Fase 4 concluída** - `HomeScreen` real em LVGL (relógio +
+> mercado, lendo `AppState`) rodando via `bsp_display_start()` (display +
+> touch automáticos), validado na placa física sem reset (ADR-0018). Wi-Fi
+> real/APIs reais ainda não implementados, por decisão (Fase 5).
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -21,7 +20,7 @@ Fase 0  - Risk Gates de hardware (C6/ESP-Hosted, SDIO, Wi-Fi+display simultâneo
 Fase 1  - Organização do monorepo                                  [feito]
 Fase 2  - Firmware core com mocks                                  [feito]
 Fase 3  - Board real / BSP                                          [feito]
-Fase 4  - Display/touch/LVGL real (buffers PSRAM pré-alocados, dirty rect nativo)
+Fase 4  - Display/touch/LVGL real (dirty rect nativo)               [feito, buffer PSRAM adiado p/ Fase 10]
 Fase 5  - Wi-Fi/NTP/HTTPS/CoinGecko snapshot
 Fase 6  - Home MVP com cache (LittleFS, escrita atômica, dado stale visível)
 Fase 7  - Sistema/status/logs (observabilidade: coredump, motivo de reset)
@@ -60,10 +59,20 @@ Fase 15 - futuro: server opcional/NoiseBot
   `firmware/main/app_main.cpp` e foi validado na placa física
   (`board=1 display=1 touch=1 net=1 sd=1` em `SystemStatus`). `cache_ready`
   fica false até a Fase 6 (camada LittleFS é separada do mount cru do SD).
-- **Fase 4:** integrar LVGL real; `UiDispatcher::process_pending()` passa a rodar
-  na `lvgl_task` (fila assíncrona com coalescing, ADR-0013); `HomeScreen::render`
-  passa de logs para widgets. Framebuffers pré-alocados em PSRAM no boot; dirty
-  rectangles via API nativa do LVGL. Pinagem de cores definida e documentada.
+- **Fase 4 (concluída):** LVGL real via `bsp_display_start()` (ADR-0018) - o
+  BSP já cuida da `lvgl_task` própria, touch como indev e o lock
+  (`IBoard::lock`/`unlock`, mapeado para `bsp_display_lock`/`unlock`)
+  exigido por `UiDispatcher::process_pending()` ao chamar
+  `HomeScreen::render`. `HomeScreen` virou widgets reais (relógio + mercado +
+  status), escopo MVP - sem clima/agenda/player/cenas (essas dependem de
+  providers/services que não existem ainda; ver `docs/design/README.md`).
+  **Adiado para a Fase 10:** buffer de display full-frame/double-buffer em
+  PSRAM (hoje usa o padrão do BSP - buffer parcial, single, RAM interna).
+  Achado real (ADR-0018): o alocador padrão do LVGL (`LV_USE_BUILTIN_MALLOC`)
+  reserva 64KB estáticos em RAM interna desde o boot, competindo com a
+  inicialização do ESP-Hosted (que roda via `__attribute__((constructor))`
+  antes do `app_main`) e causando falha na criação da própria main task:
+  trocado para `LV_USE_CLIB_MALLOC` (alocação dinâmica via heap padrão).
   Tela de Boot/splash entra aqui também (`ScreenId::Boot` já existe em
   `AppState`, só falta o screen builder - ADR-0017).
 - **Fase 5:** trocar `MockMarketProvider` por `CoinGeckoProvider` (REST, 60s,

@@ -76,6 +76,7 @@ for d in "$COMP"/*/include; do INC+=("-I$d"); done
 # ---- files that need real ESP-IDF/BSP headers with no host shim ----
 SKIP_FILES=(
   "waveshare_board.cpp"  # real display/touch BSP + Wi-Fi - hardware only
+  "home_screen.cpp"      # real LVGL widgets (Fase 4) - lvgl.h has no host shim
 )
 is_skipped() {
   local base="$(basename "$1")"

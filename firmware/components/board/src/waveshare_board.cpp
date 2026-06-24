@@ -14,9 +14,6 @@
 #include "esp_wifi.h"
 
 #include "bsp/esp32_p4_wifi6_touch_lcd_7b.h"
-#include "bsp/touch.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_touch.h"
 
 #include "driver/gpio.h"
 #include "sdmmc_cmd.h"
@@ -29,42 +26,31 @@ namespace nova {
 namespace {
 constexpr const char* kTag = "WaveshareBoard";
 
+// bsp_display_start_with_config() is the BSP's all-in-one entry point: it
+// brings up the panel + backlight pin, initializes LVGL (lvgl_port), wires
+// the GT911 touch controller as the LVGL input device automatically, and
+// starts the BSP's own LVGL task. There is no separate touch bring-up call
+// (unlike Fase 0's gate15 harness, which called bsp_touch_new() directly
+// because it didn't use LVGL at all).
+//
+// Uses the BSP's own tested defaults (partial buffer, single, internal RAM -
+// same as plain bsp_display_start()) rather than a custom full-frame
+// double-buffered PSRAM config: that config made esp_startup_start_app's own
+// main task creation fail (insufficient internal RAM for FreeRTOS/DMA
+// bookkeeping, even though the pixel data itself would live in PSRAM -
+// found while wiring Fase 4). Moving to bigger/PSRAM buffers is a Fase 10
+// performance topic (ROADMAP), not a Fase 4 correctness requirement.
 bool bring_up_display_and_touch() {
-    bsp_display_config_t disp_cfg = {};
-    esp_lcd_panel_handle_t panel = nullptr;
-    esp_lcd_panel_io_handle_t io = nullptr;
-    esp_err_t err = bsp_display_new(&disp_cfg, &panel, &io);
-    if (err != ESP_OK) {
-        ESP_LOGE(kTag, "bsp_display_new failed: %s", esp_err_to_name(err));
+    lv_display_t* disp = bsp_display_start();
+    if (!disp) {
+        ESP_LOGE(kTag, "bsp_display_start_with_config failed");
         return false;
     }
-
-    // On this board's EK79007 driver, panel->disp_on_off is left NULL, so the
-    // esp_lcd framework returns ESP_ERR_NOT_SUPPORTED (not a generic
-    // failure - see esp_lcd_panel_ops.c). The panel is effectively always
-    // "on" once esp_lcd_panel_init() succeeds (done inside bsp_display_new);
-    // visibility is controlled by the backlight below. Only
-    // ESP_ERR_NOT_SUPPORTED is expected here - anything else is a real error.
-    esp_err_t disp_err = esp_lcd_panel_disp_on_off(panel, true);
-    if (disp_err != ESP_OK && disp_err != ESP_ERR_NOT_SUPPORTED) {
-        ESP_LOGE(kTag, "esp_lcd_panel_disp_on_off failed: %s", esp_err_to_name(disp_err));
+    if (bsp_display_backlight_on() != ESP_OK) {
+        ESP_LOGE(kTag, "backlight on failed");
         return false;
     }
-
-    if (bsp_display_brightness_init() != ESP_OK || bsp_display_backlight_on() != ESP_OK) {
-        ESP_LOGE(kTag, "backlight init/on failed");
-        return false;
-    }
-    ESP_LOGI(kTag, "display (EK79007) ready, backlight on");
-
-    esp_lcd_touch_handle_t touch = nullptr;
-    bsp_touch_config_t touch_cfg = {};
-    err = bsp_touch_new(&touch_cfg, &touch);
-    if (err != ESP_OK) {
-        ESP_LOGE(kTag, "bsp_touch_new failed: %s", esp_err_to_name(err));
-        return false;
-    }
-    ESP_LOGI(kTag, "touch (GT911) ready");
+    ESP_LOGI(kTag, "display (EK79007) + touch (GT911) ready via BSP LVGL port");
     return true;
 }
 
@@ -170,13 +156,19 @@ BoardStatus WaveshareBoard::bring_up() {
     status_.display_ready = false;
     status_.touch_ready = false;
 
+    // Order matters: bring up the ESP-Hosted/SDIO transport BEFORE the LVGL
+    // display buffers. Fase 0 (gate15 harness) validated this order; doing
+    // display first starves the SDIO driver's DMA-capable memory pool and
+    // sdio_mempool_create() asserts (found while wiring Fase 4).
+    status_.network_ready = bring_up_network_transport();
+
     const bool display_and_touch_ok = bring_up_display_and_touch();
-    // bsp_display_new/bsp_touch_new don't report which one failed when both
-    // run together; treat the pair atomically since both ride the same BSP.
+    // bsp_display_start_with_config() brings up both atomically (touch is
+    // wired in as the LVGL indev internally) and doesn't report which one
+    // failed individually.
     status_.display_ready = display_and_touch_ok;
     status_.touch_ready = display_and_touch_ok;
 
-    status_.network_ready = bring_up_network_transport();
     status_.board_ready = display_and_touch_ok && status_.network_ready;
 
     // SD card is allowed to be absent/fail without blocking board_ready -
@@ -188,6 +180,14 @@ BoardStatus WaveshareBoard::bring_up() {
              status_.board_ready, status_.display_ready, status_.touch_ready,
              status_.network_ready, status_.sd_ready);
     return status_;
+}
+
+bool WaveshareBoard::lock(uint32_t timeout_ms) {
+    return bsp_display_lock(timeout_ms);
+}
+
+void WaveshareBoard::unlock() {
+    bsp_display_unlock();
 }
 
 }  // namespace nova
