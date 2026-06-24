@@ -64,9 +64,14 @@ Fase 15 - futuro: server opcional/NoiseBot
   na `lvgl_task` (fila assíncrona com coalescing, ADR-0013); `HomeScreen::render`
   passa de logs para widgets. Framebuffers pré-alocados em PSRAM no boot; dirty
   rectangles via API nativa do LVGL. Pinagem de cores definida e documentada.
+  Tela de Boot/splash entra aqui também (`ScreenId::Boot` já existe em
+  `AppState`, só falta o screen builder - ADR-0017).
 - **Fase 5:** trocar `MockMarketProvider` por `CoinGeckoProvider` (REST, 60s,
   6 req/min, cache, batch). Adicionar provider de clima (ex.: Open-Meteo) e fonte
-  USD/BRL dedicada (atrás da mesma `IMarketProvider`/interface de câmbio).
+  USD/BRL dedicada (atrás da mesma `IMarketProvider`/interface de câmbio). Tela
+  de setup/provisionamento de Wi-Fi entra aqui: UI publica intenção via
+  `EventBus`, um `SetupService` é o único a chamar `esp_wifi_connect`/persistir
+  credencial em NVS (ADR-0017 + ADR-0011) - UI nunca chama Wi-Fi direto.
 
 ## Detalhe das fases de hardening (pós-hardware provado)
 

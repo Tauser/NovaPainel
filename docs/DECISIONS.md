@@ -139,3 +139,30 @@ a configuração de usuário. A separação header/implementação evita que tod
 código real de hardware acabe "contaminando" `app_main.cpp` e quebrando o
 host check, que é o jeito rápido do time validar lógica de wiring sem
 ESP-IDF instalado.
+
+## ADR-0017 - Tela de boot e tela de setup inicial (Wi-Fi)
+**Decisão:**
+- **Boot/splash:** não precisa de decisão nova. `AppState::current_screen` já
+  nasce em `ScreenId::Boot` (era só não-renderizado até agora). Na Fase 4,
+  basta adicionar um screen builder para `Boot` igual ao de `Home` - nenhuma
+  mudança estrutural.
+- **Setup inicial (provisionamento de Wi-Fi):** a tela **nunca** chama
+  `esp_wifi_*` direto. Fluxo obrigatório: tela publica uma intenção no
+  `EventBus` (ex.: `EventType::WifiCredentialsSubmitted` com SSID/senha no
+  payload) → um `SetupService` (novo, ou método dedicado dentro do serviço de
+  rede que a Fase 5 introduzir) é o único a chamar
+  `esp_wifi_set_config`/`esp_wifi_connect` e a persistir a credencial em NVS
+  → o resultado (sucesso/falha/IP) volta via `StateStore`/`SystemStatus` e a
+  tela só lê, nunca bloqueia esperando a resposta. Mesma regra de toda a UI
+  (ADR arquitetural já vigente): UI não faz request direto, só
+  `StateStore`/`EventBus`.
+- **Armazenamento da credencial:** NVS, conforme ADR-0011 (sem cripto
+  própria; builds PROD habilitam NVS Encryption nativa; dev pode deixar
+  desativado). Nenhuma decisão nova aqui - é só lembrete de que esse dado
+  específico cai direto na regra que ADR-0011 já cobre.
+**Motivo:** a tela de setup é o primeiro lugar do produto onde a UI teria
+um motivo "razoável" de chamar rede direto (é o fluxo nativo de qualquer
+wizard de Wi-Fi). Decidir agora, antes da Fase 5 implementar, evita que a
+exceção pareça aceitável e vire precedente para outras telas furarem a
+regra de UI sem request. A tela de Boot não tinha esse risco - só ficou
+registrada aqui pra fechar a dúvida junto.
