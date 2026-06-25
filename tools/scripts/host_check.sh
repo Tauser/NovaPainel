@@ -79,6 +79,10 @@ extern "C" QueueHandle_t xQueueCreate(uint32_t, uint32_t);
 extern "C" BaseType_t xQueueSend(QueueHandle_t, const void*, TickType_t);
 extern "C" BaseType_t xQueueReceive(QueueHandle_t, void*, TickType_t);
 SH
+cat > "$SHIM/esp_system.h" <<'SH'
+#pragma once
+inline void esp_restart(void) {}
+SH
 
 # ---- include path: every component's include/ + the shim ----
 INC=("-I$SHIM")
