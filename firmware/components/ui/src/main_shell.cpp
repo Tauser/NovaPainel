@@ -134,8 +134,9 @@ void MainShell::build() {
     lv_obj_set_style_border_width(vsep, 0, 0);
     lv_obj_set_style_radius(vsep, 0, 0);
 
-    make_icon_btn(topbar, LV_SYMBOL_TINT);      // inert - no dedicated Clima screen yet
-    make_icon_btn(topbar, LV_SYMBOL_SETTINGS);  // inert - no Configuracoes screen yet
+    make_icon_btn(topbar, LV_SYMBOL_TINT);  // inert - no dedicated Clima screen yet
+    settings_btn_ = make_icon_btn(topbar, LV_SYMBOL_SETTINGS);
+    lv_obj_add_event_cb(settings_btn_, &MainShell::on_settings_clicked, LV_EVENT_CLICKED, this);
 
     // ====== column: content + dots - x/width adapt with the rail, same as
     // topbar_ above (push layout). ======
@@ -329,6 +330,11 @@ void MainShell::on_menu_toggle_clicked(lv_event_t* e) {
 void MainShell::on_system_icon_clicked(lv_event_t* e) {
     auto* self = static_cast<MainShell*>(lv_event_get_user_data(e));
     if (self->on_navigate_) self->on_navigate_(ScreenId::System);
+}
+
+void MainShell::on_settings_clicked(lv_event_t* e) {
+    auto* self = static_cast<MainShell*>(lv_event_get_user_data(e));
+    if (self->on_navigate_) self->on_navigate_(ScreenId::Settings);
 }
 
 void MainShell::on_gesture(lv_event_t* e) {

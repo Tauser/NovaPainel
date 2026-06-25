@@ -64,6 +64,7 @@ private:
     static void on_menu_toggle_clicked(lv_event_t* e);
     static void on_gesture(lv_event_t* e);
     static void on_system_icon_clicked(lv_event_t* e);
+    static void on_settings_clicked(lv_event_t* e);
 
     NavigateFn on_navigate_;
 
@@ -80,6 +81,7 @@ private:
     lv_obj_t* title_label_{nullptr};
     lv_obj_t* wifi_icon_btn_{nullptr};
     lv_obj_t* wifi_icon_{nullptr};
+    lv_obj_t* settings_btn_{nullptr};
 };
 
 }  // namespace nova

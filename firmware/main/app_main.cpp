@@ -56,6 +56,9 @@
 #include "wizard_screen.hpp"
 #include "main_shell.hpp"
 #include "system_screen.hpp"
+#include "settings_screen.hpp"
+
+#include "esp_system.h"
 
 namespace {
 constexpr const char* kTag = "app_main";
@@ -151,14 +154,24 @@ extern "C" void app_main(void) {
     HomeScreen   home;
     MainShell    shell([&store](ScreenId id) { store.set_screen(id); });
     SystemScreen system_screen([&store]() { store.set_screen(ScreenId::Home); });
-    ui_dispatcher.bind_render([&boot, &wizard, &home, &shell, &system_screen, &store, &board](const UiEvent&) {
+    SettingsScreen settings_screen(
+        [enqueue_action, &store](const OnboardingSubmission& sub) {
+            enqueue_action([&store, sub] { store.submit_onboarding(sub); });
+        },
+        [&store](ScreenId id) { store.set_screen(id); },
+        [enqueue_action]() {
+            enqueue_action([] { esp_restart(); });
+        });
+    ui_dispatcher.bind_render([&boot, &wizard, &home, &shell, &system_screen,
+                               &settings_screen, &store, &board](const UiEvent&) {
         if (board.lock(100)) {  // 100ms, in real ms (not ticks) - see IBoard::lock
             switch (store.state().current_screen) {
-                case ScreenId::Boot:   boot.render(store.state()); break;
-                case ScreenId::Setup:  wizard.render(store.state()); break;
+                case ScreenId::Boot:     boot.render(store.state()); break;
+                case ScreenId::Setup:    wizard.render(store.state()); break;
                 // Own top-level screen, not mounted via MainShell::content()
                 // - see system_screen.hpp for why (Fase 7).
-                case ScreenId::System: system_screen.render(store.state(), now_ms()); break;
+                case ScreenId::System:   system_screen.render(store.state(), now_ms()); break;
+                case ScreenId::Settings: settings_screen.render(store.state()); break;
                 default:
                     // MainShell (ADR-0024) owns the lv_screen_load() for
                     // every "MAIN phase" screen; HomeScreen just mounts its
