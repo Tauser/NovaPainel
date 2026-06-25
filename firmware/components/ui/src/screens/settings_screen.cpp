@@ -29,8 +29,6 @@ constexpr uint32_t kColorText      = 0xE8EAF2;
 constexpr uint32_t kColorTextDim   = 0x7A8298;
 constexpr uint32_t kColorTextMuted = 0x464E64;
 constexpr uint32_t kColorGreen     = 0x4ABB78;
-constexpr uint32_t kColorGreenBg   = 0x0F1D15;
-constexpr uint32_t kColorGreenBd   = 0x1A3828;
 constexpr uint32_t kColorDarkFg    = 0x090C12;
 constexpr uint32_t kColorSelected  = 0x252A3C;  // active pill bg
 
@@ -260,7 +258,7 @@ void SettingsScreen::build() {
     lv_obj_set_style_radius(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_STRETCH, LV_FLEX_ALIGN_STRETCH);
+    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_column(grid, 11, 0);
     lv_obj_set_scrollbar_mode(grid, LV_SCROLLBAR_MODE_OFF);
 
@@ -481,11 +479,6 @@ void SettingsScreen::update_live(const AppState& state) {
     const bool online = state.onboarding.wifi_status == WifiConnectStatus::Connected;
 
     // Wi-Fi card
-    const char* ssid_text = state.onboarding.wifi_status == WifiConnectStatus::Connected
-                            && !state.preferences.display_name.empty()
-                            ? "Conectado" : "—";
-    // Use actual SSID from pending_submission if available, else generic
-    // We don't store SSID in AppState post-connect, so show connection status
     const char* status_text = online ? "Conectado" : "Desconectado";
     if (std::strcmp(lv_label_get_text(wifi_status_label_), status_text) != 0) {
         lv_label_set_text(wifi_status_label_, status_text);

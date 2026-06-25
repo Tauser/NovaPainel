@@ -71,6 +71,7 @@ private:
     lv_obj_t* name_input_{nullptr};
     lv_obj_t* av_initials_label_{nullptr};
     lv_obj_t* profile_name_label_{nullptr};
+    lv_obj_t* wifi_ssid_label_{nullptr};
     lv_obj_t* wifi_status_label_{nullptr};
     lv_obj_t* sys_chip_label_{nullptr};
     lv_obj_t* sys_reset_label_{nullptr};
