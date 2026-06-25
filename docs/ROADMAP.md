@@ -15,7 +15,10 @@
 > reboot/sem-rede mostrado como "(cache)". **Fase 7 feita** (ADR-0028):
 > partição de coredump + `SystemService` (motivo do reset, contador de
 > reboots) + `SystemScreen` (tela própria, 8º ícone do rail) com idade do
-> dado por domínio.
+> dado por domínio. **Fase 8 feita** (ADR-0029): circuit breaker por
+> domínio (closed/open/half-open), backoff exponencial + jitter, probe
+> automático via `update_clock()`, `is_degraded()` público — tudo dentro
+> do `RequestOrchestrator`, serviços sem alteração.
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -119,9 +122,12 @@ Fase 15 - futuro: server opcional/NoiseBot
   (tela própria, fora do `MainShell::content()` - motivo na ADR-0028),
   acessível pelo 8º ícone do rail. Idade do dado por domínio calculada de
   `last_update_ms` já existente, sem novo campo persistido.
-- **Fase 8:** resiliência no `RequestOrchestrator` — circuit breaker por domínio
-  (closed/open/half-open), backoff exponencial + jitter, backpressure com
-  drop-oldest, retry finito, degradação para cache (ADR-0012).
+- **Fase 8 (concluída):** circuit breaker por domínio no `RequestOrchestrator`
+  — `CircuitState` (closed/open/half-open), backoff exponencial + jitter
+  (XOR-shift PRNG, sem dep externa), `update_clock()` drive Open→HalfOpen,
+  `is_degraded()` público para UI/serviços, backpressure via `can_request()`
+  retornando `false`, retry finito por sonda limitada ao período de backoff
+  (ADR-0029). Serviços e UI sem alteração.
 - **Fase 9:** segurança de produção — NVS Encryption nativa, Secure Boot v2 com
   anti-rollback, Flash Encryption; chaves/eFuses e processo de release (ADR-0011).
   Dev pode manter desativado; o **layout de partição** já assume isso desde a Fase 3.

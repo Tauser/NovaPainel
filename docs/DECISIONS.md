@@ -590,3 +590,40 @@ este MVP não precisa; tratá-la como tela própria (igual Boot/Wizard, pelo
 mesmo motivo histórico) é a correção mínima. Reusar o padrão já validado
 do Gate 15 em vez de reinventar `esp_reset_reason()`/contador de reboots
 evita repetir uma investigação já feita na placa física.
+
+## ADR-0029 - Fase 8: circuit breaker + backoff + backpressure no RequestOrchestrator
+
+**Decisão:** o `RequestOrchestrator` (ADR-0004/0012) ganha, por domínio, um
+circuit breaker com três estados (`CircuitState`: `Closed`/`Open`/`HalfOpen`)
+e backoff exponencial + jitter implementados diretamente na classe, sem nova
+camada:
+
+- **Threshold:** 3 falhas consecutivas abrem o circuito (sem janela de tempo -
+  só falhas consecutivas, pois cada domínio já é isolado pelos intervalos da
+  policy).
+- **Backoff:** começa em 10s, dobra a cada abertura, teto de 5min; ±20% de
+  jitter via XOR-shift PRNG (nenhuma dep externa - funciona no host e no
+  firmware sem `esp_random()`).
+- **Open → HalfOpen:** `update_clock()` (chamada a cada tick do loop principal)
+  verifica se `now_ms >= open_until_ms`; quando sim, transiciona para
+  `HalfOpen`. Uma única probe é permitida (`can_request()` libera, sem checar
+  o intervalo normal); sucesso fecha o circuito, falha reabre com backoff
+  dobrado.
+- **Backpressure / drop-oldest:** no modelo polling atual, `can_request()`
+  retornando `false` quando o circuito está `Open` é o drop de cada tentativa
+  pendente - sem fila FIFO explícita; o efeito é idêntico a "drop-oldest".
+- **Retry finito:** ao contrário de um retry imediato infinito, cada sonda é
+  separada por pelo menos o backoff corrente (capped a 5min), limitando o
+  impacto em servidores fora do ar.
+- **API pública nova:** `circuit_state(domain)` e `is_degraded(domain)` -
+  serviços e UI podem checar para exibir dado stale ou avisos sem quebrar o
+  encapsulamento.
+
+Nenhuma mudança nos serviços foi necessária: eles continuam chamando
+`can_request()` / `note_request()` da mesma forma; o circuit breaker é
+transparente para eles.
+
+**Motivo:** implementa o que ADR-0012 descreveu (circuit breaker, backpressure,
+retry finito, degradação para cache) com o mínimo de código novo - tudo dentro
+do `RequestOrchestrator`, que já era a porta única de saída de todos os
+requests. Nenhuma mudança de interface nos serviços ou na UI foi necessária.
