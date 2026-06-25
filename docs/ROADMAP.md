@@ -1,9 +1,18 @@
 # NovaPainel - Roadmap
 
-> Estado atual: **Fase 4 concluída** - `HomeScreen` real em LVGL (relógio +
-> mercado, lendo `AppState`) rodando via `bsp_display_start()` (display +
-> touch automáticos), validado na placa física sem reset (ADR-0018). Wi-Fi
-> real/APIs reais ainda não implementados, por decisão (Fase 5).
+> Estado atual: **Fase 0 quase fechada** (Gates 1-15 PASS, incl. soak de 8h em
+> 2026-06-24 - só falta Gate 16/brownout-térmica) e **Fase 5 em andamento real**
+> (não mais "a fazer"): `WaveshareBoard` + `CoinGeckoProvider` +
+> `OpenMeteoProvider` + `SetupService` (NVS, `esp_wifi_connect`, NTP) +
+> `WizardScreen` (onboarding completo, Wi-Fi/fuso/formato de hora) já rodam em
+> `app_main.cpp` e foram validados na placa física, com pelo menos um bug real
+> de hardware encontrado e corrigido (lock da LVGL travando a tela durante o
+> wizard - ver `docs/DECISIONS.md`). `HomeScreen`/`MainShell` (redesign v2,
+> ADR-0024) têm relógio, clima, mercado e USD/BRL dedicado (ADR-0026) reais;
+> Agenda/Cenas rápidas/Player seguem placeholder (sem
+> `CalendarService`/automação/áudio). **Fase 6 feita** (ADR-0027): cache em
+> LittleFS via `CacheStore`, `cache_ready` real, dado sobrevive a
+> reboot/sem-rede mostrado como "(cache)".
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -75,19 +84,32 @@ Fase 15 - futuro: server opcional/NoiseBot
   trocado para `LV_USE_CLIB_MALLOC` (alocação dinâmica via heap padrão).
   Tela de Boot/splash entra aqui também (`ScreenId::Boot` já existe em
   `AppState`, só falta o screen builder - ADR-0017).
-- **Fase 5:** trocar `MockMarketProvider` por `CoinGeckoProvider` (REST, 60s,
-  6 req/min, cache, batch). Adicionar provider de clima (ex.: Open-Meteo) e fonte
-  USD/BRL dedicada (atrás da mesma `IMarketProvider`/interface de câmbio). Wizard
-  de onboarding inicial entra aqui (nome de exibição, Wi-Fi, fuso horário,
-  formato de hora, tema): UI publica intenção via `EventBus`, um
-  `SetupService` é o único a persistir em NVS e chamar `esp_wifi_connect`
-  (ADR-0017 + ADR-0011) - UI nunca persiste nem chama Wi-Fi direto. Mesmo
-  `SetupService`/eventos são reusados depois pela tela de Configurações.
+- **Fase 5 (em andamento real):** `MockMarketProvider` já trocado por
+  `CoinGeckoProvider` (REST, 60s, 6 req/min - ADR-0006/0021); `OpenMeteoProvider`
+  para clima já existe (ADR-0023, Brasília fixo). Wizard de onboarding completo
+  (nome de exibição, Wi-Fi com scan/lista de redes, fuso horário, formato de
+  hora - ADR-0017/0020/0025) publica intenção via `EventBus`; `SetupService` é
+  o único a persistir em NVS e chamar `esp_wifi_connect`/NTP (ADR-0017/0021/0022)
+  - UI nunca persiste nem chama Wi-Fi direto. Mesmo `SetupService`/eventos serão
+  reusados depois pela tela de Configurações. `MarketService`/`WeatherService`
+  já checam `onboarding.wifi_status == Connected` antes de chamar o provider
+  (corrigido - antes a 1a request saía antes do Wi-Fi associar). Wizard não
+  tem passo de tema por decisão (`ThemeMode` fica no default até a futura
+  tela de Configurações - ver `app_state.hpp`), não é uma lacuna.
+  **Pendente:** fonte USD/BRL dedicada (hoje é a razão BTC/USD ÷ BTC/BRL do
+  próprio CoinGecko, ver comentário em `coingecko_provider.cpp`).
 
 ## Detalhe das fases de hardening (pós-hardware provado)
 
-- **Fase 6:** cache em LittleFS com escrita atômica e versionamento de schema
-  (ADR-0015); UI sinaliza dado stale / sem-rede / sem-NTP.
+- **Fase 6 (concluída):** cache em LittleFS com escrita atômica (`<key>.tmp`
+  + `rename()`) e versionamento de schema por header (ADR-0015/0027) via
+  `CacheStore` (`components/cache/`), montada na partição `storage`
+  existente. `WeatherService`/`MarketService`/`ForexService` semeiam o
+  `StateStore` a partir do cache no boot (`source=Cache, stale=true`) e
+  gravam após cada fetch bem-sucedido; `HomeScreen` mostra "(cache)" pro
+  clima e Bitcoin (Dólar já mostrava, ADR-0026). Sem migração de schema real
+  ainda (não há v2 de nenhum schema pra migrar de - ver nota de escopo da
+  ADR-0027); sinalização "sem-NTP" não foi implementada nesta fase.
 - **Fase 7:** tela de sistema com observabilidade real — partição de coredump,
   motivo do último reset, contador de reboots, idade do dado por domínio (ADR-0014).
 - **Fase 8:** resiliência no `RequestOrchestrator` — circuit breaker por domínio

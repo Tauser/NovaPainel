@@ -68,6 +68,17 @@ cat > "$SHIM/freertos/task.h" <<'SH'
 #include "freertos/FreeRTOS.h"
 extern "C" void vTaskDelay(TickType_t);
 SH
+cat > "$SHIM/freertos/queue.h" <<'SH'
+#pragma once
+#include <cstdint>
+typedef void* QueueHandle_t;
+typedef int BaseType_t;
+#define pdTRUE 1
+#define pdFALSE 0
+extern "C" QueueHandle_t xQueueCreate(uint32_t, uint32_t);
+extern "C" BaseType_t xQueueSend(QueueHandle_t, const void*, TickType_t);
+extern "C" BaseType_t xQueueReceive(QueueHandle_t, void*, TickType_t);
+SH
 
 # ---- include path: every component's include/ + the shim ----
 INC=("-I$SHIM")
@@ -77,6 +88,15 @@ for d in "$COMP"/*/include; do INC+=("-I$d"); done
 SKIP_FILES=(
   "waveshare_board.cpp"  # real display/touch BSP + Wi-Fi - hardware only
   "home_screen.cpp"      # real LVGL widgets (Fase 4) - lvgl.h has no host shim
+  "boot_screen.cpp"      # real LVGL widgets (Fase 4) - lvgl.h has no host shim
+  "wizard_screen.cpp"    # real LVGL widgets (Fase 5) - lvgl.h has no host shim
+  "main_shell.cpp"       # real LVGL widgets (Fase 4/5) - lvgl.h has no host shim
+  "setup_service.cpp"    # real NVS + esp_wifi (Fase 5, ADR-0017) - hardware only
+  "clock_service.cpp"    # setenv/localtime_r (POSIX, in ESP-IDF's newlib) - MinGW/MSYS2 host libc lacks them
+  "coingecko_provider.cpp" # real esp_http_client + mbedtls + cJSON (Fase 5, ADR-0021) - hardware only
+  "open_meteo_provider.cpp" # real esp_http_client + mbedtls + cJSON (Fase 5, ADR-0022) - hardware only
+  "forex_provider.cpp"   # real esp_http_client + mbedtls + cJSON (Fase 5 follow-up) - hardware only
+  "cache_store.cpp"      # real esp_littlefs + ESP-IDF VFS (Fase 6, ADR-0027) - hardware only
 )
 is_skipped() {
   local base="$(basename "$1")"
