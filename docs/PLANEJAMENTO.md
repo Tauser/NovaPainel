@@ -63,7 +63,7 @@ clima real (Open-Meteo) → BTC/USD snapshot (CoinGecko) → USD/BRL snapshot (F
 cache LittleFS (dado stale visível, sobrevive reboot) → wizard onboarding (nome, Wi-Fi,
 fuso, formato) → tela sistema/status (motivo reset, reboots, idade dos dados) →
 circuit breaker + backoff por domínio → build PROD seguro (Secure Boot v2 + Flash Encryption)
-→ buffer display PSRAM (quarter-height double-buffer) → NotificationService fila prioritária
+→ buffer display PSRAM (quarter-height single-buffer, sw_rotate) → NotificationService fila prioritária
 ```
 
 Fora do MVP: Samsung TV (removido), Sonoff, Pomodoro, perfis, rotinas, dashboard adaptativo
@@ -99,8 +99,10 @@ Política do `MarketService` no MVP:
 
 Tela 1024×600 em RGB565: ~1.2 MB por framebuffer (~2.4 MB com double buffer).
 **Implementado (Fase 10, ADR-0031):** buffer de draw em PSRAM, quarter-height
-(1024×150px × 2B × 2 = ~600KB), double-buffer. LVGL dirty rectangles nativo:
+(1024×150px × 2B = ~300KB), single-buffer. LVGL dirty rectangles nativo:
 só as regiões alteradas são enviadas ao display (LVGL rastreia automaticamente).
+Nota: `double_buffer=false` é obrigatório com `sw_rotate+PSRAM` — overlap entre
+flush e próxima renderização causava flash esporádico no display.
 
 Regras ainda válidas: sem redraw completo, candles incrementais pós-MVP,
 imagens pré-redimensionadas no host, JPEG decode limitado, álbum pausado em

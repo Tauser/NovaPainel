@@ -40,11 +40,17 @@ constexpr const char* kTag = "WaveshareBoard";
 // to live in PSRAM. That was fixed in sdkconfig.defaults (LV_USE_CLIB_MALLOC,
 // ADR-0018). With that gone, PSRAM buffers no longer starve the DMA pool.
 //
-// Quarter-height double buffer (1024 lines × 150 lines × 2B × 2 = ~600KB
-// PSRAM total): large enough that LVGL needs only ~4 flush calls per full
-// frame instead of ~24 with BSP_LCD_DRAW_BUFF_SIZE; small enough that the
-// LVGL dirty-rect flush still skips unchanged rows. Double-buffer eliminates
-// visible tearing with PSRAM latency.
+// Quarter-height single buffer in PSRAM (~300KB): large enough that LVGL needs
+// only ~4 flush calls per full frame instead of ~24 with BSP_LCD_DRAW_BUFF_SIZE;
+// small enough that the LVGL dirty-rect flush still skips unchanged rows.
+//
+// double_buffer=false: required with sw_rotate+PSRAM. With double_buffer=true
+// LVGL starts writing the next render region to the "other" buffer before the
+// current flush completes. The flush callback reads from that buffer for SW
+// rotation; with PSRAM's higher latency vs internal RAM, the rotation read and
+// LVGL's next write overlap, producing one corrupted frame every few minutes
+// (visible as a brief screen flash). Single buffer forces LVGL to wait for
+// lv_disp_flush_ready() before reusing the buffer; no overlap, no flash.
 //
 // task_stack overridden (7168 -> 16384): found necessary on real hardware for
 // the wizard's touch callbacks (stack overflow as taskLVGL panic+reboot) - kept
@@ -52,8 +58,8 @@ constexpr const char* kTag = "WaveshareBoard";
 bool bring_up_display_and_touch() {
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 4),  // quarter-height, ~300KB per buf
-        .double_buffer = true,
+        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 4),  // quarter-height, ~300KB
+        .double_buffer = false,  // must be false with sw_rotate+PSRAM (see comment above)
         .flags = {
             .buff_dma    = true,
             .buff_spiram = true,   // Fase 10: was false (internal RAM); PSRAM now safe (ADR-0031)

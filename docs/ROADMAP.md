@@ -141,11 +141,13 @@ Fase 15 - futuro: server opcional/NoiseBot
   DEV/PROD em `sdkconfig.defaults`, auditoria de log de secrets confirmada
   (ADR-0030). Zero mudanças de código-fonte; DEV não afetado.
 - **Fase 10 (concluída):** buffer de display migrado para PSRAM
-  (`buff_spiram=true`, quarter-height double-buffer, ~600KB PSRAM, ~4 flush/frame
+  (`buff_spiram=true`, quarter-height single-buffer, ~300KB PSRAM, ~4 flush/frame
   vs ~24 antes) — bloqueador de Fase 4 (`LV_USE_BUILTIN_MALLOC`) já havia sido
   corrigido (ADR-0018/0031). Dirty region via LVGL nativo, sem mudança de código.
-  Candles incrementais e backpressure de imagem seguem como pós-MVP (v1.0+).
-  Soak test excluído por decisão de produto; pertence ao processo de release.
+  `double_buffer=false` obrigatório com `sw_rotate+PSRAM`: overlap flush/render
+  causava flash esporádico. Candles incrementais e backpressure de imagem seguem
+  como pós-MVP (v1.0+). Soak test excluído por decisão de produto; pertence ao
+  processo de release.
 - **Fase 11 (concluída):** `NotificationService` — fila prioritária com cap 32,
   evicção de menor prioridade, `mark_read()`/`unread_count()`, `now_ms` em
   `notify()`. `ClockService` — comentários corrigidos para o RTC interno ESP32-P4
