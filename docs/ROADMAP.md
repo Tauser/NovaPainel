@@ -18,7 +18,10 @@
 > dado por domínio. **Fase 8 feita** (ADR-0029): circuit breaker por
 > domínio (closed/open/half-open), backoff exponencial + jitter, probe
 > automático via `update_clock()`, `is_degraded()` público — tudo dentro
-> do `RequestOrchestrator`, serviços sem alteração.
+> do `RequestOrchestrator`, serviços sem alteração. **Fase 9 feita**
+> (ADR-0030): `sdkconfig.prod` com Secure Boot v2 + Flash Encryption +
+> NVS Encryption + coredump off; `nvs_keys` em `partitions.csv`; zero
+> mudanças de código-fonte.
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -128,9 +131,11 @@ Fase 15 - futuro: server opcional/NoiseBot
   `is_degraded()` público para UI/serviços, backpressure via `can_request()`
   retornando `false`, retry finito por sonda limitada ao período de backoff
   (ADR-0029). Serviços e UI sem alteração.
-- **Fase 9:** segurança de produção — NVS Encryption nativa, Secure Boot v2 com
-  anti-rollback, Flash Encryption; chaves/eFuses e processo de release (ADR-0011).
-  Dev pode manter desativado; o **layout de partição** já assume isso desde a Fase 3.
+- **Fase 9 (concluída):** `sdkconfig.prod` (Secure Boot v2 + Flash Encryption
+  RELEASE + NVS Encryption + coredump off + log WARN), `nvs_keys` partition
+  adicionada ao `partitions.csv`, `.gitignore` para chave de signing, comentário
+  DEV/PROD em `sdkconfig.defaults`, auditoria de log de secrets confirmada
+  (ADR-0030). Zero mudanças de código-fonte; DEV não afetado.
 - **Fase 10:** performance sob carga — render parcial por dirty region, candles
   incrementais (delta), backpressure de imagem (resize no host), e **soak test de
   72h** com rede instável cíclica e provider caindo aleatoriamente, validando os

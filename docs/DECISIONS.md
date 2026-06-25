@@ -627,3 +627,54 @@ transparente para eles.
 retry finito, degradação para cache) com o mínimo de código novo - tudo dentro
 do `RequestOrchestrator`, que já era a porta única de saída de todos os
 requests. Nenhuma mudança de interface nos serviços ou na UI foi necessária.
+
+## ADR-0030 - Fase 9: build de produção seguro (Secure Boot v2, Flash Encryption, NVS Encryption)
+
+**Decisão:** segurança de produção implementada como **camada de build separada**
+(`firmware/sdkconfig.prod`), sem alterar o código-fonte do firmware ou o fluxo
+de desenvolvimento. O DEV continua com `idf.py build` sem atrito; PROD usa
+`idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build`.
+
+Escolhas concretas (todas dentro dos mecanismos nativos do ESP-IDF, sem cripto
+própria - ADR-0011):
+
+- **Secure Boot v2** (`CONFIG_SECURE_BOOT_V2_ENABLED=y`): assina o bootloader e
+  as partições de app com uma chave RSA-3072 gerada fora do repo e armazenada em
+  secrets manager. A chave pública fica gravada em eFuse - operação irreversível,
+  só executada nas unidades de produção. Anti-rollback habilitado
+  (`CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK=y`, versão inicial = 1).
+
+- **Flash Encryption** (`CONFIG_SECURE_FLASH_ENC_ENABLED=y`, RELEASE mode): a
+  chave de criptografia é gerada pelo próprio dispositivo no primeiro boot e
+  gravada em eFuse - sem transporte de chave pelo host. Após o primeiro boot,
+  todo o flash é cifrado; flashes subsequentes devem usar `idf.py encrypted-flash`.
+  Modo RELEASE (não DEVELOPMENT): permanente, sem possibilidade de reverter.
+
+- **NVS Encryption** (`CONFIG_NVS_ENCRYPTION=y`): as chaves NVS ficam na partição
+  `nvs_keys` (nova em `partitions.csv`, 4KB), que é ela mesma cifrada pelo Flash
+  Encryption. Wi-Fi SSID/senha e demais preferências do usuário ficam protegidos
+  em repouso - sem nenhuma mudança no código de `SetupService`/`SystemService`.
+
+- **Coredump desabilitado em PROD** (`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=n`):
+  um coredump pode conter heap com credenciais Wi-Fi e API keys em memória
+  (ADR-0011). DEV mantém coredump ativo (sdkconfig.defaults).
+
+- **Log nível WARN em PROD**: reduz verbosidade e evita vazar informação de
+  estado/timing pelo serial.
+
+- **Chave de Secure Boot fora do repo**: `secure_boot_signing_key.pem` adicionado
+  ao `.gitignore`; nunca versionado.
+
+- **Auditoria de secrets em logs**: `SetupService` não loga senha Wi-Fi em nenhum
+  ponto (auditado em Fase 9 - confirmado: nenhum `ESP_LOGx` com
+  `wifi_password`/`saved_password`). Constraint de não-log deve ser mantida em
+  qualquer código que toque credenciais.
+
+**Motivo:** ADR-0011 decidiu a estratégia desde o início (layout de partição e
+mecanismos nativos); esta ADR apenas registra as escolhas de implementação da
+Fase 9. Separar DEV/PROD em dois sdkconfig evita acidente de habilitar Secure
+Boot permanente numa placa de desenvolvimento. NVS Encryption + Flash Encryption
+juntos significam que as chaves NVS são automaticamente protegidas sem necessidade
+de gerenciamento manual adicional. Flash Encryption em RELEASE mode é a única
+opção compatível com produto real (DEVELOPMENT mode permite reflash plaintext, o
+que não é aceitável em produção).

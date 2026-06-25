@@ -1,5 +1,9 @@
-# NovaPainel firmware - default sdkconfig.
-# Preliminary values; final tuning happens after Fase 0 hardware bring-up.
+# NovaPainel firmware - DEV sdkconfig defaults.
+# Used by plain `idf.py build`. Security features (Secure Boot, Flash Encryption,
+# NVS Encryption) are intentionally OFF here so flashing/debugging stays frictionless.
+# For a PRODUCTION build, apply sdkconfig.prod on top:
+#   idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build
+# See sdkconfig.prod and ADR-0030 for the full PROD security checklist.
 
 # Target is set via `idf.py set-target esp32p4`.
 
@@ -48,6 +52,8 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # "coredump" partition (partitions.csv) so a panic in the field isn't lost -
 # retrievable later via `idf.py coredump-info`. ELF format (IDF default once
 # enabled) - no on-device parsing/display, see ADR-0028.
+# DEV=on; PROD=off (sdkconfig.prod overrides to n - heap may contain secrets,
+# see ADR-0011/0030).
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 
 # Default log level INFO.
