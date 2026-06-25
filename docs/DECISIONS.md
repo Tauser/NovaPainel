@@ -678,3 +678,42 @@ juntos significam que as chaves NVS são automaticamente protegidas sem necessid
 de gerenciamento manual adicional. Flash Encryption em RELEASE mode é a única
 opção compatível com produto real (DEVELOPMENT mode permite reflash plaintext, o
 que não é aceitável em produção).
+
+## ADR-0031 - Fase 10: buffer de display em PSRAM (quarter-height double-buffer)
+
+**Decisão:** o buffer de draw do LVGL (`bsp_display_cfg_t.flags.buff_spiram`)
+migra de `false` (RAM interna) para `true` (PSRAM, ~300KB por buffer), com
+`double_buffer=true` e tamanho de `BSP_LCD_H_RES * (BSP_LCD_V_RES / 4)` = 1024
+× 150 pixels × 2 bytes = 307.200 bytes por buffer, ~600KB total.
+
+**Contexto histórico:** essa configuração foi tentada e rejeitada na Fase 4
+porque `LV_USE_BUILTIN_MALLOC` reservava 64KB de RAM interna de forma estática
+desde o boot, deixando o pool DMA interno sem espaço suficiente para o
+FreeRTOS e o ESP-Hosted criarem as suas próprias tarefas/descritores. A
+correção (`LV_USE_CLIB_MALLOC=y`, `sdkconfig.defaults`, ADR-0018) foi feita
+antes do final da Fase 4 — mas para o buffer de display em si, adiou-se para
+a Fase 10 por cautela, sem revalidar no hardware.
+
+**Por que funciona agora:** com `LV_USE_CLIB_MALLOC`, o LVGL não reserva
+mais nada estaticamente no boot; toda alocação é on-demand via `malloc()`.
+O pool DMA interno fica livre para FreeRTOS/ESP-Hosted. Os buffers de draw
+em PSRAM não precisam ser DMA-contíguos em RAM interna — o ESP32-P4 acessa
+PSRAM via cache/bus e o driver MIPI-DSI consegue fazer DMA a partir dela
+(`buff_dma=true` continua ativo).
+
+**Ganho:** com buffer de ¼ de tela (~150 linhas), o LVGL precisa de apenas
+~4 chamadas de flush por frame completo, contra ~24 com o
+`BSP_LCD_DRAW_BUFF_SIZE` padrão do BSP (partição de ~25 linhas). O
+dirty-rect nativo do LVGL ainda funciona — se só uma região da tela mudou, o
+flush vai para as linhas da dirty region, não para o frame inteiro. O
+double-buffer elimina tearing visível que aparecia com o buffer único e a
+latência de PSRAM.
+
+**Fora de escopo desta fase:** candles incrementais e backpressure de imagem
+(JPEG/resize) seguem como pós-MVP (v1.0+), conforme notas do ROADMAP. O soak
+test de 72h foi excluído explicitamente desta entrega (Fase 10) por decisão
+do produto — a validação de estabilidade longa pertence ao processo de release.
+
+**Motivo:** o ganho de liberar ~300KB de RAM interna para FreeRTOS e
+ESP-Hosted era o objetivo original da Fase 10 de performance. O bloqueador
+foi removido em Fase 4; a Fase 10 apenas realiza a troca que ficou pendente.

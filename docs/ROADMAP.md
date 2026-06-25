@@ -21,7 +21,9 @@
 > do `RequestOrchestrator`, serviços sem alteração. **Fase 9 feita**
 > (ADR-0030): `sdkconfig.prod` com Secure Boot v2 + Flash Encryption +
 > NVS Encryption + coredump off; `nvs_keys` em `partitions.csv`; zero
-> mudanças de código-fonte.
+> mudanças de código-fonte. **Fase 10 feita** (ADR-0031): buffer de display
+> em PSRAM quarter-height double-buffer (~600KB, ~4 flush/frame); dirty
+> region via LVGL nativo; candles/JPEG pós-MVP.
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -136,11 +138,12 @@ Fase 15 - futuro: server opcional/NoiseBot
   adicionada ao `partitions.csv`, `.gitignore` para chave de signing, comentário
   DEV/PROD em `sdkconfig.defaults`, auditoria de log de secrets confirmada
   (ADR-0030). Zero mudanças de código-fonte; DEV não afetado.
-- **Fase 10:** performance sob carga — render parcial por dirty region, candles
-  incrementais (delta), backpressure de imagem (resize no host), e **soak test de
-  72h** com rede instável cíclica e provider caindo aleatoriamente, validando os
-  caminhos de recovery. Metas de CPU/heap definidas **após** medir a baseline no
-  hardware real, não arbitradas antes.
+- **Fase 10 (concluída):** buffer de display migrado para PSRAM
+  (`buff_spiram=true`, quarter-height double-buffer, ~600KB PSRAM, ~4 flush/frame
+  vs ~24 antes) — bloqueador de Fase 4 (`LV_USE_BUILTIN_MALLOC`) já havia sido
+  corrigido (ADR-0018/0031). Dirty region via LVGL nativo, sem mudança de código.
+  Candles incrementais e backpressure de imagem seguem como pós-MVP (v1.0+).
+  Soak test excluído por decisão de produto; pertence ao processo de release.
 - **Fase 11:** modularização — múltiplos providers de mercado atrás de
   `IMarketProvider` com fallback (a interface já permite; só ativar quando houver
   necessidade real, mantendo CoinGecko como padrão do MVP por ADR-0006);

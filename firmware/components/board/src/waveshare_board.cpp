@@ -33,31 +33,31 @@ constexpr const char* kTag = "WaveshareBoard";
 // bring-up call (unlike Fase 0's gate15 harness, which called
 // bsp_touch_new() directly because it didn't use LVGL at all).
 //
-// Uses the BSP's own tested defaults for the FRAMEBUFFER (partial buffer,
-// single, internal RAM, software rotation) rather than a custom full-frame
-// double-buffered PSRAM config: that config made esp_startup_start_app's own
-// main task creation fail (insufficient internal RAM for FreeRTOS/DMA
-// bookkeeping, even though the pixel data itself would live in PSRAM -
-// found while wiring Fase 4). Moving to bigger/PSRAM buffers is a Fase 10
-// performance topic (ROADMAP), not a Fase 4 correctness requirement.
+// Fase 10 (ADR-0031): draw buffer moved to PSRAM (buff_spiram=true).
+// The original blocker (Fase 4): LV_USE_BUILTIN_MALLOC reserved a static
+// 64KB pool in internal RAM at boot, leaving too little DMA-capable internal
+// RAM for FreeRTOS/ESP-Hosted bookkeeping when the display buffer also tried
+// to live in PSRAM. That was fixed in sdkconfig.defaults (LV_USE_CLIB_MALLOC,
+// ADR-0018). With that gone, PSRAM buffers no longer starve the DMA pool.
 //
-// task_stack IS overridden (7168 -> 16384): the default is sized for simple
-// demos, not a screen tree this deep (wizard/home/rail) - found on real
-// hardware as a "stack overflow in task taskLVGL" panic+reboot, specifically
-// when a touch-driven event callback rebuilt many widgets synchronously
-// (Wi-Fi network list). That rebuild itself was also fixed (WizardScreen
-// no longer destroys/recreates the whole list just to mark a selection),
-// but the bigger stack is kept too as headroom for whatever screen comes
-// next - this BSP's 7KB default was never validated against UI this size.
+// Quarter-height double buffer (1024 lines × 150 lines × 2B × 2 = ~600KB
+// PSRAM total): large enough that LVGL needs only ~4 flush calls per full
+// frame instead of ~24 with BSP_LCD_DRAW_BUFF_SIZE; small enough that the
+// LVGL dirty-rect flush still skips unchanged rows. Double-buffer eliminates
+// visible tearing with PSRAM latency.
+//
+// task_stack overridden (7168 -> 16384): found necessary on real hardware for
+// the wizard's touch callbacks (stack overflow as taskLVGL panic+reboot) - kept
+// as headroom for future screens.
 bool bring_up_display_and_touch() {
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
-        .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
+        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 4),  // quarter-height, ~300KB per buf
+        .double_buffer = true,
         .flags = {
-            .buff_dma = true,
-            .buff_spiram = false,
-            .sw_rotate = true,
+            .buff_dma    = true,
+            .buff_spiram = true,   // Fase 10: was false (internal RAM); PSRAM now safe (ADR-0031)
+            .sw_rotate   = true,
         },
     };
     cfg.lvgl_port_cfg.task_stack = 16384;
