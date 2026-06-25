@@ -5,6 +5,8 @@
 // np_build_rail()/np_build_topbar()/np_build_dots() + novapanel_theme.h.
 #include "main_shell.hpp"
 
+#include <cstring>
+
 #include "lvgl.h"
 #include "nova_fonts.hpp"
 
@@ -346,13 +348,18 @@ void MainShell::render(const AppState& state) {
         lv_screen_load(root_);
     }
 
-    lv_label_set_text(title_label_, state.preferences.display_name.empty()
-                                         ? "NovaPainel" : state.preferences.display_name.c_str());
+    const char* title = state.preferences.display_name.empty()
+                        ? "NovaPainel" : state.preferences.display_name.c_str();
+    if (std::strcmp(lv_label_get_text(title_label_), title) != 0)
+        lv_label_set_text(title_label_, title);
 
     const bool online = state.onboarding.wifi_status == WifiConnectStatus::Connected;
-    lv_obj_set_style_bg_color(wifi_icon_btn_, lv_color_hex(online ? 0x0E1F14 : 0x141721), 0);
-    lv_obj_set_style_border_color(wifi_icon_btn_, lv_color_hex(online ? kColorGreenBd : kColorBorder), 0);
-    lv_obj_set_style_text_color(wifi_icon_, lv_color_hex(online ? kColorGreen : kColorTextMuted), 0);
+    if (online != last_online_) {
+        lv_obj_set_style_bg_color(wifi_icon_btn_, lv_color_hex(online ? 0x0E1F14 : 0x141721), 0);
+        lv_obj_set_style_border_color(wifi_icon_btn_, lv_color_hex(online ? kColorGreenBd : kColorBorder), 0);
+        lv_obj_set_style_text_color(wifi_icon_, lv_color_hex(online ? kColorGreen : kColorTextMuted), 0);
+        last_online_ = online;
+    }
 }
 
 }  // namespace nova

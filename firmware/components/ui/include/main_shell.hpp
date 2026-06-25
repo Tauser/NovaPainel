@@ -69,6 +69,7 @@ private:
 
     bool      built_{false};
     bool      rail_open_{false};
+    bool      last_online_{false};
     lv_obj_t* root_{nullptr};
     lv_obj_t* rail_{nullptr};
     lv_obj_t* topbar_{nullptr};

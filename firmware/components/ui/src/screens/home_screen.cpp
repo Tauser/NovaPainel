@@ -8,6 +8,7 @@
 #include "home_screen.hpp"
 
 #include <cstdio>
+#include <cstring>
 
 #include "lvgl.h"
 #include "nova_fonts.hpp"
@@ -443,7 +444,7 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_style_pad_column(mh, 6, 0);
     lv_obj_set_style_margin_bottom(mh, 9, 0);
     make_label(mh, LV_SYMBOL_CHARGE, &nova_font_14, kColorAccent);
-    make_label(mh, "Mercado", &nova_font_14, kColorText);
+    make_label(mh, "Mercado", &nova_font_16, kColorText);
 
     auto make_market_row = [&](const char* name, lv_obj_t** price_label, lv_obj_t** change_label) {
         lv_obj_t* row = make_row(mk);
@@ -465,6 +466,15 @@ void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
         built_ = true;
     }
 
+    // Guard: lv_label_set_text() always calls lv_obj_invalidate() even when
+    // the text is identical, generating dirty regions and flush operations for
+    // no visual change. Only update a label when its content actually changed.
+    // seconds_label_ is excluded because it changes every second anyway.
+    auto set_text = [](lv_obj_t* l, const char* text) {
+        if (std::strcmp(lv_label_get_text(l), text) != 0)
+            lv_label_set_text(l, text);
+    };
+
     const auto& c = s.clock;
     const auto& m = s.market;
     const auto& w = s.weather;
@@ -473,20 +483,20 @@ void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
     char buf[64];
 
     std::snprintf(buf, sizeof(buf), "%02d:%02d", c.hour, c.minute);
-    lv_label_set_text(clock_label_, buf);
+    set_text(clock_label_, buf);
 
     std::snprintf(buf, sizeof(buf), "%02d", c.second);
-    lv_label_set_text(seconds_label_, buf);
+    lv_label_set_text(seconds_label_, buf);  // always changes every second
 
     std::snprintf(buf, sizeof(buf), "%s, %02d/%02d/%04d%s",
                   weekday_name(c.weekday), c.day, c.month, c.year,
                   c.synced ? "" : " (não sincronizado)");
-    lv_label_set_text(date_label_, buf);
+    set_text(date_label_, buf);
 
     std::snprintf(buf, sizeof(buf), "board=%d display=%d touch=%d net=%d sd=%d cache=%d",
                   sys.board_ready, sys.display_ready, sys.touch_ready,
                   sys.network_ready, sys.sd_ready, sys.cache_ready);
-    lv_label_set_text(status_label_, buf);
+    set_text(status_label_, buf);
 
     // Dolar (ForexProvider) and BTC (CoinGeckoProvider) are fetched by
     // separate services now - each gets its own valid/source check instead
@@ -497,11 +507,11 @@ void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
                         : (m.usd_brl_source == DataSource::Mock)  ? " (mock)"
                         : "";
         std::snprintf(buf, sizeof(buf), "R$ %.2f%s", m.usd_brl, src);
-        lv_label_set_text(market_usd_label_, buf);
-        lv_label_set_text(market_usd_change_label_, "");
+        set_text(market_usd_label_, buf);
+        set_text(market_usd_change_label_, "");
     } else {
-        lv_label_set_text(market_usd_label_, "--");
-        lv_label_set_text(market_usd_change_label_, "");
+        set_text(market_usd_label_, "--");
+        set_text(market_usd_change_label_, "");
     }
 
     if (m.valid) {
@@ -511,56 +521,56 @@ void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
         char btc_price[24];
         format_thousands(static_cast<long>(m.btc_usd + 0.5), btc_price, sizeof(btc_price));
         std::snprintf(buf, sizeof(buf), "US$ %s%s", btc_price, btc_src);
-        lv_label_set_text(market_btc_label_, buf);
+        set_text(market_btc_label_, buf);
 
         std::snprintf(buf, sizeof(buf), "%s %.1f%%",
                       m.btc_change_24h >= 0.0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN,
                       m.btc_change_24h);
-        lv_label_set_text(market_btc_change_label_, buf);
+        set_text(market_btc_change_label_, buf);
         lv_obj_set_style_text_color(
             market_btc_change_label_,
             lv_color_hex(m.btc_change_24h >= 0.0 ? kColorGreen : kColorRed), 0);
     } else {
-        lv_label_set_text(market_btc_label_, "--");
-        lv_label_set_text(market_btc_change_label_, "sem dados ainda");
+        set_text(market_btc_label_, "--");
+        set_text(market_btc_change_label_, "sem dados ainda");
     }
 
     if (w.valid) {
         std::snprintf(buf, sizeof(buf), "%.0f°C", w.temperature_c);
-        lv_label_set_text(weather_temp_label_, buf);
+        set_text(weather_temp_label_, buf);
 
-        lv_label_set_text(weather_icon_label_, weather_icon_symbol(w.condition));
+        set_text(weather_icon_label_, weather_icon_symbol(w.condition));
         {
             const char* w_src = (w.source == DataSource::Cache) ? " (cache)"
                               : (w.source == DataSource::Mock)  ? " (mock)"
                               : "";
             std::snprintf(buf, sizeof(buf), "%s%s", condition_name(w.condition), w_src);
-            lv_label_set_text(weather_condition_label_, buf);
+            set_text(weather_condition_label_, buf);
         }
 
         std::snprintf(buf, sizeof(buf), "%.0f km/h", w.wind_speed_kmh);
-        lv_label_set_text(weather_wind_label_, buf);
+        set_text(weather_wind_label_, buf);
 
         std::snprintf(buf, sizeof(buf), "%d%%", w.humidity_pct);
-        lv_label_set_text(weather_humidity_label_, buf);
+        set_text(weather_humidity_label_, buf);
 
         std::snprintf(buf, sizeof(buf), "%s %.0f°   %s %.0f°",
                       LV_SYMBOL_UP, w.temp_max_c, LV_SYMBOL_DOWN, w.temp_min_c);
-        lv_label_set_text(weather_highlow_label_, buf);
+        set_text(weather_highlow_label_, buf);
 
         std::snprintf(buf, sizeof(buf), "%.0f°", w.feels_like_c);
-        lv_label_set_text(weather_feels_label_, buf);
+        set_text(weather_feels_label_, buf);
 
         std::snprintf(buf, sizeof(buf), "%.0f", w.uv_index);
-        lv_label_set_text(weather_uv_label_, buf);
+        set_text(weather_uv_label_, buf);
     } else {
-        lv_label_set_text(weather_temp_label_, "--");
-        lv_label_set_text(weather_condition_label_, "sem dados ainda");
-        lv_label_set_text(weather_wind_label_, "--");
-        lv_label_set_text(weather_humidity_label_, "--");
-        lv_label_set_text(weather_highlow_label_, "");
-        lv_label_set_text(weather_feels_label_, "--");
-        lv_label_set_text(weather_uv_label_, "--");
+        set_text(weather_temp_label_, "--");
+        set_text(weather_condition_label_, "sem dados ainda");
+        set_text(weather_wind_label_, "--");
+        set_text(weather_humidity_label_, "--");
+        set_text(weather_highlow_label_, "");
+        set_text(weather_feels_label_, "--");
+        set_text(weather_uv_label_, "--");
     }
 }
 
