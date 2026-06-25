@@ -212,12 +212,11 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_style_pad_column(clk_row, 4, 0);
 
     clock_label_ = make_label(clk_row, "00:00", &nova_font_bold_100, kColorText);
-    seconds_label_ = make_label(clk_row, "00", &nova_font_28, 0x3A4252);
+    seconds_label_ = make_label(clk_row, "00", &nova_font_32, 0x3A4252);
     // Lift seconds to align with the clock baseline: nova_font_bold_100 has
     // ~18px descender space; nova_font_28 has ~5px — delta ≈ 13px.
-    lv_obj_set_style_pad_bottom(seconds_label_, 13, 0);
-
-    date_label_ = make_label(left, "", &nova_font_20, kColorTextDim);
+    lv_obj_set_style_pad_bottom(seconds_label_, 14, 0);
+    date_label_ = make_label(left, "", &nova_font_16, kColorTextDim);
     lv_obj_set_style_margin_top(date_label_, 6, 0);
 
     // spacer pushes the weather card to the bottom of the left column
@@ -267,7 +266,7 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_flex_align(icon_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     weather_icon_label_ = lv_label_create(icon_col);
-    lv_obj_set_style_text_font(weather_icon_label_, &nova_font_64, 0);
+    lv_obj_set_style_text_font(weather_icon_label_, &nova_font_48, 0);
     lv_obj_set_style_text_color(weather_icon_label_, lv_color_hex(kColorAccent), 0);
     lv_label_set_text(weather_icon_label_, kWeatherIconUnknown);
     lv_obj_align(weather_icon_label_, LV_ALIGN_CENTER, 0, 0);
