@@ -270,31 +270,31 @@ void SettingsScreen::on_fmt12_clicked(lv_event_t* e) {
 }
 void SettingsScreen::on_night_toggle_changed(lv_event_t* e) {
     auto* self = static_cast<SettingsScreen*>(lv_event_get_user_data(e));
-    self->night_mode_ = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+    self->night_mode_ = lv_obj_has_state(static_cast<lv_obj_t*>(lv_event_get_target(e)), LV_STATE_CHECKED);
 }
 
 // Slider callbacks each update their own value label
 void SettingsScreen::on_brilho_changed(lv_event_t* e) {
     auto* self = static_cast<SettingsScreen*>(lv_event_get_user_data(e));
-    self->brilho_ = (int)lv_slider_get_value(lv_event_get_target(e));
+    self->brilho_ = (int)lv_slider_get_value(static_cast<lv_obj_t*>(lv_event_get_target(e)));
     char buf[8]; snprintf(buf, sizeof(buf), "%d%%", self->brilho_);
     lv_label_set_text(self->brilho_val_lbl_, buf);
 }
 void SettingsScreen::on_vsys_changed(lv_event_t* e) {
     auto* self = static_cast<SettingsScreen*>(lv_event_get_user_data(e));
-    self->vol_sys_ = (int)lv_slider_get_value(lv_event_get_target(e));
+    self->vol_sys_ = (int)lv_slider_get_value(static_cast<lv_obj_t*>(lv_event_get_target(e)));
     char buf[8]; snprintf(buf, sizeof(buf), "%d%%", self->vol_sys_);
     lv_label_set_text(self->vsys_val_lbl_, buf);
 }
 void SettingsScreen::on_vmus_changed(lv_event_t* e) {
     auto* self = static_cast<SettingsScreen*>(lv_event_get_user_data(e));
-    self->vol_mus_ = (int)lv_slider_get_value(lv_event_get_target(e));
+    self->vol_mus_ = (int)lv_slider_get_value(static_cast<lv_obj_t*>(lv_event_get_target(e)));
     char buf[8]; snprintf(buf, sizeof(buf), "%d%%", self->vol_mus_);
     lv_label_set_text(self->vmus_val_lbl_, buf);
 }
 void SettingsScreen::on_valm_changed(lv_event_t* e) {
     auto* self = static_cast<SettingsScreen*>(lv_event_get_user_data(e));
-    self->vol_alm_ = (int)lv_slider_get_value(lv_event_get_target(e));
+    self->vol_alm_ = (int)lv_slider_get_value(static_cast<lv_obj_t*>(lv_event_get_target(e)));
     char buf[8]; snprintf(buf, sizeof(buf), "%d%%", self->vol_alm_);
     lv_label_set_text(self->valm_val_lbl_, buf);
 }
