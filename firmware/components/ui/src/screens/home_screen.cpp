@@ -257,16 +257,15 @@ void HomeScreen::build(lv_obj_t* parent) {
     weather_condition_label_ = make_label(info_col, "sem dados ainda", &nova_font_14, kColorTextDim);
     lv_obj_set_style_margin_top(weather_condition_label_, 4, 0);
 
-    // Right column: ícone direto em nova_font_64 (sem transform_scale e sem
-    // LV_OBJ_FLAG_OVERFLOW_VISIBLE). Scale CSS não reflui o layout e força o
-    // LVGL a subir na hierarquia flex para calcular dirty regions, podendo
-    // invalidar áreas maiores do que o esperado. Font nativa = bounds corretos.
+    // Right column: ícone em nova_font_28 (único tamanho confirmado com o
+    // range FontAwesome compilado — 48/64 não têm). Sem transform_scale:
+    // bounds corretos, sem dirty region cascade.
     lv_obj_t* icon_col = make_col(wr);
-    lv_obj_set_size(icon_col, 70, LV_SIZE_CONTENT);
+    lv_obj_set_size(icon_col, 50, LV_SIZE_CONTENT);
     lv_obj_set_flex_align(icon_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     weather_icon_label_ = lv_label_create(icon_col);
-    lv_obj_set_style_text_font(weather_icon_label_, &nova_font_48, 0);
+    lv_obj_set_style_text_font(weather_icon_label_, &nova_font_28, 0);
     lv_obj_set_style_text_color(weather_icon_label_, lv_color_hex(kColorAccent), 0);
     lv_label_set_text(weather_icon_label_, kWeatherIconUnknown);
     lv_obj_align(weather_icon_label_, LV_ALIGN_CENTER, 0, 0);
