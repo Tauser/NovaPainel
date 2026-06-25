@@ -42,6 +42,15 @@ const char* weekday_name(int wd) {
     return kDays[wd];
 }
 
+const char* month_name(int m) {
+    static const char* kMonths[] = {
+        "?", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    };
+    if (m < 1 || m > 12) return "?";
+    return kMonths[m];
+}
+
 // Formats a non-negative integer with '.' as the thousands separator
 // (pt-BR convention), e.g. 53142 -> "53.142". Falls back to a plain number
 // if it wouldn't fit `out`.
@@ -202,12 +211,14 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_flex_align(clk_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
     lv_obj_set_style_pad_column(clk_row, 4, 0);
 
-    clock_label_ = make_label(clk_row, "00:00", &nova_font_bold_100, kColorText); 
+    clock_label_ = make_label(clk_row, "00:00", &nova_font_bold_100, kColorText);
     seconds_label_ = make_label(clk_row, "00", &nova_font_28, 0x3A4252);
-    lv_obj_set_style_pad_bottom(seconds_label_, 8, 0);
+    // Lift seconds to align with the clock baseline: nova_font_bold_100 has
+    // ~18px descender space; nova_font_28 has ~5px — delta ≈ 13px.
+    lv_obj_set_style_pad_bottom(seconds_label_, 13, 0);
 
-    date_label_ = make_label(left, "", &nova_font_14, kColorTextDim);
-    lv_obj_set_style_margin_top(date_label_, 8, 0);
+    date_label_ = make_label(left, "", &nova_font_20, kColorTextDim);
+    lv_obj_set_style_margin_top(date_label_, 6, 0);
 
     // spacer pushes the weather card to the bottom of the left column
     lv_obj_t* spacer = lv_obj_create(left);
@@ -488,9 +499,9 @@ void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
     std::snprintf(buf, sizeof(buf), "%02d", c.second);
     lv_label_set_text(seconds_label_, buf);  // always changes every second
 
-    std::snprintf(buf, sizeof(buf), "%s, %02d/%02d/%04d%s",
-                  weekday_name(c.weekday), c.day, c.month, c.year,
-                  c.synced ? "" : " (não sincronizado)");
+    std::snprintf(buf, sizeof(buf), "%s, %d de %s de %04d%s",
+                  weekday_name(c.weekday), c.day, month_name(c.month), c.year,
+                  c.synced ? "" : " *");
     set_text(date_label_, buf);
 
     std::snprintf(buf, sizeof(buf), "board=%d display=%d touch=%d net=%d sd=%d cache=%d",
