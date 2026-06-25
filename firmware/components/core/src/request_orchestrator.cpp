@@ -100,15 +100,15 @@ bool RequestOrchestrator::can_request(DataDomain domain) const {
     return within_rate_limit(domain);
 }
 
-void RequestOrchestrator::note_request(DataDomain domain, uint32_t now_ms) {
+void RequestOrchestrator::note_request(DataDomain domain, uint32_t now_ms, bool success) {
     Runtime& rt = runtime(domain);
-    rt.last_request_ms = now_ms;
+    if (success) rt.last_request_ms = now_ms;
     if (now_ms - rt.window_start_ms >= kMinuteMs) {
         rt.window_start_ms = now_ms;
         rt.calls_in_window = 0;
     }
     rt.calls_in_window++;
-    ESP_LOGD(kTag, "note %s (calls_in_window=%lu)", to_string(domain),
+    ESP_LOGD(kTag, "note %s success=%d (calls_in_window=%lu)", to_string(domain), success,
              static_cast<unsigned long>(rt.calls_in_window));
 }
 

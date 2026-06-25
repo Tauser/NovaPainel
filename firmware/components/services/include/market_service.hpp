@@ -4,6 +4,7 @@
 // the StateStore. MVP uses MockMarketProvider; later swapped for CoinGecko REST.
 #pragma once
 
+#include "cache_store.hpp"
 #include "i_market_provider.hpp"
 #include "request_orchestrator.hpp"
 #include "service.hpp"
@@ -14,8 +15,8 @@ namespace nova {
 class MarketService : public Service {
 public:
     MarketService(StateStore& store, RequestOrchestrator& orchestrator,
-                  IMarketProvider& provider)
-        : store_(store), orchestrator_(orchestrator), provider_(provider) {}
+                  IMarketProvider& provider, CacheStore& cache)
+        : store_(store), orchestrator_(orchestrator), provider_(provider), cache_(cache) {}
 
     const char* name() const override { return "MarketService"; }
     bool init() override;
@@ -25,6 +26,7 @@ private:
     StateStore&          store_;
     RequestOrchestrator& orchestrator_;
     IMarketProvider&     provider_;
+    CacheStore&          cache_;
 };
 
 }  // namespace nova

@@ -29,19 +29,40 @@ constexpr const char* kTag = "WaveshareBoard";
 // bsp_display_start_with_config() is the BSP's all-in-one entry point: it
 // brings up the panel + backlight pin, initializes LVGL (lvgl_port), wires
 // the GT911 touch controller as the LVGL input device automatically, and
-// starts the BSP's own LVGL task. There is no separate touch bring-up call
-// (unlike Fase 0's gate15 harness, which called bsp_touch_new() directly
-// because it didn't use LVGL at all).
+// starts the BSP's own LVGL task ("taskLVGL"). There is no separate touch
+// bring-up call (unlike Fase 0's gate15 harness, which called
+// bsp_touch_new() directly because it didn't use LVGL at all).
 //
-// Uses the BSP's own tested defaults (partial buffer, single, internal RAM -
-// same as plain bsp_display_start()) rather than a custom full-frame
+// Uses the BSP's own tested defaults for the FRAMEBUFFER (partial buffer,
+// single, internal RAM, software rotation) rather than a custom full-frame
 // double-buffered PSRAM config: that config made esp_startup_start_app's own
 // main task creation fail (insufficient internal RAM for FreeRTOS/DMA
 // bookkeeping, even though the pixel data itself would live in PSRAM -
 // found while wiring Fase 4). Moving to bigger/PSRAM buffers is a Fase 10
 // performance topic (ROADMAP), not a Fase 4 correctness requirement.
+//
+// task_stack IS overridden (7168 -> 16384): the default is sized for simple
+// demos, not a screen tree this deep (wizard/home/rail) - found on real
+// hardware as a "stack overflow in task taskLVGL" panic+reboot, specifically
+// when a touch-driven event callback rebuilt many widgets synchronously
+// (Wi-Fi network list). That rebuild itself was also fixed (WizardScreen
+// no longer destroys/recreates the whole list just to mark a selection),
+// but the bigger stack is kept too as headroom for whatever screen comes
+// next - this BSP's 7KB default was never validated against UI this size.
 bool bring_up_display_and_touch() {
-    lv_display_t* disp = bsp_display_start();
+    bsp_display_cfg_t cfg = {
+        .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
+        .buffer_size = BSP_LCD_DRAW_BUFF_SIZE,
+        .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
+        .flags = {
+            .buff_dma = true,
+            .buff_spiram = false,
+            .sw_rotate = true,
+        },
+    };
+    cfg.lvgl_port_cfg.task_stack = 16384;
+
+    lv_display_t* disp = bsp_display_start_with_config(&cfg);
     if (!disp) {
         ESP_LOGE(kTag, "bsp_display_start_with_config failed");
         return false;

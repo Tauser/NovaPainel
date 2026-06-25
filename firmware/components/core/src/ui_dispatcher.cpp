@@ -13,10 +13,12 @@ bool is_ui_relevant(EventType type) {
     switch (type) {
         case EventType::ClockUpdated:
         case EventType::MarketUpdated:
+        case EventType::WeatherUpdated:
         case EventType::NotificationCreated:
         case EventType::SystemStatusChanged:
         case EventType::ScreenChanged:
         case EventType::UiInvalidated:
+        case EventType::OnboardingStateChanged:
             return true;
         default:
             return false;

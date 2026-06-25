@@ -20,11 +20,24 @@ enum class EventType {
     ScreenChanged,
     ClockUpdated,
     MarketUpdated,
+    WeatherUpdated,
     NotificationCreated,
     RequestPolicyChanged,
     ResourceWarning,
     UiInvalidated,
     SystemStatusChanged,
+    // ADR-0017: the wizard publishes an "intention" (never persists/calls
+    // hardware itself) by writing to StateStore::submit_onboarding(), which
+    // publishes this. SetupService is the only subscriber that acts on it.
+    OnboardingStepSubmitted,
+    // SetupService publishes this after it persisted something / advanced
+    // the wizard step / got a Wi-Fi connect result - the UI re-renders from
+    // AppState::onboarding + AppState::preferences, same pattern as
+    // ClockUpdated/MarketUpdated.
+    OnboardingStateChanged,
+    // Wizard's Wifi step asks for a network scan - same "intention" pattern
+    // as OnboardingStepSubmitted, just not tied to a wizard step submission.
+    WifiScanRequested,
 };
 
 const char* to_string(EventType type);

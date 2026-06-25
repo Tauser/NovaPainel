@@ -51,9 +51,14 @@ public:
     uint32_t        interval_ms_for(DataDomain domain) const;
     bool            within_rate_limit(DataDomain domain) const;
 
-    // Services call this right after a successful request so the orchestrator
+    // Services call this right after a request attempt so the orchestrator
     // can track interval + rate-limit windows. `now_ms` is monotonic ms.
-    void note_request(DataDomain domain, uint32_t now_ms);
+    // `success=false` (e.g. no network yet right after boot) still counts
+    // against the per-minute rate-limit budget, but does NOT push out the
+    // interval gate - the next attempt is allowed as soon as the next tick,
+    // instead of waiting the full interval (60s/10min) after a failure that
+    // never actually used the budget productively.
+    void note_request(DataDomain domain, uint32_t now_ms, bool success = true);
 
     // Lets the time-based checks know "now". Called once per loop tick.
     void update_clock(uint32_t now_ms) { now_ms_ = now_ms; }

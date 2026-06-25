@@ -6,6 +6,7 @@ namespace nova {
 const char* to_string(ScreenId id) {
     switch (id) {
         case ScreenId::Boot:       return "Boot";
+        case ScreenId::Setup:      return "Setup";
         case ScreenId::Home:       return "Home";
         case ScreenId::Market:     return "Market";
         case ScreenId::Calendar:   return "Calendar";

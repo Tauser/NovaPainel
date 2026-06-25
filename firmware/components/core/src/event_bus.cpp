@@ -15,11 +15,15 @@ const char* to_string(EventType type) {
         case EventType::ScreenChanged:        return "ScreenChanged";
         case EventType::ClockUpdated:         return "ClockUpdated";
         case EventType::MarketUpdated:        return "MarketUpdated";
+        case EventType::WeatherUpdated:       return "WeatherUpdated";
         case EventType::NotificationCreated:  return "NotificationCreated";
         case EventType::RequestPolicyChanged: return "RequestPolicyChanged";
         case EventType::ResourceWarning:      return "ResourceWarning";
         case EventType::UiInvalidated:        return "UiInvalidated";
         case EventType::SystemStatusChanged:  return "SystemStatusChanged";
+        case EventType::OnboardingStepSubmitted: return "OnboardingStepSubmitted";
+        case EventType::OnboardingStateChanged:  return "OnboardingStateChanged";
+        case EventType::WifiScanRequested:       return "WifiScanRequested";
     }
     return "Unknown";
 }
