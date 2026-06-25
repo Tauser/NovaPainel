@@ -1,61 +1,62 @@
-# NovaPanel — LVGL v9.5 Export
+# NovaPanel — LVGL v9.5 Export  (v2)
 
-Código C completo para **LVGL v9.5** gerado a partir do protótipo HTML NovaPanel.  
-(Versão anterior para v8.3 está na pasta `lvgl_export/`)
+Código C completo para **LVGL v9.5**, atualizado para corresponder ao protótipo v2.
 
 ---
 
-## O que mudou de v8 → v9.5
+## Novidades nesta versão
 
-| API v8.3 | API v9.5 | Arquivo(s) |
-|---|---|---|
-| `lv_scr_act()` | `lv_screen_active()` | `novapanel.c` |
-| `lv_btn_create()` | `lv_button_create()` | todos |
-| `lv_obj_set_flex_grow(obj, n)` | `lv_obj_set_style_flex_grow(obj, n, 0)` | todos |
-| `lv_coord_t cols[]` (grid) | `int32_t cols[]` | `screen_agenda.c` |
-| `lv_draw_ctx_t *draw_ctx` | `lv_layer_t *layer` | `screen_mercado.c` |
-| `lv_event_get_draw_ctx(e)` | `lv_event_get_layer(e)` | `screen_mercado.c` |
-| `lv_draw_line(ctx, &dsc, &p1, &p2)` | `dsc.p1=p1; dsc.p2=p2; lv_draw_line(layer,&dsc)` | `screen_mercado.c` |
-| `lv_point_t` (em draw) | `lv_point_precise_t` | `screen_mercado.c` |
-| `lv_obj_set_style_arc_rounded()` | `lv_obj_set_style_arc_round_start()` + `lv_obj_set_style_arc_round_end()` | `screen_timer.c` |
-| `LV_LABEL_LONG_DOT` | `LV_LABEL_LONG_DOTS` | `screen_home.c` |
-| `lv_obj_set_style_border_left_*` | `border_width` + `border_side(LV_BORDER_SIDE_LEFT)` | `screen_agenda.c` |
+| Mudança | Detalhe |
+|---|---|
+| **Tela de Boot** | `screen_boot.c` — splash animado, barra de progresso, botão "Pular →" |
+| **Setup Wizard** | `screen_setup.c` — 4 passos: Nome → Wi-Fi → Fuso/Formato → Confirmação |
+| **Rail icon-only** | Labels removidos dos botões de navegação; botões 44×44 px quadrados |
+| **Topbar 54→60 px** | Maior área de toque para 7" |
+| **Dot strip em fluxo** | `np_dots_bar` abaixo do conteúdo (não `position:absolute`) — sem sobreposição |
+| **Fontes 7"** | `NP_F_XS` 10→12 px, `NP_F_SM` 12→14 px |
+| **`np_phase_t`** | Novo enum `BOOT → SETUP → MAIN` para controle de fase |
 
 ---
 
 ## Estrutura
 
 ```
-novapanel_theme.h        — cores, dimensões, helpers inline
-novapanel.h              — enums, state struct, protótipos
-novapanel.c              — init, rail, topbar, navegação
+novapanel_theme.h          — cores, dimensões, helpers inline
+novapanel.h                — enums, state struct, protótipos
+novapanel.c                — init, rail (icon-only), topbar, dots, navegação
 screens/
-  screen_home.c
-  screen_agenda.c
-  screen_mercado.c       — candlestick draw via lv_layer_t (v9)
-  screen_casa.c
-  screen_alarmes.c
-  screen_clima.c
-  screen_timer.c         — arc com round_start/end (v9)
-  screen_config.c
-  screen_notif.c
+  screen_boot.c            — tela de boot (splash + barra animada)
+  screen_setup.c           — wizard de configuração inicial
+  screen_home.c            — Início
+  screen_agenda.c          — Agenda
+  screen_mercado.c         — Mercado (candlestick)
+  screen_casa.c            — Casa (IoT)
+  screen_alarmes.c         — Alarmes
+  screen_clima.c           — Clima
+  screen_timer.c           — Pomodoro
+  screen_config.c          — Configurações
+  screen_notif.c           — Notificações
 CMakeLists.txt
 ```
+
+---
 
 ## Display alvo
 
 | Parâmetro | Valor |
-|-----------|-------|
+|---|---|
 | Resolução | 1024 × 600 px |
+| Tamanho | **7 polegadas** |
 | Profundidade | 16-bit RGB565 |
 | LVGL | **v9.5.x** |
 | Chip | ESP32-P4 |
 
+---
+
 ## lv_conf.h — fontes necessárias
 
 ```c
-#define LV_FONT_MONTSERRAT_10  1
-#define LV_FONT_MONTSERRAT_12  1
+#define LV_FONT_MONTSERRAT_12  1   /* mínimo para 7" */
 #define LV_FONT_MONTSERRAT_14  1
 #define LV_FONT_MONTSERRAT_16  1
 #define LV_FONT_MONTSERRAT_20  1
@@ -66,41 +67,102 @@ CMakeLists.txt
 #define LV_FONT_DEFAULT        (&lv_font_montserrat_14)
 ```
 
-## Uso
+---
+
+## Integração — sequência de boot
 
 ```c
 #include "novapanel.h"
 
+/* ── FreeRTOS boot task ────────────────────────────────────────── */
+static void boot_task(void *arg)
+{
+    for (uint8_t pct = 0; pct < 100; ) {
+        pct += (uint8_t)(esp_random() % 12 + 4);
+        if (pct > 100) pct = 100;
+
+        /* update bar (must be called from LVGL task or with mutex) */
+        if (lv_display_get_default()) {
+            lv_lock();
+            lv_bar_set_value(g_boot_bar, pct, LV_ANIM_ON);
+            np_boot_msg_update();   /* atualiza "Inicializando..." etc. */
+            lv_unlock();
+        }
+
+        np_boot_advance(pct);
+        vTaskDelay(pdMS_TO_TICKS(160));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    lv_lock();
+    np_boot_finish();   /* mostra o wizard de setup */
+    lv_unlock();
+
+    vTaskDelete(NULL);
+}
+
+/* ── app_main ──────────────────────────────────────────────────── */
 void app_main(void)
 {
+    /* inicializar display, touch e LVGL */
     bsp_display_start();
     bsp_touch_start();
     lv_init();
     /* ... driver setup ... */
 
-    np_init();   /* constrói toda a UI */
+    lv_lock();
+    np_init();          /* constrói UI; boot overlay visível */
+    lv_unlock();
 
-    /* tick do relógio e timer Pomodoro */
-    lv_timer_create([](lv_timer_t *){ np_tick(); }, 1000, NULL);
+    xTaskCreate(boot_task, "boot", 4096, NULL, 5, NULL);
 
+    /* LVGL loop */
     while (1) {
+        lv_lock();
         lv_timer_handler();
+        lv_unlock();
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
 ```
 
-## Navegação programática
+---
+
+## Setup wizard — navegação manual
+
+Se preferir controlar o wizard por toque sem os botões embutidos:
 
 ```c
+/* avançar passo */
+np_setup_next();
+
+/* voltar passo */
+np_setup_back();
+```
+
+---
+
+## Navegação entre telas principais
+
+```c
+np_navigate_to(NP_SCR_AGENDA);
 np_navigate_to(NP_SCR_MERCADO);
-np_navigate_to(NP_SCR_TIMER);
 np_navigate_to(NP_SCR_CONFIG);
 ```
 
-## Notas de compatibilidade v9.5
+---
 
-- **Bordas tracejadas** não são suportadas nativamente pelo LVGL — a borda do card "Amanhã" usa linha sólida fina.
-- **`lv_point_precise_t`** suporta coordenadas sub-pixel (float); este código usa inteiros, o que é compatível.
-- **`lv_obj_set_flex_flow/align()`** ainda existem como wrappers de conveniência em v9; `lv_obj_set_style_flex_grow()` é a forma canônica para o grow.
-- **`lv_bar_set_start_value()`** ainda existe em v9 para barras em modo range; não é usado neste código (as barras são simples).
+## Diferenças de API v8 → v9.5 aplicadas
+
+| v8 | v9.5 |
+|---|---|
+| `lv_scr_act()` | `lv_screen_active()` |
+| `lv_btn_create()` | `lv_button_create()` |
+| `lv_obj_set_flex_grow(o,n)` | `lv_obj_set_style_flex_grow(o,n,0)` |
+| `lv_draw_ctx_t *` | `lv_layer_t *` |
+| `lv_event_get_draw_ctx()` | `lv_event_get_layer()` |
+| `lv_draw_line(ctx,&d,&p1,&p2)` | `d.p1=p1;d.p2=p2;lv_draw_line(layer,&d)` |
+| `lv_point_t` (draw) | `lv_point_precise_t` |
+| `lv_obj_set_style_arc_rounded()` | `arc_round_start()` + `arc_round_end()` |
+| `LV_LABEL_LONG_DOT` | `LV_LABEL_LONG_DOTS` |

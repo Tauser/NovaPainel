@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 
 # ================================================================
-# NOVAPANEL — ESP-IDF Component CMakeLists
+# NOVAPANEL v2 — ESP-IDF Component CMakeLists
 # LVGL v9.5  |  ESP32-P4
-#
-# Place this folder as a component:
-#   <project>/components/novapanel/
 # ================================================================
 
 idf_component_register(
@@ -20,6 +17,8 @@ idf_component_register(
         "screens/screen_timer.c"
         "screens/screen_config.c"
         "screens/screen_notif.c"
+        "screens/screen_boot.c"
+        "screens/screen_setup.c"
 
     INCLUDE_DIRS
         "."

@@ -1,5 +1,5 @@
 /* ================================================================
- * NOVAPANEL — LVGL Theme
+ * NOVAPANEL — LVGL Theme  (updated for 7" display legibility)
  * Target : 1024 × 600 px  |  LVGL v9.5  |  ESP32-P4
  * ================================================================ */
 #ifndef NOVAPANEL_THEME_H
@@ -38,7 +38,7 @@
 #define NP_W              1024
 #define NP_H              600
 #define NP_RAIL_W         62
-#define NP_TOPBAR_H       54
+#define NP_TOPBAR_H       60       /* bumped 54→60 for 7" touch comfort */
 #define NP_CONTENT_W      (NP_W - NP_RAIL_W)
 #define NP_CONTENT_H      (NP_H - NP_TOPBAR_H)
 #define NP_PAD            14
@@ -47,22 +47,32 @@
 #define NP_R_BTN          9
 #define NP_R_SM           7
 #define NP_BDW            1
+#define NP_DOTS_H         16       /* screen-indicator dots strip height */
 
-/* ── Fonts ────────────────────────────────────────────────────── *
+/* ── Fonts — scaled for 7" legibility ────────────────────────── *
  * Enable in lv_conf.h:
- *   #define LV_FONT_MONTSERRAT_10 1  ... up to 48
+ *   #define LV_FONT_MONTSERRAT_12 1   ← minimum readable on 7"
+ *   #define LV_FONT_MONTSERRAT_14 1
+ *   #define LV_FONT_MONTSERRAT_16 1
+ *   #define LV_FONT_MONTSERRAT_20 1
+ *   #define LV_FONT_MONTSERRAT_24 1
+ *   #define LV_FONT_MONTSERRAT_28 1
+ *   #define LV_FONT_MONTSERRAT_32 1
+ *   #define LV_FONT_MONTSERRAT_48 1
+ *
+ * NP_F_XS bumped 10→12, NP_F_SM bumped 12→14 vs original spec.
  * ---------------------------------------------------------------- */
-#define NP_F_XS    (&lv_font_montserrat_10)
-#define NP_F_SM    (&lv_font_montserrat_12)
-#define NP_F_MD    (&lv_font_montserrat_14)
-#define NP_F_LG    (&lv_font_montserrat_16)
-#define NP_F_XL    (&lv_font_montserrat_20)
-#define NP_F_2XL   (&lv_font_montserrat_24)
-#define NP_F_3XL   (&lv_font_montserrat_28)
-#define NP_F_4XL   (&lv_font_montserrat_32)
-#define NP_F_HERO  (&lv_font_montserrat_48)
+#define NP_F_XS    (&lv_font_montserrat_12)   /* labels, secondary */
+#define NP_F_SM    (&lv_font_montserrat_14)   /* body small        */
+#define NP_F_MD    (&lv_font_montserrat_14)   /* body              */
+#define NP_F_LG    (&lv_font_montserrat_16)   /* body large        */
+#define NP_F_XL    (&lv_font_montserrat_20)   /* subheading        */
+#define NP_F_2XL   (&lv_font_montserrat_24)   /* heading           */
+#define NP_F_3XL   (&lv_font_montserrat_28)   /* display small     */
+#define NP_F_4XL   (&lv_font_montserrat_32)   /* display           */
+#define NP_F_HERO  (&lv_font_montserrat_48)   /* hero / clock      */
 
-/* ── Helper: transparent / reset style on obj ────────────────── */
+/* ── Helper: transparent container ───────────────────────────── */
 static inline void np_obj_clear_style(lv_obj_t *obj)
 {
     lv_obj_set_style_bg_opa(obj,       LV_OPA_TRANSP, 0);
@@ -104,12 +114,12 @@ static inline lv_obj_t *np_toggle(lv_obj_t *parent, bool checked)
 {
     lv_obj_t *sw = lv_switch_create(parent);
     lv_obj_set_size(sw, 44, 24);
-    lv_obj_set_style_bg_color(sw, NP_C_ITEM_BG2,  LV_PART_MAIN);
-    lv_obj_set_style_border_color(sw, NP_C_BORDER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(sw, 1,            LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sw, NP_C_ITEM_BG2,        LV_PART_MAIN);
+    lv_obj_set_style_border_color(sw, NP_C_BORDER,       LV_PART_MAIN);
+    lv_obj_set_style_border_width(sw, 1,                 LV_PART_MAIN);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0x2C3820),
                               LV_PART_INDICATOR | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(sw, NP_C_TEXT_DIM,  LV_PART_KNOB);
+    lv_obj_set_style_bg_color(sw, NP_C_TEXT_DIM,         LV_PART_KNOB);
     lv_obj_set_style_bg_color(sw, NP_C_ACCENT,
                               LV_PART_KNOB | LV_STATE_CHECKED);
     lv_obj_set_style_pad_all(sw, 2, LV_PART_KNOB);
@@ -157,27 +167,27 @@ static inline lv_obj_t *np_col(lv_obj_t *parent)
 /* ── Helper: accent chip button ─────────────────────────────── */
 static inline lv_obj_t *np_chip(lv_obj_t *parent, const char *text)
 {
-    lv_obj_t *btn = lv_button_create(parent);          /* v9: lv_button_create */
-    lv_obj_set_size(btn, LV_SIZE_CONTENT, 28);
+    lv_obj_t *btn = lv_button_create(parent);
+    lv_obj_set_size(btn, LV_SIZE_CONTENT, 30);
     lv_obj_set_style_bg_color(btn,     NP_C_ACCENT_BG, 0);
     lv_obj_set_style_border_color(btn, NP_C_ACCENT_BD, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_set_style_radius(btn,       14, 0);
-    lv_obj_set_style_pad_hor(btn,      12, 0);
+    lv_obj_set_style_radius(btn,       15, 0);
+    lv_obj_set_style_pad_hor(btn,      14, 0);
     lv_obj_set_style_shadow_width(btn, 0, 0);
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_font(lbl,  NP_F_SM,    0);
+    lv_obj_set_style_text_font(lbl,  NP_F_SM,     0);
     lv_obj_set_style_text_color(lbl, NP_C_ACCENT, 0);
     lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 0);
     return btn;
 }
 
-/* ── Helper: icon button (36×36) ─────────────────────────────── */
+/* ── Helper: icon button (40×40) ─────────────────────────────── */
 static inline lv_obj_t *np_icon_btn(lv_obj_t *parent, const char *symbol)
 {
-    lv_obj_t *btn = lv_button_create(parent);          /* v9: lv_button_create */
-    lv_obj_set_size(btn, 36, 36);
+    lv_obj_t *btn = lv_button_create(parent);
+    lv_obj_set_size(btn, 40, 40);
     lv_obj_set_style_bg_color(btn,     NP_C_ITEM_BG, 0);
     lv_obj_set_style_border_color(btn, NP_C_BORDER,  0);
     lv_obj_set_style_border_width(btn, 1, 0);
