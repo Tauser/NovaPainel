@@ -246,11 +246,13 @@ void HomeScreen::build(lv_obj_t* parent) {
     weather_condition_label_ = make_label(info_col, "sem dados ainda", &nova_font_14, kColorTextDim);
     lv_obj_set_style_margin_top(weather_condition_label_, 4, 0);
 
-    // Right column: ícone 2x estático (nova_font_28; transform_scale não reflui
-    // o layout — col de 70px garante espaço visual sem overlap com info_col)
+    // Right column: ícone 2x estático. transform_scale não reflui o layout,
+    // então a col precisa de altura explícita (60px ≈ glifo nova_font_28 2x)
+    // e LV_OBJ_FLAG_OVERFLOW_VISIBLE para não clipar o visual 2x.
     lv_obj_t* icon_col = make_col(wr);
-    lv_obj_set_size(icon_col, 70, LV_SIZE_CONTENT);
+    lv_obj_set_size(icon_col, 70, 60);
     lv_obj_set_flex_align(icon_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_add_flag(icon_col, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
 
     weather_icon_label_ = lv_label_create(icon_col);
     lv_obj_set_style_text_font(weather_icon_label_, &nova_font_28, 0);

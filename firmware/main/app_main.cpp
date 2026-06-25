@@ -241,13 +241,10 @@ extern "C" void app_main(void) {
             render_now = true;
         }
 
-        // The wizard needs a snappier frame than the mock Home "frame" - 5s
-        // would make every tap feel stuck. Boot also wants the faster cadence
-        // so its progress bar actually animates instead of jumping once.
-        // 1s matches this loop's own tick - it can't render faster than that.
-        const bool wants_fast_render = store.state().current_screen == ScreenId::Setup ||
-                                       store.state().current_screen == ScreenId::Boot;
-        const uint32_t render_interval_ms = wants_fast_render ? 1000u : 5000u;
+        // 1s matches this loop's own tick and gives per-second clock updates
+        // without a separate LVGL timer. Dirty-rect render is cheap: only
+        // changed label regions are flushed, not the full screen.
+        const uint32_t render_interval_ms = 1000u;
         if (render_now || t - last_render_ms >= render_interval_ms) {
             ui_dispatcher.process_pending();
             last_render_ms = t;
