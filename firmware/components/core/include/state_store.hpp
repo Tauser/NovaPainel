@@ -26,6 +26,11 @@ public:
     void set_usd_brl_rate(double rate, DataSource source, uint32_t now_ms);
     void set_weather(const WeatherSummary& weather);
     void set_system_status(const SystemStatus& status);
+    // Updates only reset_reason/reboot_count, read-modify-write - same
+    // reasoning as set_usd_brl_rate: SystemService::init() runs after
+    // app_main already published the hardware-readiness flags above, must
+    // not clobber them (Fase 7, ADR-0028).
+    void set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count);
 
     // ---- Onboarding wizard (ADR-0017) ----
     // UI side: publishes the wizard's "intention", never persists/calls

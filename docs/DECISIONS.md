@@ -547,3 +547,46 @@ decidido na ADR-0015 (LittleFS, não SPIFFS, por wear leveling + escrita
 atômica). Reusar a partição `storage` existente evita reparticionar a
 flash; dividir por domínio é a mesma lição já aprendida e documentada na
 ADR-0026, aplicada também à persistência em disco.
+
+## ADR-0028 - Observabilidade (coredump, reset reason, reboots) - Fase 7
+
+**Decisão:** nova partição `coredump` (256KB, `partitions.csv`) +
+`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` (`sdkconfig.defaults`) - persiste
+crash dumps em flash, recuperáveis via `idf.py coredump-info`. Sem
+parsing/exibição do conteúdo on-device (ADR-0014 pede "persistir", não
+"exibir" - decodificar endereços/símbolos numa tela embarcada está fora de
+escopo).
+
+Novo `SystemService` (`components/services/`) reaproveita literalmente o
+padrão já validado na placa física pelo harness do Gate 15
+(`firmware/experiments/gate15_coexistence/main/gate15_main.c`):
+`esp_reset_reason()` + a mesma tabela de strings
+(POWERON/SW/PANIC/INT_WDT/TASK_WDT/OTHER_WDT/BROWNOUT/DEEPSLEEP/EXT/
+UNKNOWN) e contador de reboots em NVS - namespace dedicado `"sysdiag"`,
+separado do `"novapanel"` do `SetupService` (concern não relacionado).
+Publica via novo `StateStore::set_boot_diagnostics()` - merge parcial em
+`SystemStatus` (mesmo padrão de `set_usd_brl_rate`/ADR-0026), porque
+`SystemService::init()` roda depois de `app_main.cpp` já ter publicado as
+flags de hardware (`board_ready`/`display_ready`/etc.) - não pode
+sobrescrevê-las.
+
+Nova `SystemScreen` (`components/ui/`) é uma tela própria
+(`lv_screen_load()` dela mesma, como `BootScreen`/`WizardScreen`) - **não**
+usa `MainShell::content()`. Conteúdo simples, só texto (decisão do
+usuário, sem refinamento visual ainda): motivo do reset, contador de
+reboots, flags de hardware, idade do dado de clima/Bitcoin/Dólar
+(`now_ms - last_update_ms`, sem novo campo persistido - já existe em
+`WeatherSummary`/`MarketSummary`). Navegação: `MainShell` ganhou um 8º
+ícone no rail (`LV_SYMBOL_WARNING`, o único navegável além de "Início") e
+uma `NavigateFn` injetada no construtor (mesmo padrão de
+`WizardScreen::SubmitFn`); botão "Voltar" na `SystemScreen` chama
+`StateStore::set_screen(ScreenId::Home)`.
+
+**Motivo:** `MainShell::content()` hoje assume um único screen "MAIN
+phase" (Home) montado uma vez e nunca desmontado - dar à tela de Sistema o
+mesmo tratamento exigiria ensinar `HomeScreen`/`MainShell` a desmontar/
+remontar ao trocar de tela, infraestrutura que a ADR-0024 não previu e que
+este MVP não precisa; tratá-la como tela própria (igual Boot/Wizard, pelo
+mesmo motivo histórico) é a correção mínima. Reusar o padrão já validado
+do Gate 15 em vez de reinventar `esp_reset_reason()`/contador de reboots
+evita repetir uma investigação já feita na placa física.

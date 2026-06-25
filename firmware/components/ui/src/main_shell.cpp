@@ -37,10 +37,11 @@ constexpr int kContentH  = kH - kTopbarH;
 constexpr int kDotsH     = 16;    // NP_DOTS_H
 constexpr int kPad       = 14;    // NP_PAD
 
-constexpr int kNavCount = 7;
+constexpr int kNavCount = 8;
 constexpr const char* kNavSymbols[kNavCount] = {
     LV_SYMBOL_HOME, LV_SYMBOL_LIST, LV_SYMBOL_CHARGE, LV_SYMBOL_IMAGE,
     LV_SYMBOL_BELL, LV_SYMBOL_TINT, LV_SYMBOL_REFRESH,
+    LV_SYMBOL_WARNING,  // index 7 - System diagnostics (Fase 7), the only other navigable icon besides Inicio
 };
 
 lv_obj_t* make_icon_btn(lv_obj_t* parent, const char* symbol) {
@@ -251,9 +252,13 @@ void MainShell::build() {
         lv_obj_set_style_text_color(ic, lv_color_hex(kColorAccent), LV_STATE_CHECKED);
         lv_obj_align(ic, LV_ALIGN_CENTER, 0, 0);
 
-        if (i == 0) lv_obj_add_state(btn, LV_STATE_CHECKED);  // Inicio - only real screen
-        // The other 6 icons are intentionally inert (no event_cb) until
-        // their screens exist (Agenda/Mercado dedicado/Casa/Alarmes/Clima
+        if (i == 0) {
+            lv_obj_add_state(btn, LV_STATE_CHECKED);  // Inicio - only real screen
+        } else if (i == 7) {
+            lv_obj_add_event_cb(btn, &MainShell::on_system_icon_clicked, LV_EVENT_CLICKED, this);  // Sistema (Fase 7)
+        }
+        // Icons 1-6 are intentionally inert (no event_cb) until their
+        // screens exist (Agenda/Mercado dedicado/Casa/Alarmes/Clima
         // dedicado/Timer) - see header comment.
     }
 
@@ -317,6 +322,11 @@ void MainShell::update_edge_tab() {
 void MainShell::on_menu_toggle_clicked(lv_event_t* e) {
     auto* self = static_cast<MainShell*>(lv_event_get_user_data(e));
     self->rail_open_ ? self->close_rail() : self->open_rail();
+}
+
+void MainShell::on_system_icon_clicked(lv_event_t* e) {
+    auto* self = static_cast<MainShell*>(lv_event_get_user_data(e));
+    if (self->on_navigate_) self->on_navigate_(ScreenId::System);
 }
 
 void MainShell::on_gesture(lv_event_t* e) {

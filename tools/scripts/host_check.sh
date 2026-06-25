@@ -97,6 +97,8 @@ SKIP_FILES=(
   "open_meteo_provider.cpp" # real esp_http_client + mbedtls + cJSON (Fase 5, ADR-0022) - hardware only
   "forex_provider.cpp"   # real esp_http_client + mbedtls + cJSON (Fase 5 follow-up) - hardware only
   "cache_store.cpp"      # real esp_littlefs + ESP-IDF VFS (Fase 6, ADR-0027) - hardware only
+  "system_service.cpp"   # real esp_reset_reason + NVS (Fase 7, ADR-0028) - hardware only
+  "system_screen.cpp"    # real LVGL widgets (Fase 7) - lvgl.h has no host shim
 )
 is_skipped() {
   local base="$(basename "$1")"

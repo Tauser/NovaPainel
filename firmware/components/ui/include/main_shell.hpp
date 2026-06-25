@@ -27,6 +27,8 @@
 // see app_main.cpp.
 #pragma once
 
+#include <functional>
+
 #include "app_state.hpp"
 
 struct _lv_obj_t;
@@ -38,6 +40,13 @@ namespace nova {
 
 class MainShell {
 public:
+    // The rail's 8th icon (System diagnostics, Fase 7) is the second
+    // navigable one besides "Inicio" - mirrors WizardScreen::SubmitFn's
+    // injection pattern. The other 6 stay inert per the header comment.
+    using NavigateFn = std::function<void(ScreenId)>;
+
+    explicit MainShell(NavigateFn on_navigate) : on_navigate_(std::move(on_navigate)) {}
+
     const char* name() const { return "MainShell"; }
 
     void render(const AppState& state);
@@ -54,6 +63,9 @@ private:
 
     static void on_menu_toggle_clicked(lv_event_t* e);
     static void on_gesture(lv_event_t* e);
+    static void on_system_icon_clicked(lv_event_t* e);
+
+    NavigateFn on_navigate_;
 
     bool      built_{false};
     bool      rail_open_{false};

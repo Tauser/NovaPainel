@@ -4,9 +4,18 @@
 # Target is set via `idf.py set-target esp32p4`.
 
 # Give the main task a comfortable stack for C++ / std::function usage.
-# 6144 (not 8192) to match what Fase 0's gate15 harness validated - see the
-# esp_startup_start_app finding below.
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+# Bumped from 6144 to 16384 (Fase 7 finding): "main" is app_main()'s own
+# task - it directly calls ui_dispatcher.process_pending() -> the active
+# screen's render()/build(), so every screen's full LVGL widget-tree
+# construction runs on THIS task's stack, not just on the BSP's own
+# taskLVGL (that one already got bumped to 16384 for the same reason in
+# ADR-0025, for a different code path - touch event callbacks). Adding
+# SystemScreen (Fase 7) - one more screen's build() on this same call
+# path - was enough to exceed the 6144 budget tuned back in Fase 0,
+# before CacheStore/ForexService/SystemService/SystemScreen existed:
+# "Guru Meditation Error: Core 0 panic'ed (Stack protection fault)...
+# Detected in task "main"" on real hardware, confirmed via serial capture.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 
 # C++: keep RTTI off (smaller). Exceptions left at IDF default (off) - the code
 # uses Result<T>/Status instead of throwing.
@@ -34,6 +43,12 @@ CONFIG_SPIRAM=y
 # Custom partition table (see partitions.csv). Marked preliminary in HARDWARE.md.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Coredump to flash (Fase 7, ADR-0014/0028): persists a crash dump to the
+# "coredump" partition (partitions.csv) so a panic in the field isn't lost -
+# retrievable later via `idf.py coredump-info`. ELF format (IDF default once
+# enabled) - no on-device parsing/display, see ADR-0028.
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 
 # Default log level INFO.
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y

@@ -47,6 +47,7 @@
 #include "market_service.hpp"
 #include "weather_service.hpp"
 #include "forex_service.hpp"
+#include "system_service.hpp"
 #include "notification_service.hpp"
 #include "setup_service.hpp"
 
@@ -54,6 +55,7 @@
 #include "boot_screen.hpp"
 #include "wizard_screen.hpp"
 #include "main_shell.hpp"
+#include "system_screen.hpp"
 
 namespace {
 constexpr const char* kTag = "app_main";
@@ -96,6 +98,7 @@ extern "C" void app_main(void) {
     MarketService       market_service(store, orchestrator, market_provider, cache_store);
     WeatherService      weather_service(store, orchestrator, weather_provider, cache_store);
     ForexService        forex_service(store, orchestrator, forex_provider, cache_store);
+    SystemService       system_service(store);
     NotificationService notification_service(bus);
     SetupService        setup_service(store, bus);
 
@@ -104,6 +107,7 @@ extern "C" void app_main(void) {
     services.add(&market_service);
     services.add(&weather_service);
     services.add(&forex_service);
+    services.add(&system_service);
     services.add(&notification_service);
     services.add(&setup_service);
 
@@ -144,13 +148,17 @@ extern "C" void app_main(void) {
         [enqueue_action, &store]() {
             enqueue_action([&store] { store.request_wifi_scan(); });
         });
-    HomeScreen home;
-    MainShell  shell;
-    ui_dispatcher.bind_render([&boot, &wizard, &home, &shell, &store, &board](const UiEvent&) {
+    HomeScreen   home;
+    MainShell    shell([&store](ScreenId id) { store.set_screen(id); });
+    SystemScreen system_screen([&store]() { store.set_screen(ScreenId::Home); });
+    ui_dispatcher.bind_render([&boot, &wizard, &home, &shell, &system_screen, &store, &board](const UiEvent&) {
         if (board.lock(100)) {  // 100ms, in real ms (not ticks) - see IBoard::lock
             switch (store.state().current_screen) {
-                case ScreenId::Boot:  boot.render(store.state()); break;
-                case ScreenId::Setup: wizard.render(store.state()); break;
+                case ScreenId::Boot:   boot.render(store.state()); break;
+                case ScreenId::Setup:  wizard.render(store.state()); break;
+                // Own top-level screen, not mounted via MainShell::content()
+                // - see system_screen.hpp for why (Fase 7).
+                case ScreenId::System: system_screen.render(store.state(), now_ms()); break;
                 default:
                     // MainShell (ADR-0024) owns the lv_screen_load() for
                     // every "MAIN phase" screen; HomeScreen just mounts its

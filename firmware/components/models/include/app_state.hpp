@@ -94,6 +94,14 @@ struct SystemStatus {
     bool network_ready{false};
     bool sd_ready{false};
     bool cache_ready{false};
+
+    // Boot diagnostics (Fase 7, ADR-0028) - filled by SystemService::init(),
+    // after the flags above are already set, via StateStore::set_boot_diagnostics()
+    // (a partial merge, same pattern as set_usd_brl_rate - doesn't touch the
+    // flags above). reset_reason is a static string literal (e.g. "POWERON",
+    // "PANIC"), never owned/freed.
+    const char* reset_reason{"?"};
+    uint32_t    reboot_count{0};
 };
 
 // User-chosen preferences, collected by the onboarding wizard (ADR-0017) and

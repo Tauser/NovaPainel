@@ -44,6 +44,12 @@ void StateStore::set_usd_brl_rate(double rate, DataSource source, uint32_t now_m
     bus_.publish(EventType::MarketUpdated);
 }
 
+void StateStore::set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count) {
+    state_.system.reset_reason = reset_reason;
+    state_.system.reboot_count = reboot_count;
+    bus_.publish(EventType::SystemStatusChanged);
+}
+
 void StateStore::set_weather(const WeatherSummary& weather) {
     state_.weather = weather;
     bus_.publish(EventType::WeatherUpdated);

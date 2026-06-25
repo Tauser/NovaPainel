@@ -12,7 +12,10 @@
 > Agenda/Cenas rápidas/Player seguem placeholder (sem
 > `CalendarService`/automação/áudio). **Fase 6 feita** (ADR-0027): cache em
 > LittleFS via `CacheStore`, `cache_ready` real, dado sobrevive a
-> reboot/sem-rede mostrado como "(cache)".
+> reboot/sem-rede mostrado como "(cache)". **Fase 7 feita** (ADR-0028):
+> partição de coredump + `SystemService` (motivo do reset, contador de
+> reboots) + `SystemScreen` (tela própria, 8º ícone do rail) com idade do
+> dado por domínio.
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -110,8 +113,12 @@ Fase 15 - futuro: server opcional/NoiseBot
   clima e Bitcoin (Dólar já mostrava, ADR-0026). Sem migração de schema real
   ainda (não há v2 de nenhum schema pra migrar de - ver nota de escopo da
   ADR-0027); sinalização "sem-NTP" não foi implementada nesta fase.
-- **Fase 7:** tela de sistema com observabilidade real — partição de coredump,
-  motivo do último reset, contador de reboots, idade do dado por domínio (ADR-0014).
+- **Fase 7 (concluída):** partição `coredump` (256KB) + `ENABLE_TO_FLASH`
+  (sem parsing on-device, ver ADR-0028). `SystemService` (reset reason +
+  reboot count, padrão validado no harness Gate 15) + `SystemScreen`
+  (tela própria, fora do `MainShell::content()` - motivo na ADR-0028),
+  acessível pelo 8º ícone do rail. Idade do dado por domínio calculada de
+  `last_update_ms` já existente, sem novo campo persistido.
 - **Fase 8:** resiliência no `RequestOrchestrator` — circuit breaker por domínio
   (closed/open/half-open), backoff exponencial + jitter, backpressure com
   drop-oldest, retry finito, degradação para cache (ADR-0012).
