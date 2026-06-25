@@ -233,18 +233,26 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_t* wr = make_row(wx);
     lv_obj_set_flex_align(wr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Icon beside temp+status (row), spanning their combined height -
-    // user decision.
-    lv_obj_t* temp_block = make_row(wr);
-    lv_obj_set_size(temp_block, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_align(temp_block, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(temp_block, 24, 0);  // extra clearance: the icon renders 2x its layout box (transform_scale doesn't reflow)
+    // Left column: temperatura → mínima/máxima → status (condição)
+    lv_obj_t* info_col = make_col(wr);
+    lv_obj_set_size(info_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_align(info_col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    // nova_font_28 is the biggest size that still has icon glyphs (see
-    // nova_fonts.hpp), so "double size" is done with a permanent 2x
-    // transform_scale. Static (no animation): avoids continuous dirty-region
-    // invalidation every LVGL frame, which was causing occasional screen flashes.
-    weather_icon_label_ = lv_label_create(temp_block);
+    weather_temp_label_ = make_label(info_col, "--", &nova_font_48, kColorText);
+
+    weather_highlow_label_ = make_label(info_col, "", &nova_font_16, kColorTextMuted);
+    lv_obj_set_style_margin_top(weather_highlow_label_, 2, 0);
+
+    weather_condition_label_ = make_label(info_col, "sem dados ainda", &nova_font_14, kColorTextDim);
+    lv_obj_set_style_margin_top(weather_condition_label_, 4, 0);
+
+    // Right column: ícone 2x estático (nova_font_28; transform_scale não reflui
+    // o layout — col de 70px garante espaço visual sem overlap com info_col)
+    lv_obj_t* icon_col = make_col(wr);
+    lv_obj_set_size(icon_col, 70, LV_SIZE_CONTENT);
+    lv_obj_set_flex_align(icon_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    weather_icon_label_ = lv_label_create(icon_col);
     lv_obj_set_style_text_font(weather_icon_label_, &nova_font_28, 0);
     lv_obj_set_style_text_color(weather_icon_label_, lv_color_hex(kColorAccent), 0);
     lv_label_set_text(weather_icon_label_, kWeatherIconUnknown);
@@ -252,18 +260,7 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_style_transform_pivot_y(weather_icon_label_, LV_PCT(50), 0);
     lv_obj_set_style_transform_scale_x(weather_icon_label_, LV_SCALE_NONE * 2, 0);
     lv_obj_set_style_transform_scale_y(weather_icon_label_, LV_SCALE_NONE * 2, 0);
-
-    lv_obj_t* temp_col = make_col(temp_block);
-    lv_obj_set_size(temp_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_align(temp_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    weather_temp_label_ = make_label(temp_col, "--", &nova_font_48, kColorText);
-    weather_condition_label_ = make_label(temp_col, "sem dados ainda", &nova_font_14, kColorTextDim);
-
-    lv_obj_t* city_col = make_col(wr);
-    lv_obj_set_size(city_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_align(city_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
-    make_label(city_col, "Brasília", &nova_font_20, 0xC4C8D6);  // hardcoded location, see OpenMeteoProvider
-    weather_highlow_label_ = make_label(city_col, "", &nova_font_16, kColorTextMuted);
+    lv_obj_align(weather_icon_label_, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t* wsp = lv_obj_create(wx);
     lv_obj_set_size(wsp, LV_PCT(100), 1);
