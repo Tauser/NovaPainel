@@ -24,7 +24,13 @@ docs/      documentação canônica (v3) + ADRs
 tools/     scripts (ex.: tools/scripts/host_check.sh)
 ```
 
-Estado atual: **Fase 2 fechada** (firmware core com mocks). Sem LVGL real, BSP, rede ou APIs reais.
+Estado atual: **Fase 11 concluída** — MVP completo em produção.
+`WaveshareBoard` real (display LVGL + touch + SD + ESP-Hosted/C6), Wi-Fi, NTP,
+`CoinGeckoProvider` + `OpenMeteoProvider` + `ForexProvider` (APIs reais),
+`CacheStore` (LittleFS), `SystemService`/`SystemScreen`, circuit breaker no
+`RequestOrchestrator`, build PROD seguro (`sdkconfig.prod`), buffer de display
+em PSRAM, `NotificationService` com fila prioritária. Próximas fases: v1.0
+(modo noite, álbum, timer, perfis — Fase 12+).
 
 ## Regras de arquitetura (não-negociáveis)
 
@@ -46,12 +52,18 @@ Fluxo de dados: `Provider -> Service -> StateStore -> EventBus -> UiDispatcher -
 ```text
 firmware/components/
 ├─ core/       EventBus, StateStore, Service/ServiceManager,
-│              RequestOrchestrator, UiDispatcher
+│              RequestOrchestrator (circuit breaker, ADR-0012/0029),
+│              UiDispatcher
 ├─ models/     AppState e structs (somente dados, sem lógica/IO -> testável no host)
-├─ board/      IBoard + MockBoard (HAL)
-├─ providers/  IMarketProvider + MockMarketProvider (abstração de API)
-├─ services/   ClockService, MarketService, NotificationService
-├─ ui/         HomeScreen (hoje via logs; LVGL depois)
+├─ board/      IBoard + MockBoard (HAL) + WaveshareBoard (real, Fase 3)
+├─ providers/  IMarketProvider + MockMarketProvider + CoinGeckoProvider
+│              + OpenMeteoProvider + ForexProvider
+├─ services/   ClockService (híbrido RTC↔NTP), MarketService, WeatherService,
+│              ForexService, NotificationService (fila prioritária, cap-32),
+│              SetupService (NVS + Wi-Fi + NTP), SystemService (reset reason)
+├─ cache/      CacheStore (LittleFS, escrita atômica, ADR-0027)
+├─ ui/         BootScreen, WizardScreen, HomeScreen, MainShell,
+│              SystemScreen — todos LVGL real
 └─ utils/      Result<T> / Status (erros sem exceções)
 ```
 
@@ -82,7 +94,9 @@ idf.py -p <porta> flash monitor
 ```
 
 > A placa usa ESP32-P4 **sem Wi-Fi nativo**; rede depende do ESP32-C6 via
-> ESP-Hosted/SDIO (risco de Fase 0 - ver docs/HARDWARE.md).
+> ESP-Hosted/SDIO — validado na placa física (Gates 1-15 PASS, Fase 0).
+> Build PROD: `idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build`
+> (Secure Boot v2 + Flash Encryption + NVS Encryption — ver `sdkconfig.prod` e ADR-0030).
 
 Sem ESP-IDF instalado, valide a lógica C++ no host (compila os componentes com
 `g++` contra shims de esp_log/esp_timer/freertos):

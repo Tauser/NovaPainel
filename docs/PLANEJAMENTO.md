@@ -21,17 +21,17 @@ mesmo quando internet, API, memória, storage ou algum serviço falhar.
 ### 2.1 Mantido no projeto
 
 - Home simples/adaptativa progressiva
-- data e hora
-- Wi-Fi
-- clima básico
-- BTC e dólar via CoinGecko REST (snapshot)
-- cache local
-- tela de sistema/status
-- configurações básicas
-- logs básicos
-- arquitetura offline-first
-- preparação para LVGL
-- preparação para server opcional futuro
+- data e hora (ClockService híbrido RTC↔NTP — ADR-0009/0032)
+- Wi-Fi (wizard de onboarding + auto-reconexão — ADR-0017)
+- clima básico (Open-Meteo, sem chave — ADR-0022/0023)
+- BTC e dólar via CoinGecko REST + ForexProvider (snapshot 60s — ADR-0006/0021/0026)
+- cache local (LittleFS, escrita atômica, stale visível — ADR-0015/0027)
+- tela de sistema/status (SystemScreen + SystemService — ADR-0028)
+- configurações básicas (wizard + SetupService NVS — ADR-0017)
+- logs básicos + coredump em flash (ADR-0014/0028)
+- arquitetura offline-first (circuit breaker + backoff — ADR-0012/0029)
+- LVGL real (BSP Waveshare, dirty rect nativo, buffer PSRAM — ADR-0018/0031)
+- server opcional futuro (arquitetura permite; firmware nunca depende — ADR-0002)
 
 ### 2.2 Removido do projeto
 
@@ -54,13 +54,19 @@ passa pelo link P4 ↔ C6. Detalhes e checklist em `HARDWARE.md`.
 
 ## 4. MVP real (enxuto, ponta a ponta)
 
+**Entregue (Fases 1-11):**
+
 ```text
-boot estável → display/touch → Wi-Fi validado P4↔C6 → NTP/data/hora →
-Home simples → clima básico → BTC snapshot → dólar snapshot → cache básico →
-configurações Wi-Fi/brilho → tela sistema/status mínima → logs básicos
+boot estável → display/touch (EK79007 + GT911) → Wi-Fi validado P4↔C6 (Gates 1-15) →
+NTP/data/hora (ClockService + RTC interno) → Home simples (relógio, clima, BTC, USD/BRL) →
+clima real (Open-Meteo) → BTC/USD snapshot (CoinGecko) → USD/BRL snapshot (ForexProvider) →
+cache LittleFS (dado stale visível, sobrevive reboot) → wizard onboarding (nome, Wi-Fi,
+fuso, formato) → tela sistema/status (motivo reset, reboots, idade dos dados) →
+circuit breaker + backoff por domínio → build PROD seguro (Secure Boot v2 + Flash Encryption)
+→ buffer display PSRAM (quarter-height double-buffer) → NotificationService fila prioritária
 ```
 
-Fora do MVP: Samsung TV, Sonoff, Pomodoro, perfis, rotinas, dashboard adaptativo
+Fora do MVP: Samsung TV (removido), Sonoff, Pomodoro, perfis, rotinas, dashboard adaptativo
 completo, widgets rearranjáveis, álbum inteligente, câmera, voz, NoiseBot, mini
 carteira, candles operacionais.
 
@@ -70,34 +76,36 @@ Home adaptativa simples, modo noite, relógio premium, alertas simples de preço
 linha do tempo do dia, álbum inteligente, timer/Pomodoro, feedback sonoro,
 perfis simples, rotinas locais básicas.
 
-## 6. Estratégia de dados de mercado (ADR-0006)
+## 6. Estratégia de dados de mercado (ADR-0006/0021/0022/0023/0026)
 
-Decisão: **CoinGecko REST** no MVP (já validado pelo usuário em outro projeto).
+Decisão: **CoinGecko REST** no MVP (validado na placa física).
 
 Política do `MarketService` no MVP:
 
 ```text
-- atualização a cada 60s
-- budget interno de até 6 chamadas/min
-- cache obrigatório
-- buscar em lote quando possível (1 chamada p/ BTC + favoritas)
-- modo Home: resumo | modo Mercado: snapshot detalhado
+- atualização a cada 60s (MarketService) / 120s (ForexService) / 10min (WeatherService)
+- budget interno de até 6 chamadas/min por domínio (RequestOrchestrator)
+- circuit breaker por domínio: 3 falhas → Open, backoff 10s→5min (ADR-0029)
+- cache LittleFS obrigatório (CacheStore, ADR-0027): dado stale mostrado como "(cache)"
+- busca em lote: 1 chamada p/ BTC+favoritas no CoinGecko
 - WebSocket de exchange: somente futuro
 ```
 
-> Operacional: registrar a **Demo key gratuita** do CoinGecko (100 req/min) evita
-> 429 do plano público (5-15/min). Fonte do par USD/BRL a confirmar (derivar do
-> CoinGecko ou usar fonte de câmbio dedicada). Clima via provider próprio
-> (sugestão: Open-Meteo, sem chave) - a definir em ADR específico.
+> **Operacional:** registrar a Demo key gratuita do CoinGecko (100 req/min) evita 429.
+> **USD/BRL:** `ForexProvider` via AwesomeAPI (câmbio dedicado, independente do CoinGecko — ADR-0026).
+> **Clima:** `OpenMeteoProvider` (Open-Meteo, sem chave — ADR-0022/0023), localização fixa Brasília no MVP.
 
 ## 7. Renderização e memória
 
-Tela 1024×600 em RGB565: ~1.2 MB por framebuffer (~2.4 MB com double buffer) -
-obrigatoriamente em PSRAM. Regras: render parcial, dirty rectangles, sem redraw
-completo, candles incrementais, imagens pré-redimensionadas, JPEG decode
-limitado, álbum pausado em telas pesadas. Proibições: redesenhar gráfico inteiro
-a cada tick; decodificar foto grande durante tela financeira; **manipular
-objetos LVGL fora da `lvgl_task`**.
+Tela 1024×600 em RGB565: ~1.2 MB por framebuffer (~2.4 MB com double buffer).
+**Implementado (Fase 10, ADR-0031):** buffer de draw em PSRAM, quarter-height
+(1024×150px × 2B × 2 = ~600KB), double-buffer. LVGL dirty rectangles nativo:
+só as regiões alteradas são enviadas ao display (LVGL rastreia automaticamente).
+
+Regras ainda válidas: sem redraw completo, candles incrementais pós-MVP,
+imagens pré-redimensionadas no host, JPEG decode limitado, álbum pausado em
+telas pesadas. Proibição inviolável: **nunca manipular objetos LVGL fora da
+`lvgl_task`** (ADR-0007/0013).
 
 ## 8. Arquitetura (resumo)
 
@@ -123,17 +131,29 @@ NovaPainel/
 Ver `ROADMAP.md`. Resumo: primeiro validar hardware e rede (Fase 0), depois core
 firmware, depois Home mínima, depois dados reais conservadores, depois v1.0.
 
-## 11. Pendências imediatas
+## 11. Estado atual e pendências
 
-- confirmar modelo exato da placa comprada (P4+C6 ou P4+C5)
-- confirmar BSP, flash/PSRAM e partições recomendadas
-- confirmar se o C6 vem pré-flashado e o processo de update do C6
-- confirmar display/touch/backlight
-- confirmar presença (ou ausência) de RTC
-- confirmar SD + Wi-Fi simultâneo
+**Confirmado em hardware (Fase 0, Gates 1-15 PASS):**
+- Placa: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (P4+C6, 32MB flash, 32MB PSRAM)
+- Display EK79007 (1024×600) + touch GT911 via BSP oficial
+- ESP-Hosted/SDIO P4↔C6 funcional (Wi-Fi + display simultâneos — Gate 15, soak 8h)
+- SD card via SDMMC + LDO canal 4
+- RTC: domínio interno ESP32-P4 com bateria 1220 (sem chip I2C externo)
+- Partições: `nvs` + `nvs_keys` + `phy_init` + `factory` + `storage` + `coredump`
+
+**Pendente:**
+- Gate 16: brownout/térmica (única gate ainda em aberto da Fase 0)
+- Gate 14: validação RTC bateria (power-cycle + comparar com NTP)
+- Localização no wizard (Open-Meteo usa Brasília fixo atualmente)
+- Tela de Configurações (edição pós-onboarding de Wi-Fi/fuso/nome)
+
+**Próximas fases (v1.0+):**
+- Fase 12: modo noite, álbum, timer/Pomodoro, perfis simples (ver ROADMAP)
 
 ## 12. Conclusão
 
-A abordagem prioriza validação técnica real antes de features: validar hardware
-e rede → core firmware → Home mínima → dados reais conservadores → v1.0 e
-roadmap. Isso reduz risco e evita retrabalho.
+A abordagem priorizou validação técnica real antes de features: hardware/rede
+(Fase 0) → core firmware (Fases 1-2) → BSP/display real (Fases 3-4) → dados
+reais/onboarding (Fase 5) → cache/resiliência/segurança/performance (Fases 6-11).
+MVP entregue e validado na placa física. Próximo passo: v1.0 com expansão de
+features (Fase 12+, ver ROADMAP).
