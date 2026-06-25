@@ -242,23 +242,9 @@ void HomeScreen::build(lv_obj_t* parent) {
 
     // nova_font_28 is the biggest size that still has icon glyphs (see
     // nova_fonts.hpp), so "double size" is done with a permanent 2x
-    // transform_scale. The scale does NOT reflow the layout, so the label's
-    // bounding box stays at ~28px while the glyph renders at ~56px.
-    //
-    // To prevent dirty-region miscalculation: the label lives inside a
-    // fixed-size wrapper (60×70) that covers the full 2x visual + ±5px
-    // animation range. The animation targets the wrapper (not the label), so
-    // LVGL bases its dirty region on the wrapper bounds — no more inadvertent
-    // overlap with neighboring objects (temp_col, separators) every frame.
-    lv_obj_t* icon_wrap = lv_obj_create(temp_block);
-    lv_obj_set_size(icon_wrap, 60, 70);  // 2x glyph ~56px + 14px animation headroom
-    lv_obj_set_style_bg_opa(icon_wrap, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(icon_wrap, 0, 0);
-    lv_obj_set_style_pad_all(icon_wrap, 0, 0);
-    lv_obj_set_scrollbar_mode(icon_wrap, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_flag(icon_wrap, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
-
-    weather_icon_label_ = lv_label_create(icon_wrap);
+    // transform_scale. Static (no animation): avoids continuous dirty-region
+    // invalidation every LVGL frame, which was causing occasional screen flashes.
+    weather_icon_label_ = lv_label_create(temp_block);
     lv_obj_set_style_text_font(weather_icon_label_, &nova_font_28, 0);
     lv_obj_set_style_text_color(weather_icon_label_, lv_color_hex(kColorAccent), 0);
     lv_label_set_text(weather_icon_label_, kWeatherIconUnknown);
@@ -266,20 +252,6 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_style_transform_pivot_y(weather_icon_label_, LV_PCT(50), 0);
     lv_obj_set_style_transform_scale_x(weather_icon_label_, LV_SCALE_NONE * 2, 0);
     lv_obj_set_style_transform_scale_y(weather_icon_label_, LV_SCALE_NONE * 2, 0);
-    lv_obj_align(weather_icon_label_, LV_ALIGN_CENTER, 0, 0);
-
-    static lv_anim_t icon_float;
-    lv_anim_init(&icon_float);
-    lv_anim_set_var(&icon_float, icon_wrap);  // animate wrapper for correct dirty region
-    lv_anim_set_exec_cb(&icon_float, [](void* var, int32_t v) {
-        lv_obj_set_style_translate_y(static_cast<lv_obj_t*>(var), v, 0);
-    });
-    lv_anim_set_values(&icon_float, -5, 5);
-    lv_anim_set_time(&icon_float, 1400);
-    lv_anim_set_playback_time(&icon_float, 1400);
-    lv_anim_set_repeat_count(&icon_float, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_set_path_cb(&icon_float, lv_anim_path_ease_in_out);
-    lv_anim_start(&icon_float);
 
     lv_obj_t* temp_col = make_col(temp_block);
     lv_obj_set_size(temp_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
