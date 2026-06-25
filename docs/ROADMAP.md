@@ -23,7 +23,9 @@
 > NVS Encryption + coredump off; `nvs_keys` em `partitions.csv`; zero
 > mudanças de código-fonte. **Fase 10 feita** (ADR-0031): buffer de display
 > em PSRAM quarter-height double-buffer (~600KB, ~4 flush/frame); dirty
-> region via LVGL nativo; candles/JPEG pós-MVP.
+> region via LVGL nativo; candles/JPEG pós-MVP. **Fase 11 feita** (ADR-0032):
+> `NotificationService` fila prioritária cap-32 + `ClockService` comentários
+> alinhados ao RTC interno ESP32-P4 confirmado; multi-provider pós-MVP.
 
 ## Princípio de ordenação: risco antes de hardening
 
@@ -144,11 +146,11 @@ Fase 15 - futuro: server opcional/NoiseBot
   corrigido (ADR-0018/0031). Dirty region via LVGL nativo, sem mudança de código.
   Candles incrementais e backpressure de imagem seguem como pós-MVP (v1.0+).
   Soak test excluído por decisão de produto; pertence ao processo de release.
-- **Fase 11:** modularização — múltiplos providers de mercado atrás de
-  `IMarketProvider` com fallback (a interface já permite; só ativar quando houver
-  necessidade real, mantendo CoinGecko como padrão do MVP por ADR-0006);
-  `NotificationService` com filas por prioridade; `ClockService` híbrido RTC↔NTP
-  com degradação graciosa (ADR-0009), documentado na placa que de fato possuímos.
+- **Fase 11 (concluída):** `NotificationService` — fila prioritária com cap 32,
+  evicção de menor prioridade, `mark_read()`/`unread_count()`, `now_ms` em
+  `notify()`. `ClockService` — comentários corrigidos para o RTC interno ESP32-P4
+  com bateria 1220 confirmado em `HARDWARE.md`; lógica híbrida `kMinPlausibleEpoch`
+  já estava correta. Multi-provider de mercado permanece pós-MVP (ADR-0032).
 
 ## Notas de escopo
 

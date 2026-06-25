@@ -1,11 +1,16 @@
 // NovaPainel - services/clock_service.hpp
-// Reads the system clock (time()/localtime_r) once per second. Before NTP
-// has synced it (SetupService starts SNTP on Wi-Fi connect, ADR-0021), the
-// system clock reads close to the Unix epoch - this service detects that and
-// falls back to advancing a seeded mock clock instead, so the UI always has
-// something reasonable to show (ADR-0009 offline caveat). No hardware RTC
-// yet (Fase 0 risk, docs/HARDWARE.md) - epoch-since-boot is all there is
-// until NTP fixes it.
+// Reads the system clock (time()/localtime_r) once per second. Implements the
+// hybrid RTC↔NTP strategy (ADR-0009/0032, Fase 11):
+//
+//   - The Waveshare ESP32-P4-WIFI6-Touch-LCD-7B has the ESP32-P4's internal
+//     RTC domain backed by a 1220 battery (docs/HARDWARE.md). While the
+//     battery lives, time() returns a plausible value after a cold reboot —
+//     no NTP needed to keep the clock running. Gate 14 (Fase 0) validates
+//     this by power-cycling and comparing to NTP.
+//   - When time() >= kMinPlausibleEpoch: clock_.synced = true (RTC or NTP).
+//   - When time() < kMinPlausibleEpoch (dead/absent battery + no NTP yet):
+//     a seeded mock clock advances at 1 tick/second so the UI always shows
+//     something moving, with synced = false as the "not trustworthy" signal.
 #pragma once
 
 #include <string>

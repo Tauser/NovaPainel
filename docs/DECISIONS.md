@@ -717,3 +717,41 @@ do produto — a validação de estabilidade longa pertence ao processo de relea
 **Motivo:** o ganho de liberar ~300KB de RAM interna para FreeRTOS e
 ESP-Hosted era o objetivo original da Fase 10 de performance. O bloqueador
 foi removido em Fase 4; a Fase 10 apenas realiza a troca que ficou pendente.
+
+## ADR-0032 - Fase 11: NotificationService com fila prioritária + ClockService híbrido RTC↔NTP
+
+**NotificationService — fila prioritária com cap:**
+- Capacidade máxima de 32 itens (`kMaxItems`). Ao atingir o limite, o item
+  não-lido de menor prioridade é evicado antes de inserir o novo; se todos
+  estiverem lidos, o mais antigo (frente da fila) é removido. Prioridade
+  numérica crescente: `Silent=0 < Info=1 < Success=2 < Warning=3 < Danger=4`.
+- Novos métodos: `mark_read(id)` e `unread_count()`.
+- Parâmetro `now_ms` adicionado ao `notify()` (opcional, default 0) para
+  preencher `Notification::created_ms` — antes ficava em 0.
+- API pública backward-compatible: callers existentes compilam sem alteração.
+
+**ClockService — híbrido RTC↔NTP (ADR-0009, Fase 11):**
+- O Waveshare ESP32-P4-WIFI6-Touch-LCD-7B tem o domínio RTC interno do SoC
+  ESP32-P4 alimentado por bateria 1220 (`VBAT`, sem chip RTC I2C externo —
+  confirmado em `docs/HARDWARE.md`). Gate 14 da Fase 0 valida o
+  comportamento (power-cycle + comparar com NTP).
+- O `ClockService` já implementava a lógica híbrida correta desde a Fase 5:
+  `clock_.synced = (time() >= kMinPlausibleEpoch)`. Com a bateria viva,
+  `time()` retorna um valor plausível após reboot sem NTP → `synced=true`
+  imediatamente. Sem bateria + sem NTP → mock avança com `synced=false`.
+  Nenhuma mudança de lógica foi necessária; apenas os comentários foram
+  corrigidos para refletir o hardware confirmado.
+- Mock seed atualizado de 2026-06-14 para 2026-06-25 (mais próximo de hoje).
+
+**Multi-provider de mercado:** permanece **pós-MVP** (v1.0+), conforme
+ADR-0006 e a nota de escopo do ROADMAP. A interface `IMarketProvider` já
+permite múltiplos providers com fallback; só será ativado quando houver
+necessidade real. Nenhuma mudança de código.
+
+**Motivo:** o cap da fila de notificações é a mesma política de backpressure
+já aplicada no `RequestOrchestrator` (ADR-0012/0029) — consistência de
+design. A prioridade numérica explícita (`Silent=0 … Danger=4`) garante que
+o comparador de evicção seja simples e não quebre ao reordenar o enum. O
+`ClockService` não precisava de mudança de lógica porque a distinção
+"RTC vivo vs. NTP synced vs. sem nenhum" é toda capturada pelo
+`kMinPlausibleEpoch` check — um único bit (`synced`) é suficiente para o MVP.

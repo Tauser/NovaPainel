@@ -11,10 +11,10 @@ namespace nova {
 namespace {
 constexpr const char* kTag = "ClockService";
 
-// Below this, the system clock hasn't been NTP-synced yet (it's still near
-// the Unix epoch - there's no battery-backed RTC on this board, Fase 0).
-// Picked well in the past relative to this project's existence, not tied to
-// "now" - just needs to be far enough past 1970 to never false-positive.
+// Below this epoch value, the system clock has neither been set by NTP nor
+// kept alive by the RTC battery (dead/absent battery + no Wi-Fi yet). Picked
+// safely before this project existed; just needs to be far enough past 1970
+// that a plausible real time never false-positives as unsynced.
 constexpr time_t kMinPlausibleEpoch = 1700000000;  // 2023-11-14
 
 // Maps the wizard's curated IANA-style strings (app_state.hpp) to a POSIX TZ
@@ -33,16 +33,16 @@ const char* posix_tz_for(const std::string& iana) {
 }  // namespace
 
 bool ClockService::init() {
-    // Seed a mock time so the UI shows something moving even before NTP
-    // syncs (ADR-0009). Real date/time take over in tick() once time()
-    // reports a plausible epoch.
+    // Seed a fallback mock time shown only when the RTC battery is dead AND
+    // NTP has not yet synced. Real time takes over in tick() as soon as
+    // time() reports a plausible epoch (RTC alive or NTP synced, ADR-0032).
     clock_ = ClockState{};
-    clock_.year = 2026; clock_.month = 6; clock_.day = 14;
-    clock_.hour = 22;   clock_.minute = 41; clock_.second = 0;
-    clock_.weekday = 0;  // Sunday
+    clock_.year = 2026; clock_.month = 6; clock_.day = 25;
+    clock_.hour = 12;   clock_.minute = 0; clock_.second = 0;
+    clock_.weekday = 3;  // Wednesday
     clock_.synced = false;
     store_.set_clock(clock_);
-    ESP_LOGI(kTag, "seeded mock time 22:41:00 (not synced)");
+    ESP_LOGI(kTag, "seeded mock time (fallback; RTC battery alive -> real time in first tick)");
     return true;
 }
 
