@@ -158,6 +158,16 @@ void SetupService::handle_submission(const OnboardingSubmission& submission) {
             break;
         }
         case OnboardingStep::Wifi: {
+            if (submission.wifi_ssid.empty()) {
+                // Empty SSID = disconnect request from SettingsScreen modal
+                esp_wifi_disconnect();
+                nvs_erase_key(handle, kKeyWifiSsid);
+                nvs_erase_key(handle, kKeyWifiPassword);
+                nvs_commit(handle);
+                nvs_close(handle);
+                store_.set_wifi_status(WifiConnectStatus::Idle);
+                return;
+            }
             nvs_set_str(handle, kKeyWifiSsid, submission.wifi_ssid.c_str());
             nvs_set_str(handle, kKeyWifiPassword, submission.wifi_password.c_str());
             nvs_commit(handle);

@@ -159,6 +159,9 @@ extern "C" void app_main(void) {
             enqueue_action([&store, sub] { store.submit_onboarding(sub); });
         },
         [&store](ScreenId id) { store.set_screen(id); },
+        [enqueue_action, &store]() {
+            enqueue_action([&store] { store.request_wifi_scan(); });
+        },
         [enqueue_action]() {
             enqueue_action([] { esp_restart(); });
         });
