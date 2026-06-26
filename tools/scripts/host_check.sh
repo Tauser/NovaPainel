@@ -104,6 +104,7 @@ SKIP_FILES=(
   "system_service.cpp"   # real esp_reset_reason + NVS (Fase 7, ADR-0028) - hardware only
   "system_screen.cpp"    # real LVGL widgets (Fase 7) - lvgl.h has no host shim
   "settings_screen.cpp"  # real LVGL widgets (Fase 12) - lvgl.h has no host shim
+  "nova_keyboard_manager.cpp" # real LVGL widgets - lvgl.h has no host shim
 )
 is_skipped() {
   local base="$(basename "$1")"
