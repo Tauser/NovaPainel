@@ -1,165 +1,359 @@
-# NovaPainel - Roadmap
+# NovaPainel - Roadmap Consolidado
 
-> Estado atual: **Fase 0 quase fechada** (Gates 1-15 PASS, incl. soak de 8h em
-> 2026-06-24 - só falta Gate 16/brownout-térmica) e **Fase 5 em andamento real**
-> (não mais "a fazer"): `WaveshareBoard` + `CoinGeckoProvider` +
-> `OpenMeteoProvider` + `SetupService` (NVS, `esp_wifi_connect`, NTP) +
-> `WizardScreen` (onboarding completo, Wi-Fi/fuso/formato de hora) já rodam em
-> `app_main.cpp` e foram validados na placa física, com pelo menos um bug real
-> de hardware encontrado e corrigido (lock da LVGL travando a tela durante o
-> wizard - ver `docs/DECISIONS.md`). `HomeScreen`/`MainShell` (redesign v2,
-> ADR-0024) têm relógio, clima, mercado e USD/BRL dedicado (ADR-0026) reais;
-> Agenda/Cenas rápidas/Player seguem placeholder (sem
-> `CalendarService`/automação/áudio). **Fase 6 feita** (ADR-0027): cache em
-> LittleFS via `CacheStore`, `cache_ready` real, dado sobrevive a
-> reboot/sem-rede mostrado como "(cache)". **Fase 7 feita** (ADR-0028):
-> partição de coredump + `SystemService` (motivo do reset, contador de
-> reboots) + `SystemScreen` (tela própria, 8º ícone do rail) com idade do
-> dado por domínio. **Fase 8 feita** (ADR-0029): circuit breaker por
-> domínio (closed/open/half-open), backoff exponencial + jitter, probe
-> automático via `update_clock()`, `is_degraded()` público — tudo dentro
-> do `RequestOrchestrator`, serviços sem alteração. **Fase 9 feita**
-> (ADR-0030): `sdkconfig.prod` com Secure Boot v2 + Flash Encryption +
-> NVS Encryption + coredump off; `nvs_keys` em `partitions.csv`; zero
-> mudanças de código-fonte. **Fase 10 feita** (ADR-0031): buffer de display
-> em PSRAM quarter-height double-buffer (~600KB, ~4 flush/frame); dirty
-> region via LVGL nativo; candles/JPEG pós-MVP. **Fase 11 feita** (ADR-0032):
-> `NotificationService` fila prioritária cap-32 + `ClockService` comentários
-> alinhados ao RTC interno ESP32-P4 confirmado; multi-provider pós-MVP.
+> Roadmap oficial do projeto.
+>
+> Este documento preserva toda a base do planejamento inicial, reconhece o que
+> ja foi consolidado em hardware/documentacao e organiza a reconstrucao do
+> `firmware/` novo em fases completas, escalaveis e auditaveis.
 
-## Princípio de ordenação: risco antes de hardening
+## 1. Leitura correta do estado atual
 
-A regra é **provar a fundação antes de endurecer**. Não se otimiza render,
-PSRAM ou resiliência de rede antes do BSP/LVGL e do link P4↔C6 existirem e serem
-validados. Hardening de produção (segurança, performance, soak test) vem **depois**
-do hardware provado, não antes. Por isso a Fase 0 (viabilidade de hardware) é
-pré-requisito de tudo.
+Patrimonio concluido:
 
 ```text
-Fase 0  - Risk Gates de hardware (C6/ESP-Hosted, SDIO, Wi-Fi+display simultâneos,
-          HTTPS, NTP, WebSocket, SD+Wi-Fi, PSRAM, display/touch, RTC, partições,
-          brownout/térmica)                                        [bloqueia tudo]
-Fase 1  - Organização do monorepo                                  [feito]
-Fase 2  - Firmware core com mocks                                  [feito]
-Fase 3  - Board real / BSP                                          [feito]
-Fase 4  - Display/touch/LVGL real (dirty rect nativo)               [feito, buffer PSRAM adiado p/ Fase 10]
-Fase 5  - Wi-Fi/NTP/HTTPS/CoinGecko snapshot
-Fase 6  - Home MVP com cache (LittleFS, escrita atômica, dado stale visível)
-Fase 7  - Sistema/status/logs (observabilidade: coredump, motivo de reset)
-Fase 8  - Resiliência de produção (circuit breaker, backpressure, degradação)
-Fase 9  - Hardening de segurança (NVS Encryption, Secure Boot v2, Flash Encryption)
-Fase 10 - Performance sob carga (render parcial, candles incrementais, soak 72h)
-Fase 11 - Modularização de serviços (multi-provider, NotificationService, RTC híbrido)
-Fase 12 - v1.0: modo noite, álbum, timer, perfis simples
-Fase 13 - sensores: LD2410C, BH1750, BME280
-Fase 14 - futuro: Sonoff/automação física
-Fase 15 - futuro: server opcional/NoiseBot
+Fase 0 - hardware, BSP, conectividade-base e gates de risco             [feito]
+Trilha H - consolidacao tecnica/documental pos-Fase 0                   [feito]
+Reboot do firmware - shell novo + parte da UI + base de core            [parcial]
 ```
 
-## Detalhe das fases iniciais
+Isso significa:
 
-- **Fase 0 (bloqueante):** tratar rede e display como risco de hardware. Provar
-  boot estável, link P4↔C6 (SDIO/ESP-Hosted), **Wi-Fi + display + touch em uso
-  simultâneo por horas sem reset** (risco confirmado em campo em 2026), HTTPS,
-  NTP, PSRAM, framebuffer em PSRAM, SD, RTC e particionamento. Sem passar a Fase 0,
-  o produto não evolui. Checklist preenchível em `docs/FASE0-CHECKLIST.md`. Ver
-  `HARDWARE.md` e `skills/novapanel-hardware-risk-gate`.
-  - **Fase 0.1 — harness de coexistência (Gate 15) [entregável]:** construir o
-    firmware de teste em `firmware/experiments/gate15_coexistence/` que roda
-    display (framebuffer em PSRAM) + touch + Wi-Fi/HTTPS sustentado ao mesmo tempo,
-    com instrumentação (uptime, motivo de reset, contador de reboots, watermark de
-    heap/PSRAM, reassociações Wi-Fi). É o experimento que valida — ou redireciona —
-    toda a Fase 0. Critérios PASS/FAIL no Gate 15 do `FASE0-CHECKLIST.md`.
-- **Fase 2 (concluída):** core (`EventBus`, `StateStore`, `Service`/`ServiceManager`,
-  `RequestOrchestrator`, `UiDispatcher`), serviços mock (`ClockService`,
-  `MarketService`, `NotificationService`), `MockBoard`, `MockMarketProvider`,
-  `HomeScreen` por logs. Objetivo: validar o fluxo de dados ponta a ponta.
-- **Fase 3 (concluída):** `MockBoard` substituído pelo BSP Waveshare.
-  `WaveshareBoard` real (display EK79007 + touch GT911 via
-  `waveshare/esp32_p4_wifi6_touch_lcd_7b`, SD card via SDMMC + LDO canal 4,
-  link ESP-Hosted/SDIO ao C6 sem associar a um AP - ADR-0016) roda em
-  `firmware/main/app_main.cpp` e foi validado na placa física
-  (`board=1 display=1 touch=1 net=1 sd=1` em `SystemStatus`). `cache_ready`
-  fica false até a Fase 6 (camada LittleFS é separada do mount cru do SD).
-- **Fase 4 (concluída):** LVGL real via `bsp_display_start()` (ADR-0018) - o
-  BSP já cuida da `lvgl_task` própria, touch como indev e o lock
-  (`IBoard::lock`/`unlock`, mapeado para `bsp_display_lock`/`unlock`)
-  exigido por `UiDispatcher::process_pending()` ao chamar
-  `HomeScreen::render`. `HomeScreen` virou widgets reais (relógio + mercado +
-  status), escopo MVP - sem clima/agenda/player/cenas (essas dependem de
-  providers/services que não existem ainda; ver `docs/design/README.md`).
-  **Adiado para a Fase 10:** buffer de display full-frame/double-buffer em
-  PSRAM (hoje usa o padrão do BSP - buffer parcial, single, RAM interna).
-  Achado real (ADR-0018): o alocador padrão do LVGL (`LV_USE_BUILTIN_MALLOC`)
-  reserva 64KB estáticos em RAM interna desde o boot, competindo com a
-  inicialização do ESP-Hosted (que roda via `__attribute__((constructor))`
-  antes do `app_main`) e causando falha na criação da própria main task:
-  trocado para `LV_USE_CLIB_MALLOC` (alocação dinâmica via heap padrão).
-  Tela de Boot/splash entra aqui também (`ScreenId::Boot` já existe em
-  `AppState`, só falta o screen builder - ADR-0017).
-- **Fase 5 (em andamento real):** `MockMarketProvider` já trocado por
-  `CoinGeckoProvider` (REST, 60s, 6 req/min - ADR-0006/0021); `OpenMeteoProvider`
-  para clima já existe (ADR-0023, Brasília fixo). Wizard de onboarding completo
-  (nome de exibição, Wi-Fi com scan/lista de redes, fuso horário, formato de
-  hora - ADR-0017/0020/0025) publica intenção via `EventBus`; `SetupService` é
-  o único a persistir em NVS e chamar `esp_wifi_connect`/NTP (ADR-0017/0021/0022)
-  - UI nunca persiste nem chama Wi-Fi direto. Mesmo `SetupService`/eventos serão
-  reusados depois pela tela de Configurações. `MarketService`/`WeatherService`
-  já checam `onboarding.wifi_status == Connected` antes de chamar o provider
-  (corrigido - antes a 1a request saía antes do Wi-Fi associar). Wizard não
-  tem passo de tema por decisão (`ThemeMode` fica no default até a futura
-  tela de Configurações - ver `app_state.hpp`), não é uma lacuna.
-  **Pendente:** fonte USD/BRL dedicada (hoje é a razão BTC/USD ÷ BTC/BRL do
-  próprio CoinGecko, ver comentário em `coingecko_provider.cpp`).
+- a fundacao de hardware ja foi provada
+- a direcao arquitetural do projeto continua valida
+- o `firmware/` ativo ainda precisa reentregar as fases funcionais no tree novo
 
-## Detalhe das fases de hardening (pós-hardware provado)
+## 2. Principios de execucao
 
-- **Fase 6 (concluída):** cache em LittleFS com escrita atômica (`<key>.tmp`
-  + `rename()`) e versionamento de schema por header (ADR-0015/0027) via
-  `CacheStore` (`components/cache/`), montada na partição `storage`
-  existente. `WeatherService`/`MarketService`/`ForexService` semeiam o
-  `StateStore` a partir do cache no boot (`source=Cache, stale=true`) e
-  gravam após cada fetch bem-sucedido; `HomeScreen` mostra "(cache)" pro
-  clima e Bitcoin (Dólar já mostrava, ADR-0026). Sem migração de schema real
-  ainda (não há v2 de nenhum schema pra migrar de - ver nota de escopo da
-  ADR-0027); sinalização "sem-NTP" não foi implementada nesta fase.
-- **Fase 7 (concluída):** partição `coredump` (256KB) + `ENABLE_TO_FLASH`
-  (sem parsing on-device, ver ADR-0028). `SystemService` (reset reason +
-  reboot count, padrão validado no harness Gate 15) + `SystemScreen`
-  (tela própria, fora do `MainShell::content()` - motivo na ADR-0028),
-  acessível pelo 8º ícone do rail. Idade do dado por domínio calculada de
-  `last_update_ms` já existente, sem novo campo persistido.
-- **Fase 8 (concluída):** circuit breaker por domínio no `RequestOrchestrator`
-  — `CircuitState` (closed/open/half-open), backoff exponencial + jitter
-  (XOR-shift PRNG, sem dep externa), `update_clock()` drive Open→HalfOpen,
-  `is_degraded()` público para UI/serviços, backpressure via `can_request()`
-  retornando `false`, retry finito por sonda limitada ao período de backoff
-  (ADR-0029). Serviços e UI sem alteração.
-- **Fase 9 (concluída):** `sdkconfig.prod` (Secure Boot v2 + Flash Encryption
-  RELEASE + NVS Encryption + coredump off + log WARN), `nvs_keys` partition
-  adicionada ao `partitions.csv`, `.gitignore` para chave de signing, comentário
-  DEV/PROD em `sdkconfig.defaults`, auditoria de log de secrets confirmada
-  (ADR-0030). Zero mudanças de código-fonte; DEV não afetado.
-- **Fase 10 (concluída):** buffer de display migrado para PSRAM
-  (`buff_spiram=true`, quarter-height single-buffer, ~300KB PSRAM, ~4 flush/frame
-  vs ~24 antes) — bloqueador de Fase 4 (`LV_USE_BUILTIN_MALLOC`) já havia sido
-  corrigido (ADR-0018/0031). Dirty region via LVGL nativo, sem mudança de código.
-  `double_buffer=false` obrigatório com `sw_rotate+PSRAM`: overlap flush/render
-  causava flash esporádico. Candles incrementais e backpressure de imagem seguem
-  como pós-MVP (v1.0+). Soak test excluído por decisão de produto; pertence ao
-  processo de release.
-- **Fase 11 (concluída):** `NotificationService` — fila prioritária com cap 32,
-  evicção de menor prioridade, `mark_read()`/`unread_count()`, `now_ms` em
-  `notify()`. `ClockService` — comentários corrigidos para o RTC interno ESP32-P4
-  com bateria 1220 confirmado em `HARDWARE.md`; lógica híbrida `kMinPlausibleEpoch`
-  já estava correta. Multi-provider de mercado permanece pós-MVP (ADR-0032).
+- nenhuma fase conta como entregue sem criterio claro de saida
+- `firmware/` novo e a unica base de evolucao
+- `firmware_legacy_reference/` e somente referencia para port seletivo
+- cada retomada funcional precisa religar codigo, docs e validacao
+- otimizar, endurecer ou expandir antes da base funcional voltar e perda de foco
 
-## Notas de escopo
+## 3. Visao completa de fases
 
-- Candles incrementais, álbum/JPEG e multi-provider são **pós-MVP** (v1.0+),
-  coerente com a ADR-0006 (MVP = snapshot CoinGecko 60s) e o `PLANEJAMENTO.md`.
-  A arquitetura os permite; não se implementam no MVP.
-- Háptico no `NotificationService` depende de existir motor háptico na placa —
-  validar na Fase 0 antes de arquitetar para ele.
-- `firmware/partitions.csv` e flags de hardware permanecem **preliminares** até a
-  Fase 0 validar a placa real.
+```text
+Fase 0   - Hardware e risco de plataforma                               [feito]
+Fase H   - Consolidacao tecnica/documental pos-Fase 0                   [feito]
+Fase 1   - Consolidacao documental e baseline canonico                  [feito]
+Fase 2   - Estabilizacao do reboot do firmware                          [pendente]
+Fase 3   - Setup, conectividade e tempo                                 [pendente]
+Fase 4   - Dados reais e cache offline                                  [pendente]
+Fase 5   - Telas funcionais centrais do MVP                             [pendente]
+Fase 6   - Observabilidade e resiliencia de operacao                    [pendente]
+Fase 7   - Hardening de release e seguranca PROD                        [pendente]
+Fase 8   - v1.0 Painel Pessoal                                          [futuro]
+Fase 9   - Sensores e automacao local                                   [futuro]
+Fase 10  - Midia, ambient intelligence e experiencias avancadas         [futuro]
+Fase 11  - Ecossistema opcional: server, voz, NoiseBot e integracoes    [futuro]
+```
+
+## 4. Fase 0 - Hardware e risco de plataforma
+
+Status: **feito**
+
+Cobertura:
+
+- validacao da placa Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
+- display, touch, backlight e BSP oficial
+- PSRAM
+- ESP-Hosted / SDIO P4 <-> C6
+- Wi-Fi real
+- HTTPS
+- NTP
+- SD
+- coexistencia display + touch + rede + PSRAM
+- RTC e criterio de clock offline
+- brownout e termica
+
+Fonte de verdade:
+
+- [HARDWARE.md](D:\Projetos\NovaPanel\docs\HARDWARE.md)
+- [FASE0-CHECKLIST.md](D:\Projetos\NovaPanel\docs\FASE0-CHECKLIST.md)
+
+## 5. Fase H - Consolidacao tecnica/documental pos-Fase 0
+
+Status: **feito**
+
+Cobertura patrimonial do projeto:
+
+- seguranca operacional DEV/PROD
+- field operations
+- release/rollback
+- soak validation
+- consolidacao de achados tecnicos da plataforma
+
+Importante:
+
+- Fase H continua valida como patrimonio tecnico
+- isso nao significa que todas essas capacidades ja estao reentregues no
+  `firmware/` novo
+
+## 6. Fase 1 - Consolidacao documental e baseline canonico
+
+Status: **feito**
+
+Objetivo:
+
+- limpar a documentacao canônica
+- preservar o planejamento inicial completo
+- separar claramente visao de produto, patrimonio tecnico e estado atual do reboot
+
+Escopo:
+
+- roadmap novo e completo
+- planejamento alinhado ao estado real
+- arquitetura alvo explicitada
+- README e indice de docs coerentes
+- backup dos documentos antigos
+
+Criterio de saida:
+
+- um leitor novo entende o projeto sem cruzar verdades conflitantes
+- a documentacao deixa claro o que e visao, o que e concluido e o que ainda e reboot parcial
+
+Resultado:
+
+- concluida em 2026-06-26 com consolidacao dos documentos centrais, README,
+  roadmap, arquitetura e playbooks operacionais, preservando backup dos
+  arquivos anteriores
+
+## 7. Fase 2 - Estabilizacao do reboot do firmware
+
+Objetivo:
+
+- transformar o reboot em uma base limpa, previsivel e escalavel
+
+Escopo:
+
+- estabilizar `main/`
+- religar `ServiceManager` ao runtime
+- decidir e reinstalar a camada `board/` no tree novo
+- revisar contratos de `AppState`, `EventType` e `UiDispatcher`
+- garantir host-check e build IDF coerentes com o baseline
+- consolidar shell e navegacao
+
+Criterio de saida:
+
+- o `firmware/` novo sustenta crescimento sem wiring temporario
+- o core fica novamente pronto para receber servicos reais
+
+## 8. Fase 3 - Setup, conectividade e tempo
+
+Objetivo:
+
+- sair do baseline visual e voltar a um fluxo funcional minimo do usuario
+
+Escopo:
+
+- `SetupService`
+- onboarding funcional
+- scan Wi-Fi
+- conexao Wi-Fi
+- persistencia de nome, timezone e formato de hora
+- NTP
+- integracao entre RTC e estado de clock
+- configuracoes basicas reusaveis fora do primeiro boot
+
+Criterio de saida:
+
+- usuario conclui onboarding real
+- o painel sai de `Setup` para `Home` com estado salvo
+- o relogio para de ser apenas conteudo visual estatico
+
+## 9. Fase 4 - Dados reais e cache offline
+
+Objetivo:
+
+- restaurar utilidade concreta do painel sem quebrar o offline-first
+
+Escopo:
+
+- `WeatherService`
+- `MarketService`
+- `ForexProvider`
+- `OpenMeteoProvider`
+- `CoinGeckoProvider`
+- `CacheStore` ou equivalente
+- stale/source/last_update no fluxo real
+- `RequestOrchestrator` ligado ao caminho de requests
+
+Criterio de saida:
+
+- Home mostra dados reais
+- sem internet, o painel continua util via cache
+- o comportamento degradado fica claro para o usuario
+
+## 10. Fase 5 - Telas funcionais centrais do MVP
+
+Objetivo:
+
+- fechar o miolo do produto com UX e navegacao reais
+
+Escopo:
+
+- `Home`
+- `Agenda`
+- `Market`
+- `Settings`
+- `System`
+- placeholders restantes apenas quando dependencias nao existirem ainda
+
+Prioridade recomendada:
+
+1. `System`
+2. `Settings`
+3. `Market`
+4. consolidacao da `Home`
+5. consolidacao da `Agenda`
+6. `Devices`, `Routines`, `Focus`, `PhotoFrame`
+
+Criterio de saida:
+
+- o MVP deixa de parecer um shell demonstrativo
+- telas centrais consomem estado real e nao conteudo estatico
+
+## 11. Fase 6 - Observabilidade e resiliencia de operacao
+
+Objetivo:
+
+- recuperar no tree novo as garantias operacionais do produto
+
+Escopo:
+
+- reset reason
+- reboot count
+- status operacional por dominio
+- logs uteis de campo
+- coredump no contexto certo
+- cache auto-recuperavel
+- circuit breaker e backoff em operacao real
+- testes de degradação e reconexao
+
+Criterio de saida:
+
+- reboot, falha de rede e API indisponivel nao viram caixa-preta
+- o time consegue operar e depurar o dispositivo em campo
+
+## 12. Fase 7 - Hardening de release e seguranca PROD
+
+Objetivo:
+
+- transformar o baseline funcional em produto liberavel
+
+Escopo:
+
+- DEV vs PROD formalizado
+- `NVS Encryption`
+- `Flash Encryption`
+- `Secure Boot v2`
+- build e provisioning controlados
+- rollback consciente
+- soak de release
+
+Criterio de saida:
+
+- existe caminho repetivel e seguro para release
+- segredos, logs e rollback seguem politica clara
+
+## 13. Fase 8 - v1.0 Painel Pessoal
+
+Objetivo:
+
+- entregar o primeiro pacote forte de experiencia de produto
+
+Escopo preservado do planejamento inicial:
+
+- home adaptativa simples
+- modo noite
+- relogio premium
+- alertas simples de preco
+- linha do tempo do dia
+- album inteligente
+- timer/Pomodoro
+- feedback sonoro
+- perfis simples
+- rotinas locais basicas
+
+## 14. Fase 9 - Sensores e automacao local
+
+Objetivo:
+
+- expandir o painel para contexto ambiental e automacao residencial
+
+Escopo:
+
+- presenca
+- luz ambiente
+- temperatura/umidade/ar
+- Sonoff local
+- cenas rapidas reais
+- estado de dispositivos
+- planta da casa, se ainda fizer sentido no produto
+
+## 15. Fase 10 - Midia e experiencias avancadas
+
+Objetivo:
+
+- adicionar camadas mais sofisticadas de experiencia sem comprometer o core
+
+Escopo:
+
+- photoframe/album robusto
+- player
+- recursos de foco
+- experiencias ambient intelligence locais
+- futuras otimizacoes de render e memoria
+
+## 16. Fase 11 - Ecossistema opcional
+
+Objetivo:
+
+- integrar capacidades futuras sem quebrar o contrato offline-first
+
+Escopo:
+
+- `server/` opcional
+- bridge de servicos locais
+- voz
+- integracao com NoiseBot
+- monitoramento, camera ou interfone se mantiverem valor de produto
+
+Regra:
+
+- nenhuma dessas integracoes pode virar dependencia estrutural do firmware
+
+## 17. Itens explicitamente fora do escopo atual
+
+- Samsung TV
+- automacao fisica pesada antes do baseline funcional
+- WebSocket/candles como requisito do MVP
+- crescimento do `server/` antes do firmware justificar isso
+
+## 18. Ordem pratica recomendada a partir de agora
+
+```text
+1. Fechar Fase 1 documental
+2. Executar Fase 2 e estabilizar o reboot
+3. Reentregar Fase 3 com Setup/Wi-Fi/NTP/Clock
+4. Reentregar Fase 4 com dados reais e cache
+5. Reentregar Fase 5 com telas centrais do MVP
+6. Reentregar Fase 6 com observabilidade/resiliencia
+7. Avancar para Fase 7 e preparar release
+8. Abrir v1.0 em diante
+```
+
+## 19. Definicao de pronto por fase
+
+Uma fase so conta como concluida quando houver, no minimo:
+
+- codigo funcional no `firmware/` ativo
+- documentacao canonica atualizada
+- criterio de validacao executado
+- estado de backlog seguinte claro
+
+## 20. Backup da documentacao anterior
+
+Snapshot preservado em:
+
+- `docs/_backup/2026-06-26-pre-consolidation/`
