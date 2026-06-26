@@ -1,0 +1,72 @@
+# NovaPainel - Release and Rollback
+
+Playbook da trilha H7. Define a estrategia de release segura para o firmware do
+P4 e o que continua explicitamente futuro para OTA/firmware do C6.
+
+## Estado atual
+
+Hoje o projeto tem base de seguranca para release:
+
+- `sdkconfig.prod`
+- Secure Boot v2
+- Flash Encryption em RELEASE
+- NVS Encryption
+- particao `nvs_keys`
+
+Mas ainda nao tem pipeline OTA operacional do app nem politica final de
+rollback automatizado em campo. Este documento fixa o plano para essa etapa.
+
+## Estrategia recomendada
+
+Fase atual de release:
+
+- manter `factory` como imagem de producao principal
+- usar release cabeada/controlada enquanto OTA nao existir
+- tratar rollback como procedimento operacional de reflash controlado
+
+Fase futura:
+
+- migrar `partitions.csv` para esquema com `otadata`, `ota_0` e `ota_1`
+- manter imagem anterior assinada para rollback
+- versionar `security_version` junto do processo de release
+
+## Regra de rollback
+
+Rollback so e permitido para imagem:
+
+- assinada
+- compativel com o `security_version` vigente
+- compativel com o schema de NVS/cache suportado pela release alvo
+
+Rollback nunca deve rebaixar uma unidade abaixo da politica de anti-rollback
+definida para producao.
+
+## Firmware do ESP32-C6
+
+Estado atual:
+
+- o caminho validado e `ESP-Hosted Slave OTA via SDIO`
+- o projeto ainda nao reservou particao operacional dedicada para o firmware do C6
+- isso continua como trabalho de release futuro, nao bloqueio do MVP validado
+
+Quando essa fase entrar:
+
+- definir artefato/versionamento do firmware do C6
+- definir compatibilidade P4<->C6 por release
+- documentar janela de update, fallback e criterio de bloqueio
+
+## Gate de release
+
+Antes de marcar uma release como pronta:
+
+- build PROD assinado gerado
+- checklist de `docs/SECURITY-OPERATIONS.md` concluido
+- `host_check --app --tests` verde
+- `idf.py build` verde
+- roteiro de soak relevante executado
+- nenhum bug aberto de reboot, perda de Wi-Fi ou corrupcao de persistencia sem dono
+
+## Relacao com a trilha H
+
+- `H7`: fechado como plano operacional
+- a implementacao tecnica de OTA fica para uma fase futura de firmware/release

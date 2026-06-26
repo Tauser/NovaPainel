@@ -1,161 +1,264 @@
-# NovaPainel - Planejamento Técnico (consolidado, base v3)
+# NovaPainel - Planejamento do Projeto
 
-> Documento canônico. Substitui rascunhos anteriores (v1/v2).
+> Documento canonico do produto e da estrategia tecnica.
+>
+> Este arquivo preserva a base do planejamento inicial do NovaPainel, mas
+> atualiza a leitura de status para o baseline real do repositorio em
+> 2026-06-26.
 
-## 1. Visão do Produto
+## 1. Visao do produto
 
-O **NovaPainel** é um smart display local/offline-first baseado em ESP32-P4, com
-foco em uso diário, informações pessoais, dados de mercado, agenda, cache local
-e tela de sistema, com expansão futura para automação, sensores, voz,
-monitoramento e integração com o NoiseBot.
+O **NovaPainel** e um smart display local, offline-first e orientado a uso
+diario, baseado em **ESP32-P4 + ESP32-C6**, com firmware em **ESP-IDF + LVGL**,
+arquitetura modular, cache local e integracoes futuras com automacao,
+sensores, voz e ecossistema NoiseBot.
 
 Regra principal do produto:
 
 ```text
-O painel precisa continuar útil, responsivo e bonito
-mesmo quando internet, API, memória, storage ou algum serviço falhar.
+O painel precisa continuar util, responsivo, bonito e previsivel
+mesmo quando internet, API, storage, memoria ou algum servico falhar.
 ```
 
-## 2. Escopo
+## 2. Objetivos de engenharia
 
-### 2.1 Mantido no projeto
+O projeto deve ser:
 
-- Home simples/adaptativa progressiva
-- data e hora (ClockService híbrido RTC↔NTP — ADR-0009/0032)
-- Wi-Fi (wizard de onboarding + auto-reconexão — ADR-0017)
-- clima básico (Open-Meteo, sem chave — ADR-0022/0023)
-- BTC e dólar via CoinGecko REST + ForexProvider (snapshot 60s — ADR-0006/0021/0026)
-- cache local (LittleFS, escrita atômica, stale visível — ADR-0015/0027)
-- tela de sistema/status (SystemScreen + SystemService — ADR-0028)
-- configurações básicas (wizard + SetupService NVS — ADR-0017)
-- logs básicos + coredump em flash (ADR-0014/0028)
-- arquitetura offline-first (circuit breaker + backoff — ADR-0012/0029)
-- LVGL real (BSP Waveshare, dirty rect nativo, buffer PSRAM — ADR-0018/0031)
-- server opcional futuro (arquitetura permite; firmware nunca depende — ADR-0002)
+- escalavel em escopo, sem colapsar a manutencao
+- robusto contra falhas de rede, reboot e dados parciais
+- confiavel em operacao continua
+- facil de testar, evoluir e portar
+- sustentado por componentes e limites bem definidos
 
-### 2.2 Removido do projeto
+Principios obrigatorios:
 
-- Controle de TV Samsung (e `SamsungTvAdapter`, Wake-on-LAN, SmartThings, IR
-  para TV, tokens Samsung). Motivo: alto risco técnico, comportamento varia por
-  modelo/ano, WebSocket/token/WoL incertos, valor insuficiente para o MVP.
+- `offline-first`: o firmware nunca depende do `server/`
+- `state-driven UI`: a UI le do estado; nao faz request direto
+- `ports and adapters`: hardware e APIs externas entram por interfaces
+- `single source of truth`: `StateStore` e o estado unico da aplicacao
+- `safe concurrency`: somente a `lvgl_task` do BSP toca objetos LVGL
+- `graceful degradation`: falha externa vira cache/stale, nao travamento
+- `small recoverable steps`: fases, commits e migracoes devem ser reversiveis
 
-### 2.3 Movido para futuro
+## 3. Escopo funcional do produto
 
-Sonoff LAN (Tasmota/ESPHome/MQTT), cenas rápidas, planta da casa, automações
-físicas, sensores (presença/luz/temperatura/ar), comandos de voz,
-monitoramento/câmera/interfone, integração NoiseBot.
+### 3.1 Mantido no projeto
 
-## 3. Hardware e riscos críticos
+- Home simples e progressivamente adaptativa
+- data e hora
+- Wi-Fi com onboarding e reconfiguracao posterior
+- clima basico
+- BTC e USD/BRL
+- cache local com stale explicito
+- tela de sistema/status
+- configuracoes basicas do usuario e conectividade
+- observabilidade minima de campo
+- arquitetura modular para futuras extensoes
+- server opcional no futuro, sem dependencia do firmware
 
-O ESP32-P4 **não possui Wi-Fi/Bluetooth nativo**. Nas placas Waveshare
-`ESP32-P4-WIFI6`, a conectividade vem de um coprocessador ESP32-C6 via
-ESP-Hosted/SDIO. Toda a rede (HTTPS, WebSocket, NTP, dispositivos LAN futuros)
-passa pelo link P4 ↔ C6. Detalhes e checklist em `HARDWARE.md`.
+### 3.2 Removido do projeto
 
-## 4. MVP real (enxuto, ponta a ponta)
+- controle de TV Samsung
+- Wake-on-LAN, SmartThings, IR para TV e tokens Samsung
 
-**Entregue (Fases 1-11):**
+Motivo: risco alto demais para o valor entregue no MVP inicial.
+
+### 3.3 Futuro planejado
+
+- Sonoff LAN, Tasmota, ESPHome ou MQTT
+- cenas rapidas e automacao local
+- planta da casa e estado de dispositivos
+- sensores de presenca, luz, temperatura, umidade e qualidade do ar
+- timer, Pomodoro, modo noite, album e perfis simples
+- voz, monitoramento, camera, interfone
+- integracao opcional com NoiseBot
+
+## 4. Escopo tecnico base
+
+### 4.1 Hardware alvo
+
+- placa principal: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
+- CPU principal: ESP32-P4
+- conectividade: ESP32-C6 via ESP-Hosted/SDIO
+- display: 1024x600 via BSP oficial Waveshare
+- touch: GT911
+- armazenamento/persistencia: NVS + filesystem local
+
+### 4.2 Requisitos tecnicos obrigatorios
+
+- boot estavel e previsivel
+- coexistencia segura entre display, touch, PSRAM e rede
+- cache sobrevivendo a reboot e falta de internet
+- UI sem travar por causa de request ou service lento
+- arquitetura testavel no host sempre que possivel
+- docs, contratos e roadmap andando junto com o codigo
+
+## 5. Arquitetura alvo
+
+Fluxo principal do sistema:
 
 ```text
-boot estável → display/touch (EK79007 + GT911) → Wi-Fi validado P4↔C6 (Gates 1-15) →
-NTP/data/hora (ClockService + RTC interno) → Home simples (relógio, clima, BTC, USD/BRL) →
-clima real (Open-Meteo) → BTC/USD snapshot (CoinGecko) → USD/BRL snapshot (ForexProvider) →
-cache LittleFS (dado stale visível, sobrevive reboot) → wizard onboarding (nome, Wi-Fi,
-fuso, formato) → tela sistema/status (motivo reset, reboots, idade dos dados) →
-circuit breaker + backoff por domínio → build PROD seguro (Secure Boot v2 + Flash Encryption)
-→ buffer display PSRAM (quarter-height single-buffer, sw_rotate) → NotificationService fila prioritária
+Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task -> UI
 ```
 
-Fora do MVP: Samsung TV (removido), Sonoff, Pomodoro, perfis, rotinas, dashboard adaptativo
-completo, widgets rearranjáveis, álbum inteligente, câmera, voz, NoiseBot, mini
-carteira, candles operacionais.
+Camadas esperadas:
 
-## 5. v1.0 - Painel Pessoal (após MVP validado)
+- `board/`: HAL do hardware e pontos de sincronizacao da UI
+- `providers/`: adaptadores de APIs externas
+- `services/`: logica de dominio
+- `core/`: estado, eventos, orchestrator, wiring de runtime
+- `models/`: contratos de estado e dados
+- `ui/`: shell, telas e componentes visuais
+- `shared/`: contratos compartilhados com um server futuro
 
-Home adaptativa simples, modo noite, relógio premium, alertas simples de preço,
-linha do tempo do dia, álbum inteligente, timer/Pomodoro, feedback sonoro,
-perfis simples, rotinas locais básicas.
+Regras de arquitetura:
 
-## 6. Estratégia de dados de mercado (ADR-0006/0021/0022/0023/0026)
+- UI nao persiste dados e nao acessa hardware/rede diretamente
+- services nao renderizam UI
+- providers nao conhecem UI nem tela
+- toda mutacao de estado passa por `StateStore`
+- todo request externo passa por `RequestOrchestrator`
+- toda interacao com LVGL fora do BSP exige o lock apropriado
 
-Decisão: **CoinGecko REST** no MVP (validado na placa física).
+## 6. Estrategia de dados
 
-Política do `MarketService` no MVP:
+### 6.1 Mercado
+
+- `CoinGecko` REST para BTC no MVP
+- `ForexProvider` dedicado para USD/BRL
+- polling conservador e budget controlado
+- cache obrigatorio
+- WebSocket e candles ficam para evolucao futura
+
+### 6.2 Clima
+
+- `Open-Meteo` no MVP
+- sem chave externa como dependencia inicial
+- localizacao configuravel depois do baseline funcional
+
+### 6.3 Persistencia
+
+- `NVS` para preferencias e conectividade
+- `LittleFS` para cache local
+- escrita atomica
+- versionamento e migracao de schema
+
+## 7. Requisitos nao funcionais
+
+### 7.1 Escalabilidade
+
+- crescer por modulos independentes
+- permitir adicionar services/providers sem refatorar o core
+- preservar contratos claros entre camadas
+
+### 7.2 Robustez e confiabilidade
+
+- circuit breaker e backoff por dominio
+- cache como fallback normal de operacao
+- reset reason, reboot count e diagnostico de campo
+- release com rollback planejado
+
+### 7.3 Manutenibilidade
+
+- baixo acoplamento entre UI, dominio e IO
+- interfaces pequenas e explicitas
+- componentes host-checkaveis
+- documentacao canonica curta, direta e coerente
+- ADRs para decisoes que mudem arquitetura, seguranca ou release
+
+### 7.4 Seguranca
+
+- segredos fora de logs
+- layout e particoes pensando em producao
+- `NVS Encryption`, `Flash Encryption` e `Secure Boot v2` para release
+
+## 8. Melhor stack e praticas para este projeto
+
+Direcao tecnologica recomendada:
+
+- **ESP-IDF 5.5.x** como base principal
+- **BSP oficial Waveshare** antes de HAL custom sem necessidade
+- **LVGL 9.x** como stack de UI
+- **C++ moderno e simples** no firmware, privilegiando RAII, tipos fortes e
+  interfaces pequenas
+- **NVS + LittleFS** para persistencia
+- **contratos em `shared/`** para qualquer evolucao futura de bridge/server
+
+Praticas obrigatorias:
+
+- usar bibliotecas oficiais ou primarias sempre que possivel
+- evitar reimplementar stack de hardware onde o BSP oficial resolve
+- preferir composicao e injecao de dependencia a singletons globais
+- validar no host antes do hardware quando possivel
+- manter backlog por fases com criterio claro de saida
+
+## 9. Estado real do projeto hoje
+
+Patrimonio tecnico consolidado:
+
+- **Fase 0 concluida**: hardware, BSP e gates de risco validados
+- **trilha H concluida**: consolidacao tecnica e documental pos-Fase 0
+
+Estado do `firmware/` ativo:
+
+- baseline novo com BSP, shell LVGL, `Boot`, `Setup`, `Home` e `Agenda`
+  portadas visualmente
+- `core/`, `models/` e `ui/` reerguidos
+- reboot ainda sem reintroduzir todos os services, providers, cache,
+  onboarding funcional, observabilidade e release path no tree novo
+
+Conclusao correta:
+
+- a visao inicial do projeto segue valida
+- a fundacao de hardware esta provada
+- o firmware ativo esta em fase de reconstrucao funcional controlada
+
+## 10. O que o MVP precisa conter
+
+Para este projeto ser considerado MVP funcional no baseline novo, ele precisa
+entregar de ponta a ponta:
+
+- boot estavel
+- display e touch reais
+- onboarding funcional
+- Wi-Fi e NTP
+- clock coerente com RTC/NTP
+- Home com dados reais de clima, BTC e USD/BRL
+- cache local com stale explicito
+- tela de sistema/status
+- configuracoes basicas editaveis
+- observabilidade minima
+- resiliencia de request
+
+## 11. Roadmap de implementacao
+
+A ordem oficial das fases esta em [ROADMAP.md](D:\Projetos\NovaPanel\docs\ROADMAP.md).
+
+Resumo:
 
 ```text
-- atualização a cada 60s (MarketService) / 120s (ForexService) / 10min (WeatherService)
-- budget interno de até 6 chamadas/min por domínio (RequestOrchestrator)
-- circuit breaker por domínio: 3 falhas → Open, backoff 10s→5min (ADR-0029)
-- cache LittleFS obrigatório (CacheStore, ADR-0027): dado stale mostrado como "(cache)"
-- busca em lote: 1 chamada p/ BTC+favoritas no CoinGecko
-- WebSocket de exchange: somente futuro
+1. preservar Fase 0/H como base do projeto
+2. consolidar documentacao canonica
+3. estabilizar o firmware novo
+4. religar conectividade, tempo e preferencias
+5. religar dados reais e cache
+6. religar telas centrais e operacao
+7. endurecer release
+8. expandir para v1.0, sensores, automacao e integracoes futuras
 ```
 
-> **Operacional:** registrar a Demo key gratuita do CoinGecko (100 req/min) evita 429.
-> **USD/BRL:** `ForexProvider` via AwesomeAPI (câmbio dedicado, independente do CoinGecko — ADR-0026).
-> **Clima:** `OpenMeteoProvider` (Open-Meteo, sem chave — ADR-0022/0023), localização fixa Brasília no MVP.
+## 12. Fonte de verdade documental
 
-## 7. Renderização e memória
+Documentos canonicos:
 
-Tela 1024×600 em RGB565: ~1.2 MB por framebuffer (~2.4 MB com double buffer).
-**Implementado (Fase 10, ADR-0031):** buffer de draw em PSRAM, quarter-height
-(1024×150px × 2B = ~300KB), single-buffer. LVGL dirty rectangles nativo:
-só as regiões alteradas são enviadas ao display (LVGL rastreia automaticamente).
-Nota: `double_buffer=false` é obrigatório com `sw_rotate+PSRAM` — overlap entre
-flush e próxima renderização causava flash esporádico no display.
+- [README.md](D:\Projetos\NovaPanel\README.md)
+- [docs/README.md](D:\Projetos\NovaPanel\docs\README.md)
+- [docs/PLANEJAMENTO.md](D:\Projetos\NovaPanel\docs\PLANEJAMENTO.md)
+- [docs/ARCHITECTURE.md](D:\Projetos\NovaPanel\docs\ARCHITECTURE.md)
+- [docs/HARDWARE.md](D:\Projetos\NovaPanel\docs\HARDWARE.md)
+- [docs/ROADMAP.md](D:\Projetos\NovaPanel\docs\ROADMAP.md)
+- [docs/DECISIONS.md](D:\Projetos\NovaPanel\docs\DECISIONS.md)
 
-Regras ainda válidas: sem redraw completo, candles incrementais pós-MVP,
-imagens pré-redimensionadas no host, JPEG decode limitado, álbum pausado em
-telas pesadas. Proibição inviolável: **nunca manipular objetos LVGL fora da
-`lvgl_task`** (ADR-0007/0013).
+Backup dos documentos anteriores:
 
-## 8. Arquitetura (resumo)
-
-```text
-Provider → Service → StateStore → EventBus → UiDispatcher → lvgl_task → UI
-```
-
-Detalhes e regras em `ARCHITECTURE.md`.
-
-## 9. Estrutura do monorepo
-
-```text
-NovaPainel/
-├─ firmware/   # núcleo do produto (ESP-IDF/C++)
-├─ server/     # opcional, futuro
-├─ shared/     # contratos firmware <-> server (schemas/protocol)
-├─ docs/       # esta documentação
-└─ tools/      # scripts utilitários
-```
-
-## 10. Ordem de implementação
-
-Ver `ROADMAP.md`. Resumo: primeiro validar hardware e rede (Fase 0), depois core
-firmware, depois Home mínima, depois dados reais conservadores, depois v1.0.
-
-## 11. Estado atual e pendências
-
-**Confirmado em hardware (Fase 0, Gates 1-15 PASS):**
-- Placa: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B (P4+C6, 32MB flash, 32MB PSRAM)
-- Display EK79007 (1024×600) + touch GT911 via BSP oficial
-- ESP-Hosted/SDIO P4↔C6 funcional (Wi-Fi + display simultâneos — Gate 15, soak 8h)
-- SD card via SDMMC + LDO canal 4
-- RTC: domínio interno ESP32-P4 com bateria 1220 (sem chip I2C externo)
-- Partições: `nvs` + `nvs_keys` + `phy_init` + `factory` + `storage` + `coredump`
-
-**Pendente:**
-- Gate 16: brownout/térmica (única gate ainda em aberto da Fase 0)
-- Gate 14: validação RTC bateria (power-cycle + comparar com NTP)
-- Localização no wizard (Open-Meteo usa Brasília fixo atualmente)
-- Tela de Configurações (edição pós-onboarding de Wi-Fi/fuso/nome)
-
-**Próximas fases (v1.0+):**
-- Fase 12: modo noite, álbum, timer/Pomodoro, perfis simples (ver ROADMAP)
-
-## 12. Conclusão
-
-A abordagem priorizou validação técnica real antes de features: hardware/rede
-(Fase 0) → core firmware (Fases 1-2) → BSP/display real (Fases 3-4) → dados
-reais/onboarding (Fase 5) → cache/resiliência/segurança/performance (Fases 6-11).
-MVP entregue e validado na placa física. Próximo passo: v1.0 com expansão de
-features (Fase 12+, ver ROADMAP).
+- `docs/_backup/2026-06-26-pre-consolidation/`

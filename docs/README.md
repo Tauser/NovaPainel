@@ -1,16 +1,45 @@
-# NovaPainel - Documentação
+# NovaPainel - Documentacao
 
-Fonte única de verdade do projeto. Em caso de conflito, **estes documentos**
-prevalecem sobre qualquer rascunho anterior.
+Este diretorio contem a documentacao canonica do projeto.
 
-| Documento          | Conteúdo                                                        |
-|--------------------|-----------------------------------------------------------------|
-| `PLANEJAMENTO.md`  | Visão, escopo, MVP, estratégias (base v3, consolidada)          |
-| `ARCHITECTURE.md`  | Camadas, fluxo de dados e regras de arquitetura                 |
-| `HARDWARE.md`      | ESP32-P4 + C6/ESP-Hosted, riscos de Fase 0, sensores futuros    |
-| `ROADMAP.md`       | Fases de desenvolvimento                                        |
-| `DECISIONS.md`     | ADRs (decisões arquiteturais)                                   |
-| `PROTOCOL.md`      | Ponteiro para os contratos em `/shared`                         |
+## Ordem de leitura recomendada
 
-> Nota: o escopo antigo (v1/v2) foi descontinuado para evitar "duas verdades
-> paralelas". `PLANEJAMENTO.md` (base v3) é o documento canônico.
+1. `PLANEJAMENTO.md`
+2. `ARCHITECTURE.md`
+3. `HARDWARE.md`
+4. `ROADMAP.md`
+5. `DECISIONS.md`
+
+## Documentos centrais
+
+| Documento | Papel |
+|---|---|
+| `PLANEJAMENTO.md` | visao do produto, escopo, principios e estrategia |
+| `ARCHITECTURE.md` | arquitetura alvo, limites entre camadas e diretrizes de system design |
+| `HARDWARE.md` | base da plataforma e achados da Fase 0 |
+| `ROADMAP.md` | fases oficiais do projeto e ordem de entrega |
+| `DECISIONS.md` | ADRs e decisoes duraveis |
+| `PROTOCOL.md` | ponte para contratos em `shared/` |
+
+## Documentos operacionais
+
+| Documento | Papel |
+|---|---|
+| `FASE0-CHECKLIST.md` | evidencia detalhada da validacao de hardware |
+| `SECURITY-OPERATIONS.md` | seguranca operacional DEV/PROD |
+| `FIELD-OPERATIONS.md` | operacao e triagem de campo |
+| `RELEASE-ROLLBACK.md` | estrategia de release e rollback |
+| `SOAK-VALIDATION.md` | roteiro de soak e estabilidade |
+
+## Regras de verdade
+
+- a documentacao canonica deve refletir o estado real do projeto
+- `Fase 0` e `trilha H` continuam valendo como patrimonio tecnico
+- o `firmware/` novo e a base ativa de evolucao
+- `firmware_legacy_reference/` e somente referencia para port seletivo
+
+## Backup dos documentos anteriores
+
+Os documentos antes desta consolidacao foram preservados em:
+
+- `docs/_backup/2026-06-26-pre-consolidation/`

@@ -1,42 +1,49 @@
-acab# NovaPainel
+# NovaPainel
 
-Smart display **local / offline-first** baseado em **ESP32-P4** (ESP-IDF + C++),
-organizado como monorepo. O firmware é o núcleo do produto; o server é opcional e
-futuro.
+Smart display **local / offline-first** baseado em **ESP32-P4**, com firmware em
+**ESP-IDF + LVGL**, arquitetura modular e expansao futura para automacao,
+sensores, midia, voz e integracao opcional com o ecossistema NoiseBot.
 
-> Estado atual: **esqueleto inicial**. Arquitetura, contratos e fluxo de dados
-> completos, com **mocks** no lugar de LVGL, BSP, rede e APIs reais. Sem
-> funcionalidades reais ainda — por decisão (ver `docs/ROADMAP.md`).
+## Estado atual
+
+Leitura correta do repositorio em 2026-06-26:
+
+- `Fase 0` de hardware esta concluida
+- a trilha tecnica/documental pos-Fase 0 esta consolidada
+- o `firmware/` ativo esta em reboot controlado: shell novo, base de core e
+  parte da UI ja portadas, enquanto as fases funcionais ainda estao sendo
+  reentregues no tree novo
 
 ## Estrutura
 
 ```text
 NovaPainel/
-├─ firmware/   # núcleo do produto (ESP-IDF/C++) - ver firmware/README.md
-├─ server/     # opcional, futuro - o firmware não depende dele
-├─ shared/     # contratos firmware <-> server (schemas/protocol)
-├─ docs/       # documentação canônica (base v3)
-└─ tools/      # scripts utilitários
+├─ firmware/   # firmware ativo do produto
+├─ firmware_legacy_reference/  # referencia congelada para port seletivo
+├─ server/     # opcional e futuro
+├─ shared/     # contratos e schemas compartilhados
+├─ docs/       # documentacao canonica
+└─ tools/      # scripts utilitarios
 ```
 
-## Por onde começar
-
-- Visão e escopo: `docs/PLANEJAMENTO.md`
-- Arquitetura e regras: `docs/ARCHITECTURE.md`
-- Hardware e riscos de Fase 0: `docs/HARDWARE.md`
-- Decisões (ADRs): `docs/DECISIONS.md`
-- Roadmap: `docs/ROADMAP.md`
-
-## Princípios
+## Principios do projeto
 
 ```text
-1. A UI nunca trava e nunca faz request direto.
-2. Tudo passa por StateStore/EventBus; a UI só é tocada na lvgl_task.
+1. O firmware funciona sem server.
+2. A UI nao faz request direto.
 3. Todo request passa pelo RequestOrchestrator.
-4. Dados críticos funcionam offline (cache).
-5. Cada integração entra como adapter/provider.
-6. O ESP32-P4 depende do ESP32-C6 (ESP-Hosted) para rede - risco de Fase 0.
+4. Dados importantes degradam para cache antes de quebrar a UX.
+5. O projeto cresce por modulos, nao por acoplamento cruzado.
+6. Display, touch e rede precisam coexistir de forma confiavel na plataforma.
 ```
+
+## Documentos para começar
+
+- [Planejamento](D:\Projetos\NovaPanel\docs\PLANEJAMENTO.md)
+- [Arquitetura](D:\Projetos\NovaPanel\docs\ARCHITECTURE.md)
+- [Hardware](D:\Projetos\NovaPanel\docs\HARDWARE.md)
+- [Roadmap](D:\Projetos\NovaPanel\docs\ROADMAP.md)
+- [Decisoes](D:\Projetos\NovaPanel\docs\DECISIONS.md)
 
 ## Build do firmware
 
@@ -46,22 +53,18 @@ idf.py set-target esp32p4
 idf.py build
 ```
 
-Requer ESP-IDF com suporte a ESP32-P4. Ver `firmware/README.md`.
+## Direcao de engenharia
 
-## VS Code
+O objetivo do projeto nao e apenas "funcionar", e sim evoluir com:
 
-Para trabalhar no monorepo sem quebrar a extensao ESP-IDF, abra o workspace:
+- escalabilidade de arquitetura
+- robustez operacional
+- confiabilidade em campo
+- facilidade de manutencao
+- documentacao limpa e rastreavel
 
-```text
-NovaPanel.code-workspace
-```
+## Backup documental
 
-Ele mostra a raiz do projeto e tambem `firmware/` como pasta separada. Use a
-pasta **NovaPanel Firmware (ESP-IDF)** para comandos da extensao ESP-IDF
-(build, flash, monitor, target e OpenOCD). Essa pasta fica primeiro no
-workspace de proposito, pois alguns atalhos da extensao ESP-IDF usam a primeira
-pasta como projeto ativo. O target do firmware e `esp32p4`.
+Os documentos anteriores a consolidacao atual foram preservados em:
 
-## Licença
-
-A definir.
+- `docs/_backup/2026-06-26-pre-consolidation/`
