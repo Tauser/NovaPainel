@@ -755,3 +755,52 @@ o comparador de evicção seja simples e não quebre ao reordenar o enum. O
 `ClockService` não precisava de mudança de lógica porque a distinção
 "RTC vivo vs. NTP synced vs. sem nenhum" é toda capturada pelo
 `kMinPlausibleEpoch` check — um único bit (`synced`) é suficiente para o MVP.
+
+## ADR-0033 - NovaKeyboardManager: teclado compartilhado para inputs de texto
+
+**Decisão:** todo input de texto no sistema usa `NovaKeyboardManager`
+(`components/ui/include/common/nova_keyboard_manager.hpp`). Nenhuma tela
+cria `lv_keyboard` diretamente.
+
+**Como usar:**
+```cpp
+// 1. Declarar um membro na tela (ponteiro — forward declaration basta no .hpp)
+NovaKeyboardManager* keyboard_manager_{nullptr};
+
+// 2. Criar em build() e destruir no destrutor
+keyboard_manager_ = new NovaKeyboardManager();
+keyboard_manager_->init();
+
+// 3. Registrar cada textarea (scroll_container é opcional)
+keyboard_manager_->attach(my_textarea, scroll_container);
+
+// 4. Abrir programaticamente se necessário
+keyboard_manager_->open_for(my_textarea, scroll_container);
+
+// 5. Fechar (ex.: ao fechar o modal)
+keyboard_manager_->close();
+
+// 6. Callbacks opcionais
+keyboard_manager_->set_submit_callback([this](lv_obj_t* ta, const char* text) { … });
+keyboard_manager_->set_cancel_callback([this](lv_obj_t* ta) { … });
+keyboard_manager_->set_open_callback([this](lv_obj_t* ta) { … });
+keyboard_manager_->set_close_callback([this]() { … });
+```
+
+**Regras:**
+- O `NovaKeyboardManager` é dono do `lv_keyboard` (criado em `lv_layer_top()`
+  na primeira abertura). Cada tela instancia o seu próprio manager.
+- O `scroll_container` passado em `attach()` / `open_for()` recebe
+  `pad_bottom` automático igual à altura do teclado + gap, e é restaurado ao
+  fechar. Passar `nullptr` usa a tela raiz do textarea.
+- O manager ajusta `modal_box_` de posição via `set_open_callback` /
+  `set_close_callback` para garantir que o dialog não fique atrás do teclado.
+- Nunca incluir `nova_keyboard_manager.hpp` em headers que são compilados no
+  host check (ele inclui `lvgl.h`). Usar forward declaration +
+  ponteiro cru no `.hpp`; incluir o header completo apenas no `.cpp`.
+
+**Motivo:** o padrão anterior criava um `lv_keyboard` embutido em cada tela
+(ou painel separado), duplicando layout e lógica. O `NovaKeyboardManager`
+centraliza criação, binding (`lv_keyboard_set_textarea`), ajuste de padding
+do container e scroll do campo focado — mantendo a regra arquitetural de que
+a UI não toca inputs de outras telas.
