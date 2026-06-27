@@ -68,9 +68,9 @@ Specs e pinagem confirmadas (mistura de wiki + medição direta no hardware):
   Holder" ligado direto no pino `ESP_VBAT` do próprio ESP32-P4 - é o domínio
   RTC interno do SoC com backup de bateria (1220, 3-3.3V), não um RTC I2C
   externo (PCF85xx/DS13xx/DS32xx não aparecem no esquemático). Mantém hora
-  sem energia principal enquanto a bateria durar; comportamento exato ainda
-  precisa ser testado fisicamente (Gate 14: desligar, esperar, religar e
-  comparar com NTP).
+  sem energia principal enquanto a bateria durar; a decisão de Fase 0 está
+  fechada: firmware usa o RTC interno quando a época é plausível e degrada para
+  NTP-only/horário não sincronizado quando não houver hora confiável.
 - Áudio (fora de escopo do MVP, mas presente na placa): ES8311 (codec) +
   ES7210 (cancelamento de eco) + microfones onboard.
 - Porta USB Type-A adicional: USB OTG 2.0 High Speed (não usada no MVP).
@@ -145,9 +145,11 @@ pinos aqui):
   HTTPS, WebSocket, NTP, APIs externas e quaisquer dispositivos/serviços LAN
   futuros.
 
-## Fase 0 - Risk Gates (validar ANTES de features)
+## Fase 0 - Risk Gates (fechada)
 
-A Fase 0 trata a rede como **risco de hardware**, não como detalhe posterior.
+A Fase 0 tratou a rede como **risco de hardware**, não como detalhe posterior, e
+foi fechada com sucesso em 2026-06-26. Gates 1-16 estão PASS em
+`docs/FASE0-CHECKLIST.md`.
 
 ```text
 - firmware do C6 / ESP-Hosted (vem pré-flashado? como atualizar?)
@@ -169,9 +171,9 @@ A Fase 0 trata a rede como **risco de hardware**, não como detalhe posterior.
 
 ### Critério de saída da Fase 0
 
-Boot e logs estáveis; Wi-Fi, HTTPS, NTP, display e touch funcionais; PSRAM
-detectada; SD funcional (ou decisão consciente de adiar SD); particionamento
-inicial validado.
+Atendido: boot e logs estáveis; Wi-Fi, HTTPS, NTP, display e touch funcionais;
+PSRAM detectada; SD funcional; particionamento inicial validado; RTC decidido;
+brownout/térmica validados.
 
 ## Relógio offline (ADR-0009)
 
@@ -181,9 +183,10 @@ mantém a hora enquanto ligado; após reboot sem internet, exibe horário como
 
 ## Particionamento
 
-`firmware/partitions.csv` é **preliminar** e não deve ser tratado como definitivo
-até validar a placa real (tamanho de flash, partição do slave firmware do C6,
-layout de OTA, NVS, cache/storage).
+`firmware/partitions.csv` está validado para o MVP na placa real (flash 32MB,
+NVS, `nvs_keys`, `phy_init`, app factory, storage/cache e coredump). OTA/app
+rollback e partição operacional do firmware do C6 seguem como evolução futura de
+release, não pendência da Fase 0.
 
 ## Sensores futuros (prováveis)
 

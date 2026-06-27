@@ -315,6 +315,8 @@ Regra:
 O `firmware/` novo hoje implementa parcialmente esta arquitetura:
 
 - `core/`, `models/` e `ui/` estao reerguidos
+- `ServiceManager`, `BootstrapService`, `SetupService`, `SystemService` e `ClockService`
+  ja voltaram ao runtime
 - shell visual novo esta funcional
 - `Boot`, `Setup`, `Home` e `Agenda` ja foram portadas visualmente
 - varias telas seguem placeholder

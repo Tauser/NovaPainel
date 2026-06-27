@@ -1,4 +1,4 @@
-// NovaPainel - core/service_manager.cpp
+// NovaPanel - core/service_manager.cpp
 #include "service_manager.hpp"
 
 #include "esp_log.h"

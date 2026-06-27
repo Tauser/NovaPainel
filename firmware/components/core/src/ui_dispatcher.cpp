@@ -1,16 +1,17 @@
-// NovaPainel - core/ui_dispatcher.cpp
+// NovaPanel - core/ui_dispatcher.cpp
 #include "ui_dispatcher.hpp"
 
 #include "esp_log.h"
+#include <utility>
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "UiDispatcher";
 
-// Which bus events are relevant to the UI and should be marshaled.
 bool is_ui_relevant(EventType type) {
     switch (type) {
+        case EventType::BootStateChanged:
         case EventType::ClockUpdated:
         case EventType::MarketUpdated:
         case EventType::WeatherUpdated:
@@ -34,21 +35,37 @@ UiDispatcher::UiDispatcher(EventBus& bus) : bus_(bus) {
     });
 }
 
+void UiDispatcher::bind_render(RenderFn fn) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    render_ = std::move(fn);
+}
+
 void UiDispatcher::post(const UiEvent& event) {
-    // FUTURE: push to a FreeRTOS queue consumed by lvgl_task.
+    std::lock_guard<std::mutex> lock(mutex_);
     queue_.push_back(event);
 }
 
+size_t UiDispatcher::pending() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return queue_.size();
+}
+
 void UiDispatcher::process_pending() {
-    if (queue_.empty()) return;
-    // Coalesce: a full screen re-render reads the latest StateStore, so we draw
-    // once per drain (driven by the most recent event) instead of once per
-    // event. This is the marshaling step that will run on lvgl_task later.
-    ESP_LOGD(kTag, "draining %u ui event(s) -> 1 render [would run on lvgl_task]",
-             static_cast<unsigned>(queue_.size()));
-    const UiEvent last = queue_.back();
-    queue_.clear();
-    if (render_) render_(last);
+    std::vector<UiEvent> pending_events;
+    RenderFn render;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (queue_.empty()) return;
+        pending_events.swap(queue_);
+        render = render_;
+    }
+    ESP_LOGD(kTag, "draining %u ui event(s)", static_cast<unsigned>(pending_events.size()));
+    if (!render) {
+        return;
+    }
+    for (const UiEvent& event : pending_events) {
+        render(event);
+    }
 }
 
 }  // namespace nova

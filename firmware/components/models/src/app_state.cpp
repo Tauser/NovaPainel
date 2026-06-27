@@ -1,4 +1,4 @@
-// NovaPainel - models/app_state.cpp
+// NovaPanel - models/app_state.cpp
 #include "app_state.hpp"
 
 namespace nova {

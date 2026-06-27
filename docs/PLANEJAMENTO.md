@@ -204,7 +204,8 @@ Estado do `firmware/` ativo:
 - baseline novo com BSP, shell LVGL, `Boot`, `Setup`, `Home` e `Agenda`
   portadas visualmente
 - `core/`, `models/` e `ui/` reerguidos
-- reboot ainda sem reintroduzir todos os services, providers, cache,
+- `ServiceManager` e um bootstrap service minimo ja estao religados ao runtime
+- reboot ainda sem reintroduzir todos os demais services, providers, cache,
   onboarding funcional, observabilidade e release path no tree novo
 
 Conclusao correta:

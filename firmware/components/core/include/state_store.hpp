@@ -1,10 +1,7 @@
-// NovaPainel - core/state_store.hpp
-// Single source of truth for runtime application state.
-//
-// Services mutate state ONLY through the StateStore. Each mutation publishes the
-// matching EventType on the EventBus so the UI (via UiDispatcher) can refresh.
-// The UI reads from here; it never reads services directly. See ADR-0007.
+// NovaPanel - core/state_store.hpp
 #pragma once
+
+#include <mutex>
 
 #include "app_state.hpp"
 #include "event_bus.hpp"
@@ -15,33 +12,20 @@ class StateStore {
 public:
     explicit StateStore(EventBus& bus) : bus_(bus) {}
 
-    const AppState& state() const { return state_; }
+    AppState state() const { return snapshot(); }
+    AppState snapshot() const;
 
     void set_screen(ScreenId screen);
+    void set_boot_state(const BootState& boot);
+    void request_boot_skip();
     void set_clock(const ClockState& clock);
     void set_market(const MarketSummary& market);
-    // Updates only the usd_brl/usd_brl_valid/usd_brl_source/usd_brl_last_update_ms
-    // fields, read-modify-write - ForexService and MarketService fetch
-    // independently and must not clobber each other's half of MarketSummary.
     void set_usd_brl_rate(double rate, DataSource source, uint32_t now_ms);
     void set_weather(const WeatherSummary& weather);
     void set_system_status(const SystemStatus& status);
-    // Updates only reset_reason/reboot_count, read-modify-write - same
-    // reasoning as set_usd_brl_rate: SystemService::init() runs after
-    // app_main already published the hardware-readiness flags above, must
-    // not clobber them (Fase 7, ADR-0028).
     void set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count);
-
-    // ---- Onboarding wizard (ADR-0017) ----
-    // UI side: publishes the wizard's "intention", never persists/calls
-    // hardware itself. SetupService is the only subscriber that acts on it.
     void submit_onboarding(const OnboardingSubmission& submission);
-    // UI side: asks for a fresh Wi-Fi scan (same "intention, never touches
-    // hardware" rule). Optimistically flips wifi_scan_status to Scanning so
-    // the wizard shows feedback before SetupService's real scan finishes.
     void request_wifi_scan();
-    // SetupService side: writes back results. Each publishes
-    // OnboardingStateChanged so the wizard/UI re-renders.
     void set_onboarding_needed(bool needed);
     void set_onboarding_step(OnboardingStep step);
     void set_wifi_status(WifiConnectStatus status);
@@ -50,6 +34,7 @@ public:
 
 private:
     EventBus& bus_;
+    mutable std::mutex mutex_;
     AppState  state_{};
 };
 

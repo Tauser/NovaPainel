@@ -2,6 +2,32 @@
 
 Código C completo para **LVGL v9.5**, atualizado para corresponder ao protótipo v2.
 
+## Regra de uso
+
+Este diretório é a **fonte visual de verdade** para recriar telas no firmware.
+Quando uma tela for refeita ou portada, consulte primeiro o arquivo equivalente
+a ela neste export antes de escrever código em `firmware/`.
+
+Mapeamento de referência:
+
+| Tela no firmware | Arquivo de referência |
+|---|---|
+| Boot | `screens/screen_boot.c` |
+| Setup / Onboarding | `screens/screen_setup.c` |
+| Home / Início | `screens/screen_home.c` |
+| Agenda | `screens/screen_agenda.c` |
+| Mercado | `screens/screen_mercado.c` |
+| Casa | `screens/screen_casa.c` |
+| Alarmes | `screens/screen_alarmes.c` |
+| Clima | `screens/screen_clima.c` |
+| Timer / Pomodoro | `screens/screen_timer.c` |
+| Configurações | `screens/screen_config.c` |
+| Notificações | `screens/screen_notif.c` |
+
+Se uma tela do firmware ainda não tiver equivalente visual aqui, use o arquivo
+mais próximo como base e registre o novo artefato neste mesmo diretório para que
+ele vire a referência oficial da próxima recriação.
+
 ---
 
 ## Novidades nesta versão

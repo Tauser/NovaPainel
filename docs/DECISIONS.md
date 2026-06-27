@@ -507,11 +507,11 @@ mínimo, ver `home_screen.cpp`/`market_service.cpp`).
 **Decisão:** novo componente `firmware/components/cache/` com `CacheStore`
 (`mount()`/`write()`/`read()` genéricos, sem dependência de `models/` - não
 conhece `WeatherSummary`/`MarketSummary`). Monta LittleFS (dependência
-gerenciada `joltwallet/littlefs`) na partição `storage` já existente
-(`partitions.csv`, 1MB, tipada `data`/`spiffs` mas nunca usada por nada no
-código - o BSP Waveshare tem um `bsp_spiffs_mount()` opcional, nunca
-chamado) - não precisou mudar `partitions.csv`: LittleFS acha a partição
-pelo *label* (`ESP_PARTITION_SUBTYPE_ANY`), não pelo subtype declarado.
+gerenciada `joltwallet/littlefs`) na partição `storage` já existente. Na
+primeira implementação o mount funcionava pelo *label* mesmo com o subtype
+`spiffs`; na versão atual o `storage` foi explicitamente tipado como
+`littlefs` em `partitions.csv` para alinhar o layout com a intenção da fase e
+evitar ambiguidade futura com SPIFFS.
 Escrita atômica via `<key>.tmp` + `rename()` (ADR-0015); cada blob tem um
 header (`magic` + `schema_version` + `payload_size`) - leitura que não bate
 qualquer um dos três é tratada como "sem cache" (sem distinguir corrupção
@@ -733,8 +733,9 @@ foi removido em Fase 4; a Fase 10 apenas realiza a troca que ficou pendente.
 **ClockService — híbrido RTC↔NTP (ADR-0009, Fase 11):**
 - O Waveshare ESP32-P4-WIFI6-Touch-LCD-7B tem o domínio RTC interno do SoC
   ESP32-P4 alimentado por bateria 1220 (`VBAT`, sem chip RTC I2C externo —
-  confirmado em `docs/HARDWARE.md`). Gate 14 da Fase 0 valida o
-  comportamento (power-cycle + comparar com NTP).
+  confirmado em `docs/HARDWARE.md`). Gate 14 da Fase 0 fechou a decisão de
+  clock offline: usar o RTC interno quando a época é plausível e degradar para
+  NTP-only/horário não sincronizado quando não houver hora confiável.
 - O `ClockService` já implementava a lógica híbrida correta desde a Fase 5:
   `clock_.synced = (time() >= kMinPlausibleEpoch)`. Com a bateria viva,
   `time()` retorna um valor plausível após reboot sem NTP → `synced=true`
@@ -804,3 +805,34 @@ keyboard_manager_->set_close_callback([this]() { … });
 centraliza criação, binding (`lv_keyboard_set_textarea`), ajuste de padding
 do container e scroll do campo focado — mantendo a regra arquitetural de que
 a UI não toca inputs de outras telas.
+
+## ADR-0034 - H4/H5: schema version em NVS, cache auto-recuperavel e Wi-Fi resiliente
+
+**Decisão:** a persistência do `SetupService` deixa de depender de um layout
+"implícito" e passa a ter `schema_v` em NVS (`kCurrentNvsSchemaVersion=1`).
+Se o namespace `novapanel` vier de firmware antigo sem essa chave, o serviço
+migra o layout legado in-place e grava a versão; se encontrar uma versão mais
+nova que a do firmware atual, não tenta interpretar nem sobrescrever os dados:
+degrada com segurança para onboarding novamente. Isso evita tratar dados de
+configuração de release futura como se fossem compatíveis por acaso.
+
+O `CacheStore` continua genérico, mas passa a se auto-recuperar de arquivos
+interrompidos/corrompidos: remove `*.tmp` restantes no mount e apaga o arquivo
+final quando o header/payload vierem inválidos ou com `schema_version`
+incompatível. A política continua sendo "cache incompatível vale como ausência
+de cache", mas agora o erro não reaparece em todo boot.
+
+No Wi-Fi, `SetupService` deixa de depender apenas do callback imediato do
+driver: a conexão passa a ter timeout cooperativo via `tick(now_ms)`, retry
+limitado com atraso curto entre tentativas e reconexão também para quedas após
+já estar conectado (não só no onboarding). Desconexão pedida pelo usuário
+(SSID vazio na Settings) desarma explicitamente a auto-reconexão.
+
+**Motivo:** a Fase 6 introduziu persistência real e a Fase 5 passou a depender
+de credenciais/NTP/Wi-Fi reais, mas sem versionamento operacional da NVS e sem
+limpeza ativa de cache inválido o produto ficava sujeito a comportamentos
+ambíguos em upgrade ou corrupção por power loss. Do lado de rede, a heurística
+"tentar algumas vezes no callback de disconnect durante Connecting" resolvia o
+primeiro boot, mas não sustentava reconexão estável ao longo da vida do
+dispositivo nem detectava tentativas que simplesmente penduravam sem callback
+útil em tempo razoável.

@@ -1,19 +1,12 @@
-# NovaPainel - PRELIMINARY partition table.
-# DO NOT treat as final until Fase 0 validates the real board (flash size,
-# ESP32-C6 / ESP-Hosted slave-firmware partition, OTA layout). See docs/HARDWARE.md.
+# NovaPanel - initial hardware-first partition table.
 #
-# Security note (Fase 9, ADR-0011/0030): nvs_keys holds the NVS encryption
-# keys when CONFIG_NVS_ENCRYPTION=y is enabled (PROD builds). In DEV builds
-# it is present but unused (ESP-IDF ignores it if NVS encryption is off).
-# With Flash Encryption also enabled, the nvs_keys partition is itself
-# encrypted by the Flash Encryption key - no manual key transport needed.
+# Keep this conservative while the rewritten firmware is revalidated on the
+# ESP32-P4-WIFI6-Touch-LCD-7B. OTA and ESP32-C6 update partitions come later.
 #
 # Name,     Type, SubType,  Offset,   Size,    Flags
 nvs,        data, nvs,      ,         0x6000,
 nvs_keys,   data, nvs_keys, ,         0x1000,
 phy_init,   data, phy,      ,         0x1000,
 factory,    app,  factory,  ,         0x380000,
-storage,    data, spiffs,   ,         0x100000,
+storage,    data, littlefs, ,         0x100000,
 coredump,   data, coredump, ,         0x40000,
-# FUTURE: a dedicated partition for the ESP32-C6 ESP-Hosted slave firmware and an
-# OTA scheme (ota_0/ota_1 + otadata) are expected once the board is confirmed.

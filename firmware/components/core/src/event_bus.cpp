@@ -1,7 +1,8 @@
-// NovaPainel - core/event_bus.cpp
+// NovaPanel - core/event_bus.cpp
 #include "event_bus.hpp"
 
 #include "esp_log.h"
+#include <utility>
 
 namespace nova {
 
@@ -12,6 +13,8 @@ constexpr const char* kTag = "EventBus";
 const char* to_string(EventType type) {
     switch (type) {
         case EventType::BootCompleted:        return "BootCompleted";
+        case EventType::BootStateChanged:     return "BootStateChanged";
+        case EventType::BootSkipRequested:    return "BootSkipRequested";
         case EventType::ScreenChanged:        return "ScreenChanged";
         case EventType::ClockUpdated:         return "ClockUpdated";
         case EventType::MarketUpdated:        return "MarketUpdated";
@@ -29,12 +32,14 @@ const char* to_string(EventType type) {
 }
 
 SubscriptionId EventBus::subscribe(EventHandler handler) {
+    std::lock_guard<std::mutex> lock(mutex_);
     const SubscriptionId id = next_id_++;
     subscribers_.push_back(Subscription{id, std::move(handler)});
     return id;
 }
 
 void EventBus::unsubscribe(SubscriptionId id) {
+    std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = subscribers_.begin(); it != subscribers_.end(); ++it) {
         if (it->id == id) {
             subscribers_.erase(it);
@@ -44,10 +49,12 @@ void EventBus::unsubscribe(SubscriptionId id) {
 }
 
 void EventBus::publish(const Event& event) {
-    ESP_LOGD(kTag, "publish %s (i32=%ld)", to_string(event.type),
-             static_cast<long>(event.i32));
-    // Copy is intentional: handlers may (un)subscribe during dispatch.
-    auto snapshot = subscribers_;
+    ESP_LOGD(kTag, "publish %s (i32=%ld)", to_string(event.type), static_cast<long>(event.i32));
+    std::vector<Subscription> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        snapshot = subscribers_;
+    }
     for (auto& sub : snapshot) {
         if (sub.handler) sub.handler(event);
     }
