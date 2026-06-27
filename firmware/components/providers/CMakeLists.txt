@@ -4,5 +4,5 @@ idf_component_register(
         "src/forex_provider.cpp"
         "src/open_meteo_provider.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES models utils
+    REQUIRES models utils json
 )

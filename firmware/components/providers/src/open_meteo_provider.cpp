@@ -1,9 +1,9 @@
 #include "open_meteo_provider.hpp"
 
-#include <cerrno>
-#include <cstdlib>
 #include <string>
 #include <cstdio>
+
+#include <cJSON.h>
 
 #include "esp_log.h"
 #include "http_client.hpp"
@@ -13,57 +13,98 @@ namespace nova {
 namespace {
 constexpr const char* kTag = "OpenMeteoProvider";
 
-const char* find_value_start(const std::string& json, const char* key)
+WeatherCondition weather_from_code(int code);
+
+bool read_object_double(const cJSON* object, const char* key, double& value)
 {
-    const std::string needle = std::string("\"") + key + "\"";
-    const std::size_t key_pos = json.find(needle);
-    if (key_pos == std::string::npos) {
-        return nullptr;
-    }
-
-    const std::size_t colon_pos = json.find(':', key_pos + needle.size());
-    if (colon_pos == std::string::npos) {
-        return nullptr;
-    }
-
-    const char* value = json.c_str() + colon_pos + 1;
-    while (*value == ' ' || *value == '\n' || *value == '\r' || *value == '\t') {
-        ++value;
-    }
-    return value;
-}
-
-bool parse_double(const std::string& json, const char* key, double& value)
-{
-    const char* start = find_value_start(json, key);
-    if (!start) {
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(const_cast<cJSON*>(object), key);
+    if (!cJSON_IsNumber(item)) {
         return false;
     }
-
-    char* end = nullptr;
-    errno = 0;
-    const double parsed = std::strtod(start, &end);
-    if (end == start || errno == ERANGE) {
-        return false;
-    }
-    value = parsed;
+    value = item->valuedouble;
     return true;
 }
 
-bool parse_int(const std::string& json, const char* key, int& value)
+bool read_object_int(const cJSON* object, const char* key, int& value)
 {
-    const char* start = find_value_start(json, key);
-    if (!start) {
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(const_cast<cJSON*>(object), key);
+    if (!cJSON_IsNumber(item)) {
+        return false;
+    }
+    value = item->valueint;
+    return true;
+}
+
+bool read_first_array_double(const cJSON* object, const char* key, double& value)
+{
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(const_cast<cJSON*>(object), key);
+    if (!cJSON_IsArray(item)) {
         return false;
     }
 
-    char* end = nullptr;
-    errno = 0;
-    const long parsed = std::strtol(start, &end, 10);
-    if (end == start || errno == ERANGE) {
+    const cJSON* first = cJSON_GetArrayItem(const_cast<cJSON*>(item), 0);
+    if (!cJSON_IsNumber(first)) {
         return false;
     }
-    value = static_cast<int>(parsed);
+    value = first->valuedouble;
+    return true;
+}
+
+bool parse_weather_payload(const std::string& body, WeatherSummary& out)
+{
+    cJSON* root = cJSON_ParseWithLength(body.c_str(), body.size());
+    if (!root) {
+        const char* parse_error = cJSON_GetErrorPtr();
+        if (parse_error) {
+            ESP_LOGW(kTag, "JSON parse failed near: %.120s", parse_error);
+        } else {
+            ESP_LOGW(kTag, "JSON parse failed");
+        }
+        return false;
+    }
+
+    const cJSON* current = cJSON_GetObjectItemCaseSensitive(root, "current");
+    const cJSON* daily = cJSON_GetObjectItemCaseSensitive(root, "daily");
+    if (!cJSON_IsObject(current) || !cJSON_IsObject(daily)) {
+        ESP_LOGW(kTag, "JSON payload missing current/daily objects");
+        cJSON_Delete(root);
+        return false;
+    }
+
+    double temperature = 0.0;
+    double feels_like = 0.0;
+    double humidity = 0.0;
+    double wind = 0.0;
+    double uv = 0.0;
+    double temp_max = 0.0;
+    double temp_min = 0.0;
+    int code = 0;
+    if (!read_object_double(current, "temperature_2m", temperature) ||
+        !read_object_double(current, "apparent_temperature", feels_like) ||
+        !read_object_double(current, "relative_humidity_2m", humidity) ||
+        !read_object_double(current, "wind_speed_10m", wind) ||
+        !read_object_double(current, "uv_index", uv) ||
+        !read_first_array_double(daily, "temperature_2m_max", temp_max) ||
+        !read_first_array_double(daily, "temperature_2m_min", temp_min) ||
+        !read_object_int(current, "weather_code", code)) {
+        ESP_LOGW(kTag, "JSON payload missing required weather fields");
+        cJSON_Delete(root);
+        return false;
+    }
+
+    out.temperature_c = temperature;
+    out.feels_like_c = feels_like;
+    out.humidity_pct = static_cast<int>(humidity);
+    out.wind_speed_kmh = wind;
+    out.uv_index = uv;
+    out.temp_max_c = temp_max;
+    out.temp_min_c = temp_min;
+    out.condition = weather_from_code(code);
+    out.valid = true;
+    out.stale = false;
+    out.source = DataSource::Live;
+
+    cJSON_Delete(root);
     return true;
 }
 
@@ -125,7 +166,8 @@ std::string build_url(const UserPreferences& preferences)
     std::snprintf(url, sizeof(url),
                   "https://api.open-meteo.com/v1/forecast?"
                   "latitude=%.6f&longitude=%.6f&"
-                  "current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&"
+                  "current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,uv_index&"
+                  "daily=temperature_2m_max,temperature_2m_min&"
                   "timezone=%s",
                   preferences.latitude,
                   preferences.longitude,
@@ -144,40 +186,16 @@ bool OpenMeteoProvider::fetch(WeatherSummary& out, uint32_t now_ms,
         return false;
     }
 
-    double temperature = 0.0;
-    double feels_like = 0.0;
-    double humidity = 0.0;
-    double wind = 0.0;
-    double uv = 0.0;
-    int code = 0;
-    if (!parse_double(body, "temperature_2m", temperature) ||
-        !parse_double(body, "apparent_temperature", feels_like) ||
-        !parse_double(body, "relative_humidity_2m", humidity) ||
-        !parse_double(body, "wind_speed_10m", wind) ||
-        !parse_int(body, "weather_code", code)) {
-        ESP_LOGW(kTag, "JSON parse failed");
+    if (!parse_weather_payload(body, out)) {
         return false;
     }
 
-    if (!parse_double(body, "uv_index", uv)) {
-        uv = 0.0;
-    }
-
-    out.temperature_c = temperature;
-    out.feels_like_c = feels_like;
-    out.humidity_pct = static_cast<int>(humidity);
-    out.wind_speed_kmh = wind;
-    out.uv_index = uv;
-    out.temp_max_c = temperature;
-    out.temp_min_c = temperature;
-    out.condition = weather_from_code(code);
-    out.valid = true;
-    out.stale = false;
-    out.source = DataSource::Live;
     out.last_update_ms = now_ms;
 
-    ESP_LOGI(kTag, "temp=%.1f feels=%.1f humidity=%d wind=%.1f code=%d",
-             out.temperature_c, out.feels_like_c, out.humidity_pct, out.wind_speed_kmh, code);
+    ESP_LOGI(kTag, "temp=%.1f min=%.1f max=%.1f humidity=%d wind=%.1f code=%d",
+             out.temperature_c, out.temp_min_c, out.temp_max_c,
+             out.humidity_pct, out.wind_speed_kmh,
+             static_cast<int>(out.condition));
     return true;
 }
 
