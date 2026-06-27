@@ -1,0 +1,50 @@
+// NovaPainel - ui/src/screens/home_screen.cpp
+// Real LVGL widgets (Fase 4/5). NOT host-checkable: lvgl.h has no host shim
+// (see tools/scripts/host_check.sh, which skips this file on purpose).
+// Faithful port of docs/design/lvgl_export_reference/screens/screen_home.c
+// (+ novapanel_theme.h for colors/fonts/dimensions) - see home_screen.hpp
+// for which sections are real data vs. the reference's own placeholder
+// content (Agenda/Cenas rápidas/Player).
+#include "home_screen.hpp"
+
+#include <cstdio>
+
+#include "lvgl.h"
+#include "nova_fonts.hpp"
+
+namespace nova {
+
+namespace {
+// -- Palette, from docs/design/lvgl_export_reference/novapanel_theme.h --
+constexpr uint32_t kColorCard      = 0x141721;  // NP_C_CARD
+constexpr uint32_t kColorCard2     = 0x1B1E2D;  // NP_C_CARD2
+constexpr uint32_t kColorBorder    = 0x1E2235;  // NP_C_BORDER
+constexpr uint32_t kColorSep       = 0x181B28;  // NP_C_SEP
+constexpr uint32_t kColorAccent    = 0xE8A83C;  // NP_C_ACCENT
+constexpr uint32_t kColorAccentBg  = 0x1C1900;  // NP_C_ACCENT_BG
+constexpr uint32_t kColorText      = 0xE8EAF2;  // NP_C_TEXT
+constexpr uint32_t kColorTextDim   = 0x7A8298;  // NP_C_TEXT_DIM
+constexpr uint32_t kColorTextMuted = 0x464E64;  // NP_C_TEXT_MUTED
+constexpr uint32_t kColorTextMed   = 0xBCC0CE;  // NP_C_TEXT_MED
+constexpr uint32_t kColorGreen     = 0x4ABB78;  // NP_C_GREEN
+constexpr uint32_t kColorRed       = 0xD05252;  // NP_C_RED
+constexpr uint32_t kColorDarkFg    = 0x090C12;  // NP_C_DARK_FG
+
+constexpr int kLeftW   = 362;  // LEFT_W
+constexpr int kColGap  = 12;   // COL_GAP
+constexpr int kRCard   = 12;   // NP_R_CARD
+
+const char* weekday_name(int wd) {
+    static const char* kDays[] = {"Domingo", "Segunda", "Terça", "Quarta",
+                                  "Quinta", "Sexta", "Sábado"};
+    if (wd < 0 || wd > 6) return "?";
+    return kDays[wd];
+}
+
+// Formats a non-negative integer with '.' as the thousands separator
+// (pt-BR convention), e.g. 53142 -> "53.142". Falls back to a plain number
+// if it wouldn't fit `out`.
+void format_thousands(long value, char* out, size_t out_size) {
+    char raw[32];
+    const int len = std::snprintf(raw, sizeof(raw), "%ld", value);
+    const int groups = (len - 1) / 3;

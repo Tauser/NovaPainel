@@ -1,0 +1,1 @@
+I (3641) sdio_wrapper: SDIO master: Slot 1, Data-Lines: 4-bit FrI (72945) esp-x509-crt-bundle: Certificate validated

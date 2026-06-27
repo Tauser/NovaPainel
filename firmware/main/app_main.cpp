@@ -191,22 +191,27 @@ extern "C" void app_main(void)
         state.set_onboarding_step(step);
     });
 
+    // Flag compartilhado entre o render callback e o loop principal (mesma
+    // thread). Evita múltiplas chamadas a np_update_home() dentro da mesma
+    // janela de process_pending() quando vários providers publicam em burst
+    // (Market, Weather, Clock, System na mesma frame de 200ms → flicker).
+    bool home_needs_update = false;
+
     ui.bind_render([&](const UiEvent& event) {
         ESP_LOGI(TAG, "ui event queued from %s (i32=%" PRId32 ")", to_string(event.source), event.i32);
         if (event.source == EventType::ScreenChanged) {
             const auto screen = static_cast<ScreenId>(event.i32);
             np_navigate_to(screen);
             if (screen == ScreenId::Home) {
-                np_update_home(state.state());
+                home_needs_update = true;  // atualiza após navegar, fora do loop de eventos
             }
         } else if (event.source == EventType::BootStateChanged) {
             np_update_boot(state.state().boot);
-        } else if (event.source == EventType::ClockUpdated) {
-            np_update_home(state.state());
-        } else if (event.source == EventType::MarketUpdated ||
-                   event.source == EventType::WeatherUpdated ||
+        } else if (event.source == EventType::ClockUpdated       ||
+                   event.source == EventType::MarketUpdated      ||
+                   event.source == EventType::WeatherUpdated     ||
                    event.source == EventType::SystemStatusChanged) {
-            np_update_home(state.state());
+            home_needs_update = true;  // coalesced: chamada única após drenar a fila
         } else if (event.source == EventType::OnboardingStateChanged) {
             np_update_setup(state.state());
         }
@@ -273,7 +278,12 @@ extern "C" void app_main(void)
             abort();
         }
         np_tick();
+        home_needs_update = false;
         ui.process_pending();
+        if (home_needs_update) {
+            np_update_home(state.state());
+            home_needs_update = false;
+        }
         bsp_display_unlock();
         if (now_ms - last_alive_log_ms >= 1000u) {
             log_heap_snapshot("alive");

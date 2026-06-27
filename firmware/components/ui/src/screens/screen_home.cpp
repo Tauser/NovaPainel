@@ -82,6 +82,20 @@ void set_line_if_changed(lv_obj_t* label, const char* text)
     }
 }
 
+// Evita invalidar o widget quando a cor não mudou.
+// lv_obj_set_style_text_color é sempre "dirty" mesmo sem alteração,
+// o que força re-render do label a cada np_update_home().
+void set_color_if_changed(lv_obj_t* label, lv_color_t color)
+{
+    if (!label) {
+        return;
+    }
+    const lv_color_t current = lv_obj_get_style_text_color(label, LV_PART_MAIN);
+    if (current.red != color.red || current.green != color.green || current.blue != color.blue) {
+        lv_obj_set_style_text_color(label, color, 0);
+    }
+}
+
 void format_usd_whole(char* out, size_t out_size, double value)
 {
     const unsigned long whole = static_cast<unsigned long>(value + 0.5);
@@ -122,9 +136,7 @@ void np_update_home(const AppState& state)
     set_line_if_changed(g_clock_date, date_text);
 
     set_line_if_changed(g_clock_source, clock.synced ? "NTP sincronizado" : "Relogio local");
-    lv_obj_set_style_text_color(g_clock_source,
-                                clock.synced ? NP_C_GREEN : NP_C_ACCENT,
-                                0);
+    set_color_if_changed(g_clock_source, clock.synced ? NP_C_GREEN : NP_C_ACCENT);
 
     if (g_weather_temp && g_weather_desc && g_weather_meta) {
         if (state.weather.valid) {
@@ -160,16 +172,13 @@ void np_update_home(const AppState& state)
                               state.market.btc_change_24h >= 0.0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN,
                               state.market.btc_change_24h);
                 set_line_if_changed(g_market_change, change_text);
-                lv_obj_set_style_text_color(g_market_change,
-                                            state.market.btc_change_24h >= 0.0 ? NP_C_GREEN : NP_C_RED,
-                                            0);
+                set_color_if_changed(g_market_change,
+                                     state.market.btc_change_24h >= 0.0 ? NP_C_GREEN : NP_C_RED);
             }
         } else {
             set_line_if_changed(g_market_btc, "US$ --");
             set_line_if_changed(g_market_change, "aguardando");
-            if (g_market_change) {
-                lv_obj_set_style_text_color(g_market_change, NP_C_TEXT_MUTED, 0);
-            }
+            set_color_if_changed(g_market_change, NP_C_TEXT_MUTED);
         }
 
         if (state.market.usd_brl_valid) {

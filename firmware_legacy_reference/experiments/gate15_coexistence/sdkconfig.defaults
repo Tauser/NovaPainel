@@ -1,0 +1,52 @@
+# Gate 15 harness - preliminary sdkconfig.
+# Target set via `idf.py set-target esp32p4`. Values are starting points; tune
+# during Fase 0 against the real board.
+
+# --- PSRAM (required for the framebuffer) ---
+# Confirm the exact PSRAM symbols/speed for the purchased P4 board in Fase 0.
+CONFIG_SPIRAM=y
+
+# --- Brownout detector: keep ON and log triggers (Gate 16) ---
+CONFIG_ESP_BROWNOUT_DET=y
+
+# --- Coredump to flash so silent resets leave evidence (ADR-0014) ---
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+
+# --- Stack for the main task (C, modest) ---
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+
+# --- Logging ---
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# NOTE: Wi-Fi on ESP32-P4 is NOT native. It comes from the ESP32-C6 over
+# ESP-Hosted/SDIO. The esp_wifi_remote + esp-hosted managed components (see
+# main/idf_component.yml) provide the standard esp_wifi.h API. The exact
+# component versions and SDIO pin/clock config MUST be confirmed in Fase 0
+# (Gates 8 and 9) before this builds and runs on hardware.
+
+# --- Chip revision (Gate 1 finding, 2026-06-23) ---
+# The physical board's ESP32-P4 silicon is revision v1.3 (esptool reports it on
+# connect), not the v3.x production revision IDF assumes by default
+# (ESP32P4_REV_MIN_301). v0.x/v1.x and v3.x have a documented hardware
+# difference (see Kconfig.hw_support) and are mutually exclusive build configs.
+# Without this, the bootloader rejects the chip at boot
+# ("requires chip revision in range [v3.1 - v3.99]").
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# --- Custom partition table (Gate 3/12 finding, 2026-06-23) ---
+# Built-in "singleapp_coredump" template assumes ~1MB factory app; after
+# wiring the mbedtls cert bundle (Gate 12) only 4% free space was left.
+# Real flash is 32MB, so grow factory/coredump (see partitions.csv).
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- Flash size (Gate 3 finding, 2026-06-23) ---
+# Boot log: "Detected size(32768k) larger than the size in the binary image
+# header(2048k)". The board's real flash chip is 32MB; the default for a new
+# esp32p4 sdkconfig is 2MB. Partition table layout (singleapp_coredump) still
+# fits fine either way, but declaring the real size avoids the size-mismatch
+# warning and any future esptool/OTA size assumption bugs.
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="32MB"

@@ -1,0 +1,9 @@
+# Gate 15 harness - custom partition table.
+# Real flash is 32MB (Gate 3); the built-in "singleapp_coredump" template
+# assumes ~1MB factory app, which left only 4% free after wiring the mbedtls
+# certificate bundle (Gate 12). Bump factory/coredump, still tiny vs 32MB.
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,           ,  0x6000
+phy_init, data, phy,           ,  0x1000
+factory,  app,  factory,       ,  4M
+coredump, data, coredump,      ,  256K

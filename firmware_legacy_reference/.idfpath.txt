@@ -1,0 +1,1 @@
+C:\Users\Tauser\sdkconfig;C:\\Espressif\\tools
