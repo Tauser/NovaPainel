@@ -21,6 +21,7 @@ using RenderFn = std::function<void(const UiEvent&)>;
 class UiDispatcher {
 public:
     explicit UiDispatcher(EventBus& bus);
+    ~UiDispatcher();
     void bind_render(RenderFn fn);
     void post(const UiEvent& event);
     void process_pending();

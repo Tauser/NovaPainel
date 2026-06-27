@@ -2,43 +2,16 @@
 
 #include <cerrno>
 #include <cstdlib>
-#include <utility>
 #include <string>
+#include <cstdio>
 
-#include "esp_err.h"
-#include "esp_crt_bundle.h"
-#include "esp_http_client.h"
 #include "esp_log.h"
+#include "http_client.hpp"
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "OpenMeteoProvider";
-constexpr const char* kUrl =
-    "https://api.open-meteo.com/v1/forecast?latitude=-15.793889&longitude=-47.882778&"
-    "current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&"
-    "timezone=America%2FSao_Paulo";
-
-struct HttpBody {
-    std::string data;
-};
-
-esp_err_t http_event_handler(esp_http_client_event_t* evt)
-{
-    auto* body = static_cast<HttpBody*>(evt->user_data);
-    if (!body) {
-        return ESP_OK;
-    }
-
-    switch (evt->event_id) {
-        case HTTP_EVENT_ON_DATA:
-            body->data.append(static_cast<const char*>(evt->data), evt->data_len);
-            break;
-        default:
-            break;
-    }
-    return ESP_OK;
-}
 
 const char* find_value_start(const std::string& json, const char* key)
 {
@@ -127,44 +100,47 @@ WeatherCondition weather_from_code(int code)
     }
 }
 
-bool fetch_http(const char* url, std::string& body)
+std::string encode_timezone(const std::string& timezone)
 {
-    HttpBody payload;
-    esp_http_client_config_t config{};
-    config.url = url;
-    config.method = HTTP_METHOD_GET;
-    config.timeout_ms = 5000;
-    config.buffer_size = 1024;
-    config.event_handler = http_event_handler;
-    config.user_data = &payload;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        ESP_LOGW(kTag, "esp_http_client_init failed");
-        return false;
+    std::string encoded;
+    encoded.reserve(timezone.size() + 8);
+    for (const char ch : timezone) {
+        if (ch == '/') {
+            encoded += "%2F";
+        } else {
+            encoded.push_back(ch);
+        }
     }
+    return encoded;
+}
 
-    const esp_err_t open_err = esp_http_client_perform(client);
-    const int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
+std::string build_url(const UserPreferences& preferences)
+{
+    const char* timezone = preferences.timezone.empty()
+        ? "America/Sao_Paulo"
+        : preferences.timezone.c_str();
+    const std::string encoded_timezone = encode_timezone(timezone);
 
-    if (open_err != ESP_OK || status != 200 || payload.data.empty()) {
-        ESP_LOGW(kTag, "HTTP failed: err=%s status=%d",
-                 esp_err_to_name(open_err), status);
-        return false;
-    }
-
-    body = std::move(payload.data);
-    return true;
+    char url[384];
+    std::snprintf(url, sizeof(url),
+                  "https://api.open-meteo.com/v1/forecast?"
+                  "latitude=%.6f&longitude=%.6f&"
+                  "current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&"
+                  "timezone=%s",
+                  preferences.latitude,
+                  preferences.longitude,
+                  encoded_timezone.c_str());
+    return url;
 }
 
 }  // namespace
 
-bool OpenMeteoProvider::fetch(WeatherSummary& out, uint32_t now_ms)
+bool OpenMeteoProvider::fetch(WeatherSummary& out, uint32_t now_ms,
+                              const UserPreferences& preferences)
 {
     std::string body;
-    if (!fetch_http(kUrl, body)) {
+    const std::string url = build_url(preferences);
+    if (!http_get(kTag, url.c_str(), body)) {
         return false;
     }
 

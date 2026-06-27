@@ -18,11 +18,11 @@ public:
     bool mount();
     bool ready() const { return ready_; }
 
-    bool load_market(MarketSummary& out) const;
-    bool save_market(const MarketSummary& market) const;
+    bool load_crypto(CryptoSummary& out) const;
+    bool save_crypto(const CryptoSummary& market) const;
 
-    bool load_forex(MarketSummary& out) const;
-    bool save_forex(const MarketSummary& market) const;
+    bool load_forex(ForexSummary& out) const;
+    bool save_forex(const ForexSummary& market) const;
 
     bool load_weather(WeatherSummary& out) const;
     bool save_weather(const WeatherSummary& weather) const;

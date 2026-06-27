@@ -162,18 +162,18 @@ void np_update_home(const AppState& state)
     }
 
     if (g_market_btc && g_market_fx) {
-        if (state.market.valid) {
+        if (state.crypto.valid) {
             char btc_text[64];
-            format_usd_whole(btc_text, sizeof(btc_text), state.market.btc_usd);
+            format_usd_whole(btc_text, sizeof(btc_text), state.crypto.btc_usd);
             set_line_if_changed(g_market_btc, btc_text);
             if (g_market_change) {
                 char change_text[32];
                 std::snprintf(change_text, sizeof(change_text), "%s %.2f%%",
-                              state.market.btc_change_24h >= 0.0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN,
-                              state.market.btc_change_24h);
+                              state.crypto.btc_change_24h >= 0.0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN,
+                              state.crypto.btc_change_24h);
                 set_line_if_changed(g_market_change, change_text);
                 set_color_if_changed(g_market_change,
-                                     state.market.btc_change_24h >= 0.0 ? NP_C_GREEN : NP_C_RED);
+                                     state.crypto.btc_change_24h >= 0.0 ? NP_C_GREEN : NP_C_RED);
             }
         } else {
             set_line_if_changed(g_market_btc, "US$ --");
@@ -181,17 +181,17 @@ void np_update_home(const AppState& state)
             set_color_if_changed(g_market_change, NP_C_TEXT_MUTED);
         }
 
-        if (state.market.usd_brl_valid) {
+        if (state.forex.usd_brl_valid) {
             char fx_text[64];
-            std::snprintf(fx_text, sizeof(fx_text), "R$ %.2f", state.market.usd_brl);
+            std::snprintf(fx_text, sizeof(fx_text), "R$ %.2f", state.forex.usd_brl);
             set_line_if_changed(g_market_fx, fx_text);
         } else {
             set_line_if_changed(g_market_fx, "R$ --");
         }
 
         if (g_market_note) {
-            const bool has_market_data = state.market.valid || state.market.usd_brl_valid;
-            const bool stale = state.market.stale || state.market.usd_brl_stale;
+            const bool has_market_data = state.crypto.valid || state.forex.usd_brl_valid;
+            const bool stale = state.crypto.stale || state.forex.usd_brl_stale;
             const char* note = has_market_data
                 ? (stale ? "dados do cache" : "dados ao vivo")
                 : "aguardando dados";

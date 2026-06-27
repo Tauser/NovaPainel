@@ -32,11 +32,11 @@ const char* MarketService::name() const
 
 bool MarketService::init()
 {
-    MarketSummary cached{};
-    if (cache_.load_market(cached)) {
+    CryptoSummary cached{};
+    if (cache_.load_crypto(cached)) {
         cached.stale = true;
         cached.source = DataSource::Cache;
-        store_.set_market(cached);
+        store_.set_crypto(cached);
     }
     return true;
 }
@@ -48,7 +48,7 @@ void MarketService::start()
     }
     started_ = true;
     BaseType_t ok = xTaskCreate(task_entry, "market_service", kTaskStackWords, this, kTaskPriority,
-                                reinterpret_cast<TaskHandle_t*>(&task_handle_));
+                                &task_handle_);
     if (ok != pdPASS) {
         ESP_LOGE(kTag, "failed to create task");
         task_handle_ = nullptr;
@@ -67,20 +67,20 @@ void MarketService::task_entry(void* arg)
 
 bool MarketService::refresh(uint32_t now_ms)
 {
-    MarketSummary market{};
+    CryptoSummary market{};
     if (!provider_.fetch(market, now_ms)) {
-        MarketSummary cached{};
-        if (cache_.load_market(cached)) {
+        CryptoSummary cached{};
+        if (cache_.load_crypto(cached)) {
             cached.stale = true;
             cached.source = DataSource::Cache;
-            store_.set_market(cached);
+            store_.set_crypto(cached);
         }
         orchestrator_.note_request(DataDomain::MarketSummary, now_ms, false);
         return false;
     }
 
-    store_.set_market(market);
-    cache_.save_market(market);
+    store_.set_crypto(market);
+    cache_.save_crypto(market);
     orchestrator_.note_request(DataDomain::MarketSummary, now_ms, true);
     return true;
 }

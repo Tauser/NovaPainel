@@ -12,6 +12,7 @@ pelo `UiDispatcher` para a futura `lvgl_task` (ADR-0007).
 | `ScreenChanged`        | StateStore                   | Tela ativa mudou (payload = ScreenId)        | sim            |
 | `ClockUpdated`         | ClockService/StateStore      | Relógio avançou                              | sim            |
 | `MarketUpdated`        | MarketService/StateStore     | Novo snapshot de mercado                     | sim            |
+| `ForexUpdated`         | ForexService/StateStore      | Novo snapshot de câmbio                      | sim            |
 | `NotificationCreated`  | NotificationService          | Nova notificação (payload = id)              | sim            |
 | `RequestPolicyChanged` | RequestOrchestrator          | Política/prioridade por tela mudou           | não            |
 | `ResourceWarning`      | (futuro) ResourceMonitor     | Memória/recurso baixo                        | sim            |

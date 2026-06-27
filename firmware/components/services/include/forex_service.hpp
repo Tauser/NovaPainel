@@ -2,6 +2,13 @@
 
 #include <cstdint>
 
+#if defined(ESP_PLATFORM)
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#else
+using TaskHandle_t = void*;
+#endif
+
 #include "cache_store.hpp"
 #include "i_forex_provider.hpp"
 #include "request_orchestrator.hpp"
@@ -31,7 +38,7 @@ private:
     RequestOrchestrator& orchestrator_;
     CacheStore&          cache_;
     IForexProvider&      provider_;
-    void*                task_handle_{nullptr};
+    TaskHandle_t         task_handle_{nullptr};
     bool                 started_{false};
 };
 

@@ -15,6 +15,7 @@ enum class EventType {
     ScreenChanged,
     ClockUpdated,
     MarketUpdated,
+    ForexUpdated,
     WeatherUpdated,
     NotificationCreated,
     RequestPolicyChanged,

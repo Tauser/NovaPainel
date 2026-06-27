@@ -32,6 +32,7 @@ void np_bind_setup_step(SetupStepFn fn);
 void np_update_boot(const BootState& boot);
 void np_update_setup(const AppState& state);
 void np_update_home(const AppState& state);
+void np_update_shell(const AppState& state);
 void np_tick_setup();
 void np_navigate_to(ScreenId screen);
 void np_tick();

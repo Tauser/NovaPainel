@@ -46,6 +46,7 @@ static const char *TAG = "NovaPanel";
 
 #define NOVAPANEL_DISPLAY_ROTATION LV_DISPLAY_ROTATION_180
 #define NOVAPANEL_LVGL_LOCK_MS 1000
+#define NOVAPANEL_LVGL_MAX_TIMEOUTS 5
 
 static void log_heap_snapshot(const char *phase)
 {
@@ -83,6 +84,25 @@ static void start_display(void)
 
     bsp_display_rotate(display, NOVAPANEL_DISPLAY_ROTATION);
     ESP_LOGI(TAG, "display rotation=%d sw_rotate=1 double_buffer=0", (int)NOVAPANEL_DISPLAY_ROTATION);
+}
+
+static bool with_lvgl_lock(const char* phase, int& consecutive_failures,
+                           const std::function<void()>& fn)
+{
+    if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
+        ++consecutive_failures;
+        ESP_LOGE(TAG, "LVGL lock timeout during %s (%d/%d)",
+                 phase, consecutive_failures, NOVAPANEL_LVGL_MAX_TIMEOUTS);
+        if (consecutive_failures >= NOVAPANEL_LVGL_MAX_TIMEOUTS) {
+            ESP_LOGE(TAG, "LVGL remained unavailable after repeated timeouts; keeping system alive");
+        }
+        return false;
+    }
+
+    consecutive_failures = 0;
+    fn();
+    bsp_display_unlock();
+    return true;
 }
 
 static bool start_network_transport(void)
@@ -196,6 +216,7 @@ extern "C" void app_main(void)
     // janela de process_pending() quando vários providers publicam em burst
     // (Market, Weather, Clock, System na mesma frame de 200ms → flicker).
     bool home_needs_update = false;
+    bool shell_needs_update = false;
 
     ui.bind_render([&](const UiEvent& event) {
         ESP_LOGI(TAG, "ui event queued from %s (i32=%" PRId32 ")", to_string(event.source), event.i32);
@@ -209,10 +230,12 @@ extern "C" void app_main(void)
             np_update_boot(state.state().boot);
         } else if (event.source == EventType::ClockUpdated       ||
                    event.source == EventType::MarketUpdated      ||
+                   event.source == EventType::ForexUpdated       ||
                    event.source == EventType::WeatherUpdated     ||
                    event.source == EventType::SystemStatusChanged) {
             home_needs_update = true;  // coalesced: chamada única após drenar a fila
         } else if (event.source == EventType::OnboardingStateChanged) {
+            shell_needs_update = true;
             np_update_setup(state.state());
         }
     });
@@ -229,15 +252,15 @@ extern "C" void app_main(void)
     services.start_all();
 
     start_display();
-    if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
-        ESP_LOGE(TAG, "LVGL lock timeout while initializing UI");
-        abort();
-    }
-    np_init();
-    np_update_boot(state.state().boot);
-    np_update_setup(state.state());
-    np_update_home(state.state());
-    bsp_display_unlock();
+    int lvgl_lock_failures = 0;
+    with_lvgl_lock("initializing UI", lvgl_lock_failures, [&]() {
+        const AppState current = state.state();
+        np_init();
+        np_update_shell(current);
+        np_update_boot(current.boot);
+        np_update_setup(current);
+        np_update_home(current);
+    });
 
     {
         SystemStatus system = state.state().system;
@@ -254,12 +277,9 @@ extern "C" void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(250));
     bsp_display_backlight_on();
     ESP_LOGI(TAG, "backlight enabled after first UI frame");
-    if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
-        ESP_LOGE(TAG, "LVGL lock timeout while rendering initial screen");
-        abort();
-    }
-    ui.process_pending();
-    bsp_display_unlock();
+    with_lvgl_lock("rendering initial screen", lvgl_lock_failures, [&]() {
+        ui.process_pending();
+    });
     log_heap_snapshot("display_ready");
 
     uint32_t last_alive_log_ms = boot_now_ms;
@@ -273,18 +293,22 @@ extern "C" void app_main(void)
             delete pending_action;
         }
         services.tick_all(now_ms);
-        if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
-            ESP_LOGE(TAG, "LVGL lock timeout in periodic UI tick");
-            abort();
-        }
-        np_tick();
-        home_needs_update = false;
-        ui.process_pending();
-        if (home_needs_update) {
-            np_update_home(state.state());
+        with_lvgl_lock("periodic UI tick", lvgl_lock_failures, [&]() {
+            np_tick();
             home_needs_update = false;
-        }
-        bsp_display_unlock();
+            shell_needs_update = false;
+            ui.process_pending();
+            if (shell_needs_update) {
+                np_update_shell(state.state());
+                shell_needs_update = false;
+            }
+            if (home_needs_update) {
+                const AppState current = state.state();
+                np_update_shell(current);
+                np_update_home(current);
+                home_needs_update = false;
+            }
+        });
         if (now_ms - last_alive_log_ms >= 1000u) {
             log_heap_snapshot("alive");
             last_alive_log_ms = now_ms;

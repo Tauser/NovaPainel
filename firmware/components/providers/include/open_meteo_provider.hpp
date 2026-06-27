@@ -8,7 +8,7 @@ namespace nova {
 
 class OpenMeteoProvider final {
 public:
-    bool fetch(WeatherSummary& out, uint32_t now_ms);
+    bool fetch(WeatherSummary& out, uint32_t now_ms, const UserPreferences& preferences);
 };
 
 }  // namespace nova

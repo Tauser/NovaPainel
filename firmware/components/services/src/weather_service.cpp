@@ -48,7 +48,7 @@ void WeatherService::start()
     }
     started_ = true;
     BaseType_t ok = xTaskCreate(task_entry, "weather_service", kTaskStackWords, this, kTaskPriority,
-                                reinterpret_cast<TaskHandle_t*>(&task_handle_));
+                                &task_handle_);
     if (ok != pdPASS) {
         ESP_LOGE(kTag, "failed to create task");
         task_handle_ = nullptr;
@@ -67,8 +67,9 @@ void WeatherService::task_entry(void* arg)
 
 bool WeatherService::refresh(uint32_t now_ms)
 {
-    WeatherSummary weather = store_.snapshot().weather;
-    if (!provider_.fetch(weather, now_ms)) {
+    const AppState state = store_.snapshot();
+    WeatherSummary weather = state.weather;
+    if (!provider_.fetch(weather, now_ms, state.preferences)) {
         WeatherSummary cached{};
         if (cache_.load_weather(cached)) {
             cached.stale = true;

@@ -19,8 +19,8 @@ public:
     void set_boot_state(const BootState& boot);
     void request_boot_skip();
     void set_clock(const ClockState& clock);
-    void set_market(const MarketSummary& market);
-    void set_usd_brl_rate(double rate, DataSource source, uint32_t now_ms);
+    void set_crypto(const CryptoSummary& crypto);
+    void set_forex(const ForexSummary& forex);
     void set_weather(const WeatherSummary& weather);
     void set_system_status(const SystemStatus& status);
     void set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count);

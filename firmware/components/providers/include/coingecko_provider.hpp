@@ -8,7 +8,7 @@ namespace nova {
 
 class CoinGeckoProvider final {
 public:
-    bool fetch(MarketSummary& out, uint32_t now_ms);
+    bool fetch(CryptoSummary& out, uint32_t now_ms);
 };
 
 }  // namespace nova

@@ -2,13 +2,10 @@
 
 #include <cerrno>
 #include <cstdlib>
-#include <utility>
 #include <string>
 
-#include "esp_err.h"
-#include "esp_crt_bundle.h"
-#include "esp_http_client.h"
 #include "esp_log.h"
+#include "http_client.hpp"
 
 namespace nova {
 
@@ -16,27 +13,6 @@ namespace {
 constexpr const char* kTag = "CoinGeckoProvider";
 constexpr const char* kUrl =
     "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true";
-
-struct HttpBody {
-    std::string data;
-};
-
-esp_err_t http_event_handler(esp_http_client_event_t* evt)
-{
-    auto* body = static_cast<HttpBody*>(evt->user_data);
-    if (!body) {
-        return ESP_OK;
-    }
-
-    switch (evt->event_id) {
-        case HTTP_EVENT_ON_DATA:
-            body->data.append(static_cast<const char*>(evt->data), evt->data_len);
-            break;
-        default:
-            break;
-    }
-    return ESP_OK;
-}
 
 const char* find_value_start(const std::string& json, const char* key)
 {
@@ -75,44 +51,12 @@ bool parse_double(const std::string& json, const char* key, double& value)
     return true;
 }
 
-bool fetch_http(const char* url, std::string& body)
-{
-    HttpBody payload;
-    esp_http_client_config_t config{};
-    config.url = url;
-    config.method = HTTP_METHOD_GET;
-    config.timeout_ms = 5000;
-    config.buffer_size = 1024;
-    config.event_handler = http_event_handler;
-    config.user_data = &payload;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        ESP_LOGW(kTag, "esp_http_client_init failed");
-        return false;
-    }
-
-    const esp_err_t open_err = esp_http_client_perform(client);
-    const int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-
-    if (open_err != ESP_OK || status != 200 || payload.data.empty()) {
-        ESP_LOGW(kTag, "HTTP failed: err=%s status=%d",
-                 esp_err_to_name(open_err), status);
-        return false;
-    }
-
-    body = std::move(payload.data);
-    return true;
-}
-
 }  // namespace
 
-bool CoinGeckoProvider::fetch(MarketSummary& out, uint32_t now_ms)
+bool CoinGeckoProvider::fetch(CryptoSummary& out, uint32_t now_ms)
 {
     std::string body;
-    if (!fetch_http(kUrl, body)) {
+    if (!http_get(kTag, kUrl, body)) {
         return false;
     }
 

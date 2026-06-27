@@ -50,14 +50,16 @@ struct ClockState {
 
 enum class DataSource { Live, Cache, Mock };
 
-struct MarketSummary {
+struct CryptoSummary {
     double    btc_usd{0.0};
     double    btc_change_24h{0.0};
     bool      valid{false};
     bool      stale{false};
     DataSource source{DataSource::Mock};
     uint32_t  last_update_ms{0};
+};
 
+struct ForexSummary {
     double    usd_brl{0.0};
     bool      usd_brl_valid{false};
     bool      usd_brl_stale{false};
@@ -98,6 +100,8 @@ enum class ThemeMode { Auto, Light, Dark };
 struct UserPreferences {
     std::string display_name;
     std::string timezone;
+    double      latitude{-15.793889};
+    double      longitude{-47.882778};
     bool        time_format_24h{true};
     ThemeMode   theme{ThemeMode::Auto};
 };
@@ -142,7 +146,8 @@ struct AppState {
     ScreenId        current_screen{ScreenId::Boot};
     BootState       boot{};
     ClockState      clock{};
-    MarketSummary   market{};
+    CryptoSummary   crypto{};
+    ForexSummary    forex{};
     WeatherSummary  weather{};
     SystemStatus    system{};
     UserPreferences preferences{};

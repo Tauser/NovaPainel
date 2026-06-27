@@ -15,6 +15,7 @@ bool is_ui_relevant(EventType type) {
         case EventType::BootStateChanged:
         case EventType::ClockUpdated:
         case EventType::MarketUpdated:
+        case EventType::ForexUpdated:
         case EventType::WeatherUpdated:
         case EventType::NotificationCreated:
         case EventType::SystemStatusChanged:
@@ -34,6 +35,7 @@ bool is_coalescible(EventType type) {
     switch (type) {
         case EventType::ClockUpdated:
         case EventType::MarketUpdated:
+        case EventType::ForexUpdated:
         case EventType::WeatherUpdated:
         case EventType::SystemStatusChanged:
         case EventType::UiInvalidated:
@@ -73,6 +75,12 @@ UiDispatcher::UiDispatcher(EventBus& bus) : bus_(bus) {
             post(UiEvent{e.type, e.i32});
         }
     });
+}
+
+UiDispatcher::~UiDispatcher() {
+    if (sub_id_ != 0) {
+        bus_.unsubscribe(sub_id_);
+    }
 }
 
 void UiDispatcher::bind_render(RenderFn fn) {

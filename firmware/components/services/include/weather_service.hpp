@@ -2,6 +2,13 @@
 
 #include <cstdint>
 
+#if defined(ESP_PLATFORM)
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#else
+using TaskHandle_t = void*;
+#endif
+
 #include "request_orchestrator.hpp"
 #include "service.hpp"
 #include "state_store.hpp"
@@ -31,7 +38,7 @@ private:
     RequestOrchestrator&   orchestrator_;
     CacheStore&           cache_;
     OpenMeteoProvider&     provider_;
-    void*                 task_handle_{nullptr};
+    TaskHandle_t          task_handle_{nullptr};
     bool                  started_{false};
 };
 

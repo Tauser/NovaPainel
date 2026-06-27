@@ -10,7 +10,6 @@
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "nvs.h"
-#include "nvs_flash.h"
 
 namespace nova {
 
@@ -136,8 +135,6 @@ const char* SetupService::name() const
 
 bool SetupService::init()
 {
-    nvs_flash_init();
-
     nvs_handle_t handle{};
     if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
         ESP_LOGE(kTag, "nvs_open failed");

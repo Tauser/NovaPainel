@@ -158,7 +158,7 @@ bool CacheStore::mount()
     return true;
 }
 
-bool CacheStore::load_market(MarketSummary& out) const
+bool CacheStore::load_crypto(CryptoSummary& out) const
 {
     MarketBlob blob{};
     if (!load_blob(PayloadTraits<MarketBlob>::path, blob)) {
@@ -174,7 +174,7 @@ bool CacheStore::load_market(MarketSummary& out) const
     return true;
 }
 
-bool CacheStore::save_market(const MarketSummary& market) const
+bool CacheStore::save_crypto(const CryptoSummary& market) const
 {
     MarketBlob blob{
         market.btc_usd,
@@ -187,7 +187,7 @@ bool CacheStore::save_market(const MarketSummary& market) const
     return save_blob(PayloadTraits<MarketBlob>::path, blob);
 }
 
-bool CacheStore::load_forex(MarketSummary& out) const
+bool CacheStore::load_forex(ForexSummary& out) const
 {
     ForexBlob blob{};
     if (!load_blob(PayloadTraits<ForexBlob>::path, blob)) {
@@ -202,7 +202,7 @@ bool CacheStore::load_forex(MarketSummary& out) const
     return true;
 }
 
-bool CacheStore::save_forex(const MarketSummary& market) const
+bool CacheStore::save_forex(const ForexSummary& market) const
 {
     ForexBlob blob{
         market.usd_brl,
@@ -282,10 +282,10 @@ bool CacheStore::save_blob(const char* path, const T& value) const
 namespace nova {
 
 bool CacheStore::mount() { return false; }
-bool CacheStore::load_market(MarketSummary&) const { return false; }
-bool CacheStore::save_market(const MarketSummary&) const { return false; }
-bool CacheStore::load_forex(MarketSummary&) const { return false; }
-bool CacheStore::save_forex(const MarketSummary&) const { return false; }
+bool CacheStore::load_crypto(CryptoSummary&) const { return false; }
+bool CacheStore::save_crypto(const CryptoSummary&) const { return false; }
+bool CacheStore::load_forex(ForexSummary&) const { return false; }
+bool CacheStore::save_forex(const ForexSummary&) const { return false; }
 bool CacheStore::load_weather(WeatherSummary&) const { return false; }
 bool CacheStore::save_weather(const WeatherSummary&) const { return false; }
 

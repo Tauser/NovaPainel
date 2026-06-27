@@ -36,35 +36,20 @@ void StateStore::set_clock(const ClockState& clock) {
     bus_.publish(EventType::ClockUpdated);
 }
 
-void StateStore::set_market(const MarketSummary& market) {
+void StateStore::set_crypto(const CryptoSummary& crypto) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        const double     usd_brl = state_.market.usd_brl;
-        const bool       usd_brl_valid = state_.market.usd_brl_valid;
-        const bool       usd_brl_stale = state_.market.usd_brl_stale;
-        const DataSource usd_brl_source = state_.market.usd_brl_source;
-        const uint32_t   usd_brl_last_update_ms = state_.market.usd_brl_last_update_ms;
-
-        state_.market = market;
-        state_.market.usd_brl = usd_brl;
-        state_.market.usd_brl_valid = usd_brl_valid;
-        state_.market.usd_brl_stale = usd_brl_stale;
-        state_.market.usd_brl_source = usd_brl_source;
-        state_.market.usd_brl_last_update_ms = usd_brl_last_update_ms;
+        state_.crypto = crypto;
     }
     bus_.publish(EventType::MarketUpdated);
 }
 
-void StateStore::set_usd_brl_rate(double rate, DataSource source, uint32_t now_ms) {
+void StateStore::set_forex(const ForexSummary& forex) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        state_.market.usd_brl = rate;
-        state_.market.usd_brl_valid = true;
-        state_.market.usd_brl_stale = (source == DataSource::Cache);
-        state_.market.usd_brl_source = source;
-        state_.market.usd_brl_last_update_ms = now_ms;
+        state_.forex = forex;
     }
-    bus_.publish(EventType::MarketUpdated);
+    bus_.publish(EventType::ForexUpdated);
 }
 
 void StateStore::set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count) {

@@ -18,6 +18,7 @@ const char* to_string(EventType type) {
         case EventType::ScreenChanged:        return "ScreenChanged";
         case EventType::ClockUpdated:         return "ClockUpdated";
         case EventType::MarketUpdated:        return "MarketUpdated";
+        case EventType::ForexUpdated:         return "ForexUpdated";
         case EventType::WeatherUpdated:       return "WeatherUpdated";
         case EventType::NotificationCreated:  return "NotificationCreated";
         case EventType::RequestPolicyChanged: return "RequestPolicyChanged";

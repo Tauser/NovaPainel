@@ -32,11 +32,11 @@ const char* ForexService::name() const
 
 bool ForexService::init()
 {
-    MarketSummary cached{};
+    ForexSummary cached{};
     if (cache_.load_forex(cached)) {
         cached.usd_brl_stale = true;
         cached.usd_brl_source = DataSource::Cache;
-        store_.set_usd_brl_rate(cached.usd_brl, cached.usd_brl_source, cached.usd_brl_last_update_ms);
+        store_.set_forex(cached);
     }
     return true;
 }
@@ -48,7 +48,7 @@ void ForexService::start()
     }
     started_ = true;
     BaseType_t ok = xTaskCreate(task_entry, "forex_service", kTaskStackWords, this, kTaskPriority,
-                                reinterpret_cast<TaskHandle_t*>(&task_handle_));
+                                &task_handle_);
     if (ok != pdPASS) {
         ESP_LOGE(kTag, "failed to create task");
         task_handle_ = nullptr;
@@ -67,20 +67,20 @@ void ForexService::task_entry(void* arg)
 
 bool ForexService::refresh(uint32_t now_ms)
 {
-    double usd_brl = 0.0;
-    if (!provider_.fetch(usd_brl, now_ms)) {
-        MarketSummary cached{};
+    ForexSummary forex{};
+    if (!provider_.fetch(forex, now_ms)) {
+        ForexSummary cached{};
         if (cache_.load_forex(cached)) {
             cached.usd_brl_stale = true;
             cached.usd_brl_source = DataSource::Cache;
-            store_.set_usd_brl_rate(cached.usd_brl, cached.usd_brl_source, cached.usd_brl_last_update_ms);
+            store_.set_forex(cached);
         }
         orchestrator_.note_request(DataDomain::Forex, now_ms, false);
         return false;
     }
 
-    store_.set_usd_brl_rate(usd_brl, DataSource::Live, now_ms);
-    cache_.save_forex(store_.snapshot().market);
+    store_.set_forex(forex);
+    cache_.save_forex(forex);
     orchestrator_.note_request(DataDomain::Forex, now_ms, true);
     return true;
 }

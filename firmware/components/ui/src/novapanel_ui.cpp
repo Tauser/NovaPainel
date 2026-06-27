@@ -1,6 +1,7 @@
 #include "novapanel_ui.hpp"
 
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 #include "esp_log.h"
@@ -34,6 +35,7 @@ static lv_obj_t *g_topbar_title = nullptr;
 static lv_obj_t *g_topbar_greeting = nullptr;
 static lv_obj_t *g_topbar_clock = nullptr;
 static lv_obj_t *g_topbar_greeting_chip = nullptr;
+static lv_obj_t *g_topbar_notification_badge = nullptr;
 static lv_obj_t *g_shell_col = nullptr;
 static lv_obj_t *g_menu_btn = nullptr;
 static lv_obj_t *g_menu_icon = nullptr;
@@ -55,6 +57,18 @@ static const char *greet_by_hour(int hour)
     if (hour >= 5 && hour < 12) return "Bom dia";
     if (hour >= 12 && hour < 18) return "Boa tarde";
     return "Boa noite";
+}
+
+static void set_topbar_line_if_changed(lv_obj_t *label, const char *text)
+{
+    if (!label) {
+        return;
+    }
+
+    const char *current = lv_label_get_text(label);
+    if (!current || std::strcmp(current, text) != 0) {
+        lv_label_set_text(label, text);
+    }
 }
 
 static void refresh_clock_label()
@@ -263,7 +277,7 @@ static void build_topbar()
         LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(title_row, 8, 0);
 
-    g_topbar_title = np_label(title_row, "Tauser", NP_F_LG, NP_C_TEXT);
+    g_topbar_title = np_label(title_row, "NovaPanel", NP_F_LG, NP_C_TEXT);
     g_topbar_greeting_chip = lv_obj_create(title_row);
     lv_obj_set_size(g_topbar_greeting_chip, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(g_topbar_greeting_chip, NP_C_ACCENT_BG, 0);
@@ -288,16 +302,17 @@ static void build_topbar()
     lv_obj_t *bell = np_icon_btn(np_topbar, NP_I_BELL);
     lv_obj_add_event_cb(bell, bell_cb, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t *badge = lv_obj_create(np_topbar);
-    lv_obj_set_size(badge, 18, 18);
-    lv_obj_set_style_bg_color(badge, NP_C_ACCENT, 0);
-    lv_obj_set_style_border_width(badge, 0, 0);
-    lv_obj_set_style_radius(badge, 9, 0);
-    lv_obj_set_style_pad_all(badge, 0, 0);
-    lv_obj_set_style_margin_left(badge, -18, 0);
-    lv_obj_set_style_margin_top(badge, -10, 0);
-    lv_obj_set_scrollbar_mode(badge, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_t *badge_label = np_label(badge, "3", NP_F_XS, NP_C_DARK_FG);
+    g_topbar_notification_badge = lv_obj_create(np_topbar);
+    lv_obj_set_size(g_topbar_notification_badge, 18, 18);
+    lv_obj_set_style_bg_color(g_topbar_notification_badge, NP_C_ACCENT, 0);
+    lv_obj_set_style_border_width(g_topbar_notification_badge, 0, 0);
+    lv_obj_set_style_radius(g_topbar_notification_badge, 9, 0);
+    lv_obj_set_style_pad_all(g_topbar_notification_badge, 0, 0);
+    lv_obj_set_style_margin_left(g_topbar_notification_badge, -18, 0);
+    lv_obj_set_style_margin_top(g_topbar_notification_badge, -10, 0);
+    lv_obj_set_scrollbar_mode(g_topbar_notification_badge, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *badge_label = np_label(g_topbar_notification_badge, "3", NP_F_XS, NP_C_DARK_FG);
     lv_obj_align(badge_label, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t *vs = lv_obj_create(np_topbar);
@@ -500,6 +515,18 @@ void np_tick()
 {
     refresh_clock_label();
     np_tick_setup();
+}
+
+void np_update_shell(const AppState& state)
+{
+    const char *display_name = state.preferences.display_name.empty()
+        ? "NovaPanel"
+        : state.preferences.display_name.c_str();
+    set_topbar_line_if_changed(g_topbar_title, display_name);
+
+    if (g_topbar_notification_badge) {
+        lv_obj_add_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void np_init()

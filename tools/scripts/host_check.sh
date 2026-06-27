@@ -447,7 +447,7 @@ if [ "$CHECK_TESTS" = "1" ]; then
   test_src_win="$(to_win_path "$test_src")"
   test_bin_win="$(to_win_path "$OBJ/core_tests.exe")"
   includes_csv="$(IFS=';'; echo "${INC[*]}")"
-  sources_csv="$(to_win_path "$COMP/models/src/app_state.cpp");$(to_win_path "$COMP/core/src/event_bus.cpp");$(to_win_path "$COMP/core/src/state_store.cpp");$(to_win_path "$COMP/core/src/request_orchestrator.cpp");$(to_win_path "$COMP/core/src/ui_dispatcher.cpp");$(to_win_path "$COMP/services/src/notification_service.cpp");$test_src_win"
+  sources_csv="$(to_win_path "$COMP/models/src/app_state.cpp");$(to_win_path "$COMP/core/src/event_bus.cpp");$(to_win_path "$COMP/core/src/state_store.cpp");$(to_win_path "$COMP/core/src/request_orchestrator.cpp");$test_src_win"
   if INCLUDES_CSV="$includes_csv" SOURCES_CSV="$sources_csv" \
     pwsh.exe -NoLogo -NoProfile -NonInteractive -File "$LINK_PS1" \
       -Compiler "$CXX_WIN" \
