@@ -1,88 +1,115 @@
-// NovaPainel - providers/forex_provider.cpp
-// Hardware-only: esp_http_client + mbedtls cert bundle + cJSON, none of
-// which have a host shim (see tools/scripts/host_check.sh SKIP_FILES). Same
-// NTP/TLS prerequisite as CoinGeckoProvider/OpenMeteoProvider (ADR-0021).
 #include "forex_provider.hpp"
 
+#include <cerrno>
 #include <cstdlib>
-#include <cstring>
+#include <string>
+#include <utility>
 
 #include "esp_crt_bundle.h"
+#include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "cJSON.h"
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "ForexProvider";
-
 constexpr const char* kUrl = "https://economia.awesomeapi.com.br/json/last/USD-BRL";
 
-constexpr int kMaxResponseBytes = 512;
-
-struct FetchContext {
-    char buf[kMaxResponseBytes];
-    int  len{0};
+struct HttpBody {
+    std::string data;
 };
 
-esp_err_t http_event_handler(esp_http_client_event_t* evt) {
-    if (evt->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-    auto* ctx = static_cast<FetchContext*>(evt->user_data);
-    if (ctx->len + evt->data_len < kMaxResponseBytes) {
-        std::memcpy(ctx->buf + ctx->len, evt->data, evt->data_len);
-        ctx->len += evt->data_len;
+esp_err_t http_event_handler(esp_http_client_event_t* evt)
+{
+    auto* body = static_cast<HttpBody*>(evt->user_data);
+    if (!body) {
+        return ESP_OK;
+    }
+
+    if (evt->event_id == HTTP_EVENT_ON_DATA) {
+        body->data.append(static_cast<const char*>(evt->data), evt->data_len);
     }
     return ESP_OK;
 }
-}  // namespace
 
-Result<double> ForexProvider::fetch_usd_brl() {
-    FetchContext ctx{};
-
-    esp_http_client_config_t config = {};
-    config.url = kUrl;
+bool fetch_http(const char* url, std::string& body)
+{
+    HttpBody payload;
+    esp_http_client_config_t config{};
+    config.url = url;
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 5000;
+    config.buffer_size = 1024;
+    config.event_handler = http_event_handler;
+    config.user_data = &payload;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.event_handler = &http_event_handler;
-    config.user_data = &ctx;
-    config.timeout_ms = 8000;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        ESP_LOGW(kTag, "esp_http_client_init failed");
+        return false;
+    }
+
     const esp_err_t err = esp_http_client_perform(client);
     const int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK || status != 200) {
-        ESP_LOGW(kTag, "http failed: err=%s status=%d", esp_err_to_name(err), status);
-        return Result<double>::fail(ErrorCode::Network, "awesomeapi http failed");
+    if (err != ESP_OK || status != 200 || payload.data.empty()) {
+        ESP_LOGW(kTag, "HTTP failed: err=%s status=%d", esp_err_to_name(err), status);
+        return false;
     }
 
-    ctx.buf[ctx.len < kMaxResponseBytes ? ctx.len : kMaxResponseBytes - 1] = '\0';
+    body = std::move(payload.data);
+    return true;
+}
 
-    cJSON* root = cJSON_Parse(ctx.buf);
-    if (!root) {
-        ESP_LOGW(kTag, "json parse failed: '%s'", ctx.buf);
-        return Result<double>::fail(ErrorCode::Parse, "awesomeapi json parse failed");
+bool parse_bid(const std::string& json, double& value)
+{
+    const std::string needle = "\"bid\"";
+    const std::size_t key_pos = json.find(needle);
+    if (key_pos == std::string::npos) {
+        return false;
     }
 
-    // Response shape: {"USDBRL": {"bid": "5.4250", ...}} - "bid" (and every
-    // other numeric-looking field) comes as a JSON *string*, not a number.
-    cJSON* pair = cJSON_GetObjectItemCaseSensitive(root, "USDBRL");
-    cJSON* bid = pair ? cJSON_GetObjectItemCaseSensitive(pair, "bid") : nullptr;
-
-    if (!cJSON_IsString(bid) || bid->valuestring == nullptr) {
-        ESP_LOGW(kTag, "json missing USDBRL.bid field");
-        cJSON_Delete(root);
-        return Result<double>::fail(ErrorCode::Parse, "awesomeapi json missing fields");
+    const std::size_t colon_pos = json.find(':', key_pos + needle.size());
+    if (colon_pos == std::string::npos) {
+        return false;
     }
 
-    const double rate = std::atof(bid->valuestring);
-    cJSON_Delete(root);
-
-    if (rate <= 0.0) {
-        return Result<double>::fail(ErrorCode::Parse, "awesomeapi invalid rate");
+    const std::size_t quote_start = json.find('"', colon_pos + 1);
+    if (quote_start == std::string::npos) {
+        return false;
     }
-    return Result<double>::ok(rate);
+
+    const char* start = json.c_str() + quote_start + 1;
+    char* end = nullptr;
+    errno = 0;
+    const double parsed = std::strtod(start, &end);
+    if (end == start || errno == ERANGE || parsed <= 0.0) {
+        return false;
+    }
+
+    value = parsed;
+    return true;
+}
+
+}  // namespace
+
+bool ForexProvider::fetch(double& usd_brl, uint32_t)
+{
+    std::string body;
+    if (!fetch_http(kUrl, body)) {
+        return false;
+    }
+
+    if (!parse_bid(body, usd_brl)) {
+        ESP_LOGW(kTag, "JSON parse failed");
+        return false;
+    }
+
+    ESP_LOGI(kTag, "USD/BRL=%.4f", usd_brl);
+    return true;
 }
 
 }  // namespace nova

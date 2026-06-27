@@ -1,131 +1,208 @@
-// NovaPainel - providers/open_meteo_provider.cpp
-// Hardware-only: esp_http_client + mbedtls cert bundle + cJSON, none of
-// which have a host shim (see tools/scripts/host_check.sh SKIP_FILES). Same
-// NTP/TLS prerequisite as CoinGeckoProvider (ADR-0021).
 #include "open_meteo_provider.hpp"
 
-#include <cstring>
+#include <cerrno>
+#include <cstdlib>
+#include <utility>
+#include <string>
 
+#include "esp_err.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "cJSON.h"
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "OpenMeteoProvider";
-
-// Brasília, DF (no location step in the wizard yet - ADR-0022). Open-Meteo
-// needs no API key, unlike CoinGecko's Demo key (ADR-0006).
 constexpr const char* kUrl =
-    "https://api.open-meteo.com/v1/forecast"
-    "?latitude=-15.78&longitude=-47.93"
-    "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature"
-    "&daily=temperature_2m_max,temperature_2m_min,uv_index_max"
-    "&timezone=America%2FSao_Paulo";
+    "https://api.open-meteo.com/v1/forecast?latitude=-15.793889&longitude=-47.882778&"
+    "current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&"
+    "timezone=America%2FSao_Paulo";
 
-// Bigger now that the response also carries the "daily" block (today's
-// high/low/UV) on top of "current".
-constexpr int kMaxResponseBytes = 1536;
-
-struct FetchContext {
-    char buf[kMaxResponseBytes];
-    int  len{0};
+struct HttpBody {
+    std::string data;
 };
 
-esp_err_t http_event_handler(esp_http_client_event_t* evt) {
-    if (evt->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-    auto* ctx = static_cast<FetchContext*>(evt->user_data);
-    if (ctx->len + evt->data_len < kMaxResponseBytes) {
-        std::memcpy(ctx->buf + ctx->len, evt->data, evt->data_len);
-        ctx->len += evt->data_len;
+esp_err_t http_event_handler(esp_http_client_event_t* evt)
+{
+    auto* body = static_cast<HttpBody*>(evt->user_data);
+    if (!body) {
+        return ESP_OK;
+    }
+
+    switch (evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            body->data.append(static_cast<const char*>(evt->data), evt->data_len);
+            break;
+        default:
+            break;
     }
     return ESP_OK;
 }
 
-// WMO weather codes (https://open-meteo.com/en/docs - "WMO Weather
-// interpretation codes"), bucketed down to WeatherCondition.
-WeatherCondition condition_for_wmo_code(int code) {
-    if (code == 0) return WeatherCondition::Clear;
-    if (code >= 1 && code <= 3) return WeatherCondition::Cloudy;
-    if (code == 45 || code == 48) return WeatherCondition::Fog;
-    if (code >= 51 && code <= 57) return WeatherCondition::Drizzle;
-    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return WeatherCondition::Rain;
-    if ((code >= 71 && code <= 77) || code == 85 || code == 86) return WeatherCondition::Snow;
-    if (code >= 95 && code <= 99) return WeatherCondition::Thunderstorm;
-    return WeatherCondition::Unknown;
+const char* find_value_start(const std::string& json, const char* key)
+{
+    const std::string needle = std::string("\"") + key + "\"";
+    const std::size_t key_pos = json.find(needle);
+    if (key_pos == std::string::npos) {
+        return nullptr;
+    }
+
+    const std::size_t colon_pos = json.find(':', key_pos + needle.size());
+    if (colon_pos == std::string::npos) {
+        return nullptr;
+    }
+
+    const char* value = json.c_str() + colon_pos + 1;
+    while (*value == ' ' || *value == '\n' || *value == '\r' || *value == '\t') {
+        ++value;
+    }
+    return value;
 }
-}  // namespace
 
-Result<WeatherSummary> OpenMeteoProvider::fetch_current() {
-    FetchContext ctx{};
+bool parse_double(const std::string& json, const char* key, double& value)
+{
+    const char* start = find_value_start(json, key);
+    if (!start) {
+        return false;
+    }
 
-    esp_http_client_config_t config = {};
-    config.url = kUrl;
+    char* end = nullptr;
+    errno = 0;
+    const double parsed = std::strtod(start, &end);
+    if (end == start || errno == ERANGE) {
+        return false;
+    }
+    value = parsed;
+    return true;
+}
+
+bool parse_int(const std::string& json, const char* key, int& value)
+{
+    const char* start = find_value_start(json, key);
+    if (!start) {
+        return false;
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const long parsed = std::strtol(start, &end, 10);
+    if (end == start || errno == ERANGE) {
+        return false;
+    }
+    value = static_cast<int>(parsed);
+    return true;
+}
+
+WeatherCondition weather_from_code(int code)
+{
+    switch (code) {
+        case 0: return WeatherCondition::Clear;
+        case 1:
+        case 2:
+        case 3: return WeatherCondition::Cloudy;
+        case 45:
+        case 48: return WeatherCondition::Fog;
+        case 51:
+        case 53:
+        case 55:
+        case 56:
+        case 57: return WeatherCondition::Drizzle;
+        case 61:
+        case 63:
+        case 65:
+        case 80:
+        case 81:
+        case 82: return WeatherCondition::Rain;
+        case 71:
+        case 73:
+        case 75:
+        case 77:
+        case 85:
+        case 86: return WeatherCondition::Snow;
+        case 95:
+        case 96:
+        case 99: return WeatherCondition::Thunderstorm;
+        default:  return WeatherCondition::Unknown;
+    }
+}
+
+bool fetch_http(const char* url, std::string& body)
+{
+    HttpBody payload;
+    esp_http_client_config_t config{};
+    config.url = url;
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 5000;
+    config.buffer_size = 1024;
+    config.event_handler = http_event_handler;
+    config.user_data = &payload;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.event_handler = &http_event_handler;
-    config.user_data = &ctx;
-    config.timeout_ms = 8000;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    const esp_err_t err = esp_http_client_perform(client);
+    if (!client) {
+        ESP_LOGW(kTag, "esp_http_client_init failed");
+        return false;
+    }
+
+    const esp_err_t open_err = esp_http_client_perform(client);
     const int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK || status != 200) {
-        ESP_LOGW(kTag, "http failed: err=%s status=%d", esp_err_to_name(err), status);
-        return Result<WeatherSummary>::fail(ErrorCode::Network, "open-meteo http failed");
+    if (open_err != ESP_OK || status != 200 || payload.data.empty()) {
+        ESP_LOGW(kTag, "HTTP failed: err=%s status=%d",
+                 esp_err_to_name(open_err), status);
+        return false;
     }
 
-    ctx.buf[ctx.len < kMaxResponseBytes ? ctx.len : kMaxResponseBytes - 1] = '\0';
+    body = std::move(payload.data);
+    return true;
+}
 
-    cJSON* root = cJSON_Parse(ctx.buf);
-    if (!root) {
-        ESP_LOGW(kTag, "json parse failed: '%s'", ctx.buf);
-        return Result<WeatherSummary>::fail(ErrorCode::Parse, "open-meteo json parse failed");
+}  // namespace
+
+bool OpenMeteoProvider::fetch(WeatherSummary& out, uint32_t now_ms)
+{
+    std::string body;
+    if (!fetch_http(kUrl, body)) {
+        return false;
     }
 
-    cJSON* current = cJSON_GetObjectItemCaseSensitive(root, "current");
-    cJSON* temp = current ? cJSON_GetObjectItemCaseSensitive(current, "temperature_2m") : nullptr;
-    cJSON* humidity = current ? cJSON_GetObjectItemCaseSensitive(current, "relative_humidity_2m") : nullptr;
-    cJSON* code = current ? cJSON_GetObjectItemCaseSensitive(current, "weather_code") : nullptr;
-    cJSON* wind = current ? cJSON_GetObjectItemCaseSensitive(current, "wind_speed_10m") : nullptr;
-    cJSON* feels_like = current ? cJSON_GetObjectItemCaseSensitive(current, "apparent_temperature") : nullptr;
-
-    if (!cJSON_IsNumber(temp) || !cJSON_IsNumber(code)) {
-        ESP_LOGW(kTag, "json missing temperature_2m/weather_code fields");
-        cJSON_Delete(root);
-        return Result<WeatherSummary>::fail(ErrorCode::Parse, "open-meteo json missing fields");
+    double temperature = 0.0;
+    double feels_like = 0.0;
+    double humidity = 0.0;
+    double wind = 0.0;
+    double uv = 0.0;
+    int code = 0;
+    if (!parse_double(body, "temperature_2m", temperature) ||
+        !parse_double(body, "apparent_temperature", feels_like) ||
+        !parse_double(body, "relative_humidity_2m", humidity) ||
+        !parse_double(body, "wind_speed_10m", wind) ||
+        !parse_int(body, "weather_code", code)) {
+        ESP_LOGW(kTag, "JSON parse failed");
+        return false;
     }
 
-    // "daily" arrays are indexed by day, with today always at [0] (the
-    // request has no start_date/forecast_days override, so Open-Meteo
-    // defaults to starting today). Optional - the UI shows "--" rather than
-    // failing the whole fetch if this block is ever missing.
-    cJSON* daily = cJSON_GetObjectItemCaseSensitive(root, "daily");
-    cJSON* temp_max_arr = daily ? cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_max") : nullptr;
-    cJSON* temp_min_arr = daily ? cJSON_GetObjectItemCaseSensitive(daily, "temperature_2m_min") : nullptr;
-    cJSON* uv_arr = daily ? cJSON_GetObjectItemCaseSensitive(daily, "uv_index_max") : nullptr;
-    cJSON* temp_max0 = cJSON_IsArray(temp_max_arr) ? cJSON_GetArrayItem(temp_max_arr, 0) : nullptr;
-    cJSON* temp_min0 = cJSON_IsArray(temp_min_arr) ? cJSON_GetArrayItem(temp_min_arr, 0) : nullptr;
-    cJSON* uv0 = cJSON_IsArray(uv_arr) ? cJSON_GetArrayItem(uv_arr, 0) : nullptr;
+    if (!parse_double(body, "uv_index", uv)) {
+        uv = 0.0;
+    }
 
-    WeatherSummary s{};
-    s.temperature_c = temp->valuedouble;
-    s.feels_like_c = cJSON_IsNumber(feels_like) ? feels_like->valuedouble : temp->valuedouble;
-    s.temp_max_c = cJSON_IsNumber(temp_max0) ? temp_max0->valuedouble : temp->valuedouble;
-    s.temp_min_c = cJSON_IsNumber(temp_min0) ? temp_min0->valuedouble : temp->valuedouble;
-    s.uv_index = cJSON_IsNumber(uv0) ? uv0->valuedouble : 0.0;
-    s.humidity_pct = cJSON_IsNumber(humidity) ? static_cast<int>(humidity->valuedouble) : 0;
-    s.wind_speed_kmh = cJSON_IsNumber(wind) ? wind->valuedouble : 0.0;
-    s.condition = condition_for_wmo_code(static_cast<int>(code->valuedouble));
-    s.valid = true;
-    s.stale = false;
-    s.source = DataSource::Live;
+    out.temperature_c = temperature;
+    out.feels_like_c = feels_like;
+    out.humidity_pct = static_cast<int>(humidity);
+    out.wind_speed_kmh = wind;
+    out.uv_index = uv;
+    out.temp_max_c = temperature;
+    out.temp_min_c = temperature;
+    out.condition = weather_from_code(code);
+    out.valid = true;
+    out.stale = false;
+    out.source = DataSource::Live;
+    out.last_update_ms = now_ms;
 
-    cJSON_Delete(root);
-    return Result<WeatherSummary>::ok(s);
+    ESP_LOGI(kTag, "temp=%.1f feels=%.1f humidity=%d wind=%.1f code=%d",
+             out.temperature_c, out.feels_like_c, out.humidity_pct, out.wind_speed_kmh, code);
+    return true;
 }
 
 }  // namespace nova

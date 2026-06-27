@@ -1,270 +1,283 @@
-// NovaPainel - main/app_main.cpp
-// Firmware entry point. Board bring-up is REAL (Fase 3, WaveshareBoard),
-// Boot/Setup(wizard)/Home render REAL LVGL widgets (Fase 4/5, ADR-0017),
-// SetupService persists to NVS + connects Wi-Fi + starts NTP (ADR-0021).
-// MarketService pulls real BTC/USD-BRL from CoinGeckoProvider (ADR-0006) and
-// WeatherService pulls real weather from OpenMeteoProvider (ADR-0022), both
-// gated by RequestOrchestrator. Both tick() synchronously on this loop's own
-// task (not the lvgl_task) - a slow HTTPS response just delays this loop's
-// next iteration for a second or two, it does not freeze rendering/touch the
-// way the wizard's old direct-call bug did.
-// It demonstrates the data flow that the real product keeps:
-//   Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task
-//
-// Boot order (per docs/ARCHITECTURE.md):
-//   EventBus -> StateStore -> UiDispatcher -> RequestOrchestrator -> Board
-//   -> providers -> services (incl. SetupService::init(), which decides
-//   onboarding.needed from NVS) -> register -> board bring-up -> init ->
-//   start -> BootScreen (LVGL) -> (after kBootScreenDurationMs) -> either
-//   WizardScreen (first boot) or HomeScreen.
-//
-// LVGL is not thread-safe (ADR-0007/0013). The real board's own LVGL port
-// task is the only task that calls lv_timer_handler(); any other code that
-// touches lv_obj_* (here, the render callback driven by UiDispatcher) must
-// hold board.lock()/unlock() first - see IBoard::lock in mock_board.hpp.
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include <functional>
 
+#include "bsp/esp32_p4_wifi6_touch_lcd_7b.h"
+#include "event_bus.hpp"
+#include "clock_service.hpp"
+#include "bootstrap_service.hpp"
+#include "request_orchestrator.hpp"
+#include "cache_store.hpp"
+#include "market_service.hpp"
+#include "forex_service.hpp"
+#include "weather_service.hpp"
+#include "coingecko_provider.hpp"
+#include "forex_provider.hpp"
+#include "open_meteo_provider.hpp"
+#include "novapanel_ui.hpp"
+#include "setup_service.hpp"
+#include "system_service.hpp"
+#include "service_manager.hpp"
+#include "state_store.hpp"
+#include "ui_dispatcher.hpp"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
-#include "event_bus.hpp"
-#include "state_store.hpp"
-#include "service_manager.hpp"
-#include "request_orchestrator.hpp"
-#include "ui_dispatcher.hpp"
+#if __has_include("esp_wifi.h") && __has_include("esp_netif.h") && __has_include("esp_event.h")
+#define NOVAPANEL_HAS_WIFI_TRANSPORT 1
+#include "esp_err.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
+#include "nvs_flash.h"
+#else
+#define NOVAPANEL_HAS_WIFI_TRANSPORT 0
+#endif
 
-#include "waveshare_board.hpp"
-#include "cache_store.hpp"
-#include "coingecko_provider.hpp"
-#include "open_meteo_provider.hpp"
-#include "forex_provider.hpp"
+using namespace nova;
 
-#include "clock_service.hpp"
-#include "market_service.hpp"
-#include "weather_service.hpp"
-#include "forex_service.hpp"
-#include "system_service.hpp"
-#include "notification_service.hpp"
-#include "setup_service.hpp"
+static const char *TAG = "NovaPanel";
 
-#include "home_screen.hpp"
-#include "boot_screen.hpp"
-#include "wizard_screen.hpp"
-#include "main_shell.hpp"
-#include "system_screen.hpp"
-#include "settings_screen.hpp"
+#define NOVAPANEL_DISPLAY_ROTATION LV_DISPLAY_ROTATION_180
+#define NOVAPANEL_LVGL_LOCK_MS 1000
 
-#include "esp_system.h"
-
-namespace {
-constexpr const char* kTag = "app_main";
-
-// How long the Boot/splash screen (ADR-0017/0023) stays up before the app
-// moves on (unless skipped) - also drives BootScreen's progress bar
-// animation. 3s (not the original 1.5s) so the once-per-second main loop
-// below gets a few renders in to animate it, not just a single jump.
-constexpr uint32_t kBootScreenDurationMs = 3000;
-
-uint32_t now_ms() {
-    return static_cast<uint32_t>(esp_timer_get_time() / 1000);
+static void log_heap_snapshot(const char *phase)
+{
+    ESP_LOGI(TAG,
+             "%s: uptime_ms=%" PRId64 " free_internal=%u min_internal=%u free_spiram=%u min_spiram=%u",
+             phase,
+             esp_timer_get_time() / 1000,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM));
 }
-}  // namespace
 
-extern "C" void app_main(void) {
-    using namespace nova;
+static void start_display(void)
+{
+    ESP_LOGI(TAG, "starting Waveshare BSP display");
 
-    ESP_LOGI(kTag, "==== NovaPainel firmware (Fase 3: real board bring-up) ====");
+    bsp_display_cfg_t cfg = {
+        .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
+        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 4),
+        .double_buffer = false,
+        .flags = {
+            .buff_dma = true,
+            .buff_spiram = true,
+            .sw_rotate = true,
+        },
+    };
+    cfg.lvgl_port_cfg.task_stack = 16384;
 
-    // ---- Core wiring ----
-    EventBus            bus;
-    StateStore          store(bus);
-    UiDispatcher        ui_dispatcher(bus);
-    RequestOrchestrator orchestrator;
+    lv_display_t *display = bsp_display_start_with_config(&cfg);
+    if (display == NULL) {
+        ESP_LOGE(TAG, "display start failed");
+        abort();
+    }
 
-    // ---- Hardware abstraction (real, Fase 3) ----
-    WaveshareBoard board;
+    bsp_display_rotate(display, NOVAPANEL_DISPLAY_ROTATION);
+    ESP_LOGI(TAG, "display rotation=%d sw_rotate=1 double_buffer=0", (int)NOVAPANEL_DISPLAY_ROTATION);
+}
 
-    // ---- Local cache (LittleFS, Fase 6/ADR-0027) ----
-    CacheStore cache_store;
+static bool start_network_transport(void)
+{
+#if NOVAPANEL_HAS_WIFI_TRANSPORT
+    esp_err_t nvs_err = nvs_flash_init();
+    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nvs_err = nvs_flash_init();
+    }
+    if (nvs_err != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_flash_init failed: %s", esp_err_to_name(nvs_err));
+        return false;
+    }
 
-    // ---- Providers ----
-    CoinGeckoProvider market_provider;
-    OpenMeteoProvider weather_provider;
-    ForexProvider     forex_provider;
+    esp_err_t err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_netif_init failed: %s", esp_err_to_name(err));
+        return false;
+    }
 
-    // ---- Services ----
-    ClockService        clock_service(store);
-    MarketService       market_service(store, orchestrator, market_provider, cache_store);
-    WeatherService      weather_service(store, orchestrator, weather_provider, cache_store);
-    ForexService        forex_service(store, orchestrator, forex_provider, cache_store);
-    SystemService       system_service(store);
-    NotificationService notification_service(bus);
-    SetupService        setup_service(store, bus);
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp_event_loop_create_default failed: %s", esp_err_to_name(err));
+        return false;
+    }
 
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    err = esp_wifi_init(&cfg);
+    if (err != ESP_OK && err != ESP_ERR_WIFI_INIT_STATE) {
+        ESP_LOGE(TAG, "esp_wifi_init failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_set_mode failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    err = esp_wifi_start();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_CONN) {
+        ESP_LOGE(TAG, "esp_wifi_start failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    ESP_LOGI(TAG, "ESP-Hosted/SDIO transport requested for C6");
+    return true;
+#else
+    ESP_LOGW(TAG, "network transport skipped in host build");
+    return false;
+#endif
+}
+
+extern "C" void app_main(void)
+{
+    EventBus bus;
+    StateStore state(bus);
+    UiDispatcher ui(bus);
+    RequestOrchestrator requests;
+    CacheStore cache;
     ServiceManager services;
+    BootstrapService bootstrap(state, bus);
+    SetupService setup(state, bus);
+    SystemService system_service(state);
+    ClockService clock_service(state);
+    CoinGeckoProvider coingecko_provider;
+    ForexProvider forex_provider;
+    OpenMeteoProvider open_meteo_provider;
+    MarketService market_service(state, requests, cache, coingecko_provider);
+    ForexService forex_service(state, requests, cache, forex_provider);
+    WeatherService weather_service(state, requests, cache, open_meteo_provider);
+
+    services.add(&setup);
+    services.add(&bootstrap);
+    services.add(&system_service);
     services.add(&clock_service);
     services.add(&market_service);
-    services.add(&weather_service);
     services.add(&forex_service);
-    services.add(&system_service);
-    services.add(&notification_service);
-    services.add(&setup_service);
+    services.add(&weather_service);
 
-    // SetupService does NVS writes + esp_wifi_connect()/esp_wifi_scan_start()
-    // - all of which can block for a while (flash I/O, Wi-Fi RPC over the
-    // Hosted/SDIO link). WizardScreen's button-click callbacks run ON the
-    // BSP's own lvgl_task WHILE it holds the BSP's LVGL mutex (ADR-0018) -
-    // calling store.submit_onboarding()/request_wifi_scan() straight from
-    // there froze the whole display for as long as the call took (found on
-    // real hardware testing this wizard). This queue defers any such action
-    // to this loop's own task, off the lvgl_task, so a slow/failing Wi-Fi
-    // call never blocks rendering/touch. Holds heap-allocated std::function
-    // pointers (not OnboardingSubmission directly) so it can carry either
-    // kind of deferred call through the same queue.
     QueueHandle_t action_queue = xQueueCreate(4, sizeof(std::function<void()>*));
     auto enqueue_action = [action_queue](std::function<void()> fn) {
         auto* copy = new std::function<void()>(std::move(fn));
         if (xQueueSend(action_queue, &copy, 0) != pdTRUE) {
-            delete copy;  // queue full - drop rather than block the lvgl_task
+            delete copy;
         }
     };
 
-    // ---- UI (real LVGL widgets, Fase 4/5). Bound through the dispatcher so
-    //      rendering is always marshaled - never called directly from a
-    //      service - and always under the board's LVGL lock. WizardScreen's
-    //      callbacks are the only way the UI reaches SetupService
-    //      (ADR-0017: UI never persists/calls hardware itself). ----
-    BootScreen boot(kBootScreenDurationMs, [&store]() {
-        // Cheap in-memory state change (no NVS/Wi-Fi) - safe to call
-        // directly off the lvgl_task, unlike the wizard's actions above.
-        store.set_screen(store.state().onboarding.needed ? ScreenId::Setup
-                                                          : ScreenId::Home);
+    np_bind_boot_skip([&]() {
+        state.request_boot_skip();
     });
-    WizardScreen wizard(
-        [enqueue_action, &store](const OnboardingSubmission& submission) {
-            enqueue_action([&store, submission] { store.submit_onboarding(submission); });
-        },
-        [enqueue_action, &store]() {
-            enqueue_action([&store] { store.request_wifi_scan(); });
+    np_bind_setup_submit([&](const OnboardingSubmission& submission) {
+        enqueue_action([&state, submission]() {
+            state.submit_onboarding(submission);
         });
-    HomeScreen   home;
-    MainShell    shell([&store](ScreenId id) { store.set_screen(id); });
-    SystemScreen system_screen([&store]() { store.set_screen(ScreenId::Home); });
-    SettingsScreen settings_screen(
-        [enqueue_action, &store](const OnboardingSubmission& sub) {
-            enqueue_action([&store, sub] { store.submit_onboarding(sub); });
-        },
-        [&store](ScreenId id) { store.set_screen(id); },
-        [enqueue_action, &store]() {
-            enqueue_action([&store] { store.request_wifi_scan(); });
-        },
-        [enqueue_action]() {
-            enqueue_action([] { esp_restart(); });
+    });
+    np_bind_setup_scan([&]() {
+        enqueue_action([&state]() {
+            state.request_wifi_scan();
         });
-    ui_dispatcher.bind_render([&boot, &wizard, &home, &shell, &system_screen,
-                               &settings_screen, &store, &board](const UiEvent&) {
-        if (board.lock(100)) {  // 100ms, in real ms (not ticks) - see IBoard::lock
-            switch (store.state().current_screen) {
-                case ScreenId::Boot:     boot.render(store.state()); break;
-                case ScreenId::Setup:    wizard.render(store.state()); break;
-                // Own top-level screen, not mounted via MainShell::content()
-                // - see system_screen.hpp for why (Fase 7).
-                case ScreenId::System:   system_screen.render(store.state(), now_ms()); break;
-                case ScreenId::Settings: settings_screen.render(store.state()); break;
-                default:
-                    // MainShell (ADR-0024) owns the lv_screen_load() for
-                    // every "MAIN phase" screen; HomeScreen just mounts its
-                    // widgets inside shell.content() on first call.
-                    shell.render(store.state());
-                    home.render(store.state(), shell.content());
-                    break;
+    });
+    np_bind_setup_step([&](OnboardingStep step) {
+        state.set_onboarding_step(step);
+    });
+
+    ui.bind_render([&](const UiEvent& event) {
+        ESP_LOGI(TAG, "ui event queued from %s (i32=%" PRId32 ")", to_string(event.source), event.i32);
+        if (event.source == EventType::ScreenChanged) {
+            const auto screen = static_cast<ScreenId>(event.i32);
+            np_navigate_to(screen);
+            if (screen == ScreenId::Home) {
+                np_update_home(state.state());
             }
-            board.unlock();
+        } else if (event.source == EventType::BootStateChanged) {
+            np_update_boot(state.state().boot);
+        } else if (event.source == EventType::ClockUpdated) {
+            np_update_home(state.state());
+        } else if (event.source == EventType::MarketUpdated ||
+                   event.source == EventType::WeatherUpdated ||
+                   event.source == EventType::SystemStatusChanged) {
+            np_update_home(state.state());
+        } else if (event.source == EventType::OnboardingStateChanged) {
+            np_update_setup(state.state());
         }
     });
 
-    // ---- Board bring-up -> publish system status ----
-    const BoardStatus bs = board.bring_up();
-    SystemStatus sys{};
-    sys.board_ready   = bs.board_ready;
-    sys.display_ready = bs.display_ready;
-    sys.touch_ready   = bs.touch_ready;
-    sys.network_ready = bs.network_ready;
-    sys.sd_ready      = bs.sd_ready;
-    sys.cache_ready   = cache_store.mount();  // LittleFS on "storage" (Fase 6, ADR-0027) - false is not fatal, services just skip cache reads/writes
-    store.set_system_status(sys);
+    ESP_LOGI(TAG, "booting rewritten NovaPanel firmware");
+    log_heap_snapshot("boot");
 
-    // ---- Init + start services ----
+    const bool network_transport_started = start_network_transport();
+    const bool cache_ready = cache.mount();
+
     if (!services.init_all()) {
-        ESP_LOGE(kTag, "one or more services failed to init");
+        ESP_LOGW(TAG, "one or more services failed to init");
     }
     services.start_all();
 
-    notification_service.notify(NotificationLevel::Info,
-                                NotificationCategory::System,
-                                "Boot", "NovaPainel skeleton iniciado");
+    start_display();
+    if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
+        ESP_LOGE(TAG, "LVGL lock timeout while initializing UI");
+        abort();
+    }
+    np_init();
+    np_update_boot(state.state().boot);
+    np_update_setup(state.state());
+    np_update_home(state.state());
+    bsp_display_unlock();
 
-    bus.publish(EventType::BootCompleted);
+    {
+        SystemStatus system = state.state().system;
+        system.board_ready = true;
+        system.display_ready = true;
+        system.network_ready = network_transport_started;
+        system.cache_ready = cache_ready;
+        state.set_system_status(system);
+    }
 
-    // Render the Boot/splash screen right away (don't wait for the 5s frame
-    // throttle below) - SystemStatusChanged was already queued by
-    // store.set_system_status() above.
-    ui_dispatcher.process_pending();
+    const uint32_t boot_now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+    services.tick_all(boot_now_ms);
 
-    ESP_LOGI(kTag, "entering main loop. LVGL itself runs on the board's own lvgl_task.");
+    vTaskDelay(pdMS_TO_TICKS(250));
+    bsp_display_backlight_on();
+    ESP_LOGI(TAG, "backlight enabled after first UI frame");
+    if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
+        ESP_LOGE(TAG, "LVGL lock timeout while rendering initial screen");
+        abort();
+    }
+    ui.process_pending();
+    bsp_display_unlock();
+    log_heap_snapshot("display_ready");
 
-    // ---- Cooperative main loop ----
-    // NOTE: the real LVGL task (inside the BSP's esp_lvgl_port) calls
-    // lv_timer_handler() on its own; this loop just ticks services and drains
-    // the UiDispatcher into HomeScreen::render() under the board's LVGL lock
-    // (see bind_render above). Services running on their own tasks remains
-    // future work; this single loop keeps the skeleton dependency-free.
-    const TickType_t loop_delay = pdMS_TO_TICKS(1000);
-    const uint32_t   boot_start_ms = now_ms();
-    uint32_t         last_render_ms = 0;
-    bool             splash_done = false;
-    for (;;) {
-        const uint32_t t = now_ms();
-        orchestrator.update_clock(t);
-        services.tick_all(t);
-
-        bool render_now = false;
-
-        // Drain deferred wizard actions here - off the lvgl_task - so
-        // SetupService's NVS/Wi-Fi calls never block rendering or touch
-        // (see action_queue comment above).
+    uint32_t last_alive_log_ms = boot_now_ms;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000);
+        requests.update_clock(now_ms);
         std::function<void()>* pending_action = nullptr;
         while (xQueueReceive(action_queue, &pending_action, 0) == pdTRUE) {
             (*pending_action)();
             delete pending_action;
-            render_now = true;
         }
-
-        if (!splash_done && t - boot_start_ms >= kBootScreenDurationMs) {
-            // SetupService::init() already decided onboarding.needed from NVS
-            // before this loop started.
-            store.set_screen(store.state().onboarding.needed ? ScreenId::Setup
-                                                              : ScreenId::Home);
-            splash_done = true;
-            render_now = true;
-        } else if (store.state().current_screen == ScreenId::Setup &&
-                  store.state().onboarding.step == OnboardingStep::Done) {
-            store.set_screen(ScreenId::Home);
-            render_now = true;
+        services.tick_all(now_ms);
+        if (!bsp_display_lock(NOVAPANEL_LVGL_LOCK_MS)) {
+            ESP_LOGE(TAG, "LVGL lock timeout in periodic UI tick");
+            abort();
         }
-
-        // 1s matches this loop's own tick and gives per-second clock updates
-        // without a separate LVGL timer. Dirty-rect render is cheap: only
-        // changed label regions are flushed, not the full screen.
-        const uint32_t render_interval_ms = 1000u;
-        if (render_now || t - last_render_ms >= render_interval_ms) {
-            ui_dispatcher.process_pending();
-            last_render_ms = t;
+        np_tick();
+        ui.process_pending();
+        bsp_display_unlock();
+        if (now_ms - last_alive_log_ms >= 1000u) {
+            log_heap_snapshot("alive");
+            last_alive_log_ms = now_ms;
         }
-        vTaskDelay(loop_delay);
     }
 }

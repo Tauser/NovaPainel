@@ -1,21 +1,16 @@
-file(GLOB NOVA_FONT_SRCS "fonts/*.c")
-
 idf_component_register(
     SRCS
-        "src/screens/home_screen.cpp"
-        "src/screens/boot_screen.cpp"
-        "src/screens/wizard_screen.cpp"
-        "src/screens/system_screen.cpp"
-        "src/screens/settings_screen.cpp"
         "src/common/nova_keyboard_manager.cpp"
-        "src/main_shell.cpp"
-        ${NOVA_FONT_SRCS}
-
-    INCLUDE_DIRS
-        "include"
-
-    REQUIRES
-        models
-        utils
-        lvgl__lvgl
+        "src/fonts/fontawesome_16.c"
+        "src/fonts/fontawesome_20.c"
+        "src/fonts/nova_font_64.c"
+        "src/fonts/lv_font_montserrat_extrabold_94.c"
+        "src/novapanel_ui.cpp"
+        "src/screens/screen_boot.cpp"
+        "src/screens/screen_agenda.cpp"
+        "src/screens/screen_home.cpp"
+        "src/screens/screen_placeholders.cpp"
+        "src/screens/screen_setup.cpp"
+    INCLUDE_DIRS "include"
+    REQUIRES models lvgl
 )

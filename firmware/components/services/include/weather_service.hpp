@@ -1,32 +1,38 @@
-// NovaPainel - services/weather_service.hpp
-// Pulls a weather snapshot through a provider, but ONLY when the
-// RequestOrchestrator allows it (DataDomain::Weather: 10min interval, 6
-// req-min). Mirrors market_service.hpp.
 #pragma once
 
-#include "cache_store.hpp"
-#include "i_weather_provider.hpp"
+#include <cstdint>
+
 #include "request_orchestrator.hpp"
 #include "service.hpp"
 #include "state_store.hpp"
+#include "cache_store.hpp"
+#include "open_meteo_provider.hpp"
 
 namespace nova {
 
-class WeatherService : public Service {
+class WeatherService final : public Service {
 public:
-    WeatherService(StateStore& store, RequestOrchestrator& orchestrator,
-                   IWeatherProvider& provider, CacheStore& cache)
-        : store_(store), orchestrator_(orchestrator), provider_(provider), cache_(cache) {}
+    WeatherService(StateStore& store,
+                   RequestOrchestrator& orchestrator,
+                   CacheStore& cache,
+                   OpenMeteoProvider& provider);
 
-    const char* name() const override { return "WeatherService"; }
+    const char* name() const override;
     bool init() override;
+    void start() override;
     void tick(uint32_t now_ms) override;
 
 private:
+    static void task_entry(void* arg);
+    void run();
+    bool refresh(uint32_t now_ms);
+
     StateStore&           store_;
-    RequestOrchestrator&  orchestrator_;
-    IWeatherProvider&     provider_;
+    RequestOrchestrator&   orchestrator_;
     CacheStore&           cache_;
+    OpenMeteoProvider&     provider_;
+    void*                 task_handle_{nullptr};
+    bool                  started_{false};
 };
 
 }  // namespace nova

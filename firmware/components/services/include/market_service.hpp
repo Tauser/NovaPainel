@@ -1,32 +1,38 @@
-// NovaPainel - services/market_service.hpp
-// Pulls a market snapshot through a provider, but ONLY when the
-// RequestOrchestrator allows it (interval + rate-limit). Writes the result to
-// the StateStore. MVP uses MockMarketProvider; later swapped for CoinGecko REST.
 #pragma once
 
-#include "cache_store.hpp"
-#include "i_market_provider.hpp"
+#include <cstdint>
+
 #include "request_orchestrator.hpp"
 #include "service.hpp"
 #include "state_store.hpp"
+#include "cache_store.hpp"
+#include "coingecko_provider.hpp"
 
 namespace nova {
 
-class MarketService : public Service {
+class MarketService final : public Service {
 public:
-    MarketService(StateStore& store, RequestOrchestrator& orchestrator,
-                  IMarketProvider& provider, CacheStore& cache)
-        : store_(store), orchestrator_(orchestrator), provider_(provider), cache_(cache) {}
+    MarketService(StateStore& store,
+                  RequestOrchestrator& orchestrator,
+                  CacheStore& cache,
+                  CoinGeckoProvider& provider);
 
-    const char* name() const override { return "MarketService"; }
+    const char* name() const override;
     bool init() override;
+    void start() override;
     void tick(uint32_t now_ms) override;
 
 private:
-    StateStore&          store_;
-    RequestOrchestrator& orchestrator_;
-    IMarketProvider&     provider_;
-    CacheStore&          cache_;
+    static void task_entry(void* arg);
+    void run();
+    bool refresh(uint32_t now_ms);
+
+    StateStore&           store_;
+    RequestOrchestrator&   orchestrator_;
+    CacheStore&           cache_;
+    CoinGeckoProvider&     provider_;
+    void*                 task_handle_{nullptr};
+    bool                  started_{false};
 };
 
 }  // namespace nova

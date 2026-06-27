@@ -1,95 +1,139 @@
-// NovaPainel - providers/coingecko_provider.cpp
-// Hardware-only: esp_http_client + mbedtls cert bundle + cJSON, none of
-// which have a host shim (see tools/scripts/host_check.sh SKIP_FILES).
-// Needs the system clock to be NTP-synced (ADR-0021) for TLS cert
-// validation to succeed - SetupService starts SNTP once Wi-Fi connects.
 #include "coingecko_provider.hpp"
 
-#include <cstring>
+#include <cerrno>
+#include <cstdlib>
+#include <utility>
+#include <string>
 
+#include "esp_err.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "cJSON.h"
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "CoinGeckoProvider";
-
-// BTC in USD (price + 24h change). USD/BRL used to be triangulated from a
-// bitcoin/brl quote in this same response - now comes from a dedicated
-// ForexProvider/AwesomeAPI instead (ROADMAP Fase 5 follow-up), so this only
-// asks CoinGecko for what it alone provides.
 constexpr const char* kUrl =
-    "https://api.coingecko.com/api/v3/simple/price"
-    "?ids=bitcoin&vs_currencies=usd&include_24hr_change=true";
+    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true";
 
-constexpr int kMaxResponseBytes = 512;
-
-struct FetchContext {
-    char buf[kMaxResponseBytes];
-    int  len{0};
+struct HttpBody {
+    std::string data;
 };
 
-esp_err_t http_event_handler(esp_http_client_event_t* evt) {
-    if (evt->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-    auto* ctx = static_cast<FetchContext*>(evt->user_data);
-    if (ctx->len + evt->data_len < kMaxResponseBytes) {
-        std::memcpy(ctx->buf + ctx->len, evt->data, evt->data_len);
-        ctx->len += evt->data_len;
+esp_err_t http_event_handler(esp_http_client_event_t* evt)
+{
+    auto* body = static_cast<HttpBody*>(evt->user_data);
+    if (!body) {
+        return ESP_OK;
+    }
+
+    switch (evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            body->data.append(static_cast<const char*>(evt->data), evt->data_len);
+            break;
+        default:
+            break;
     }
     return ESP_OK;
 }
-}  // namespace
 
-Result<MarketSummary> CoinGeckoProvider::fetch_summary() {
-    FetchContext ctx{};
+const char* find_value_start(const std::string& json, const char* key)
+{
+    const std::string needle = std::string("\"") + key + "\"";
+    const std::size_t key_pos = json.find(needle);
+    if (key_pos == std::string::npos) {
+        return nullptr;
+    }
 
-    esp_http_client_config_t config = {};
-    config.url = kUrl;
+    const std::size_t colon_pos = json.find(':', key_pos + needle.size());
+    if (colon_pos == std::string::npos) {
+        return nullptr;
+    }
+
+    const char* value = json.c_str() + colon_pos + 1;
+    while (*value == ' ' || *value == '\n' || *value == '\r' || *value == '\t') {
+        ++value;
+    }
+    return value;
+}
+
+bool parse_double(const std::string& json, const char* key, double& value)
+{
+    const char* start = find_value_start(json, key);
+    if (!start) {
+        return false;
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const double parsed = std::strtod(start, &end);
+    if (end == start || errno == ERANGE) {
+        return false;
+    }
+    value = parsed;
+    return true;
+}
+
+bool fetch_http(const char* url, std::string& body)
+{
+    HttpBody payload;
+    esp_http_client_config_t config{};
+    config.url = url;
+    config.method = HTTP_METHOD_GET;
+    config.timeout_ms = 5000;
+    config.buffer_size = 1024;
+    config.event_handler = http_event_handler;
+    config.user_data = &payload;
     config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.event_handler = &http_event_handler;
-    config.user_data = &ctx;
-    config.timeout_ms = 8000;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    const esp_err_t err = esp_http_client_perform(client);
+    if (!client) {
+        ESP_LOGW(kTag, "esp_http_client_init failed");
+        return false;
+    }
+
+    const esp_err_t open_err = esp_http_client_perform(client);
     const int status = esp_http_client_get_status_code(client);
     esp_http_client_cleanup(client);
 
-    if (err != ESP_OK || status != 200) {
-        ESP_LOGW(kTag, "http failed: err=%s status=%d", esp_err_to_name(err), status);
-        return Result<MarketSummary>::fail(ErrorCode::Network, "coingecko http failed");
+    if (open_err != ESP_OK || status != 200 || payload.data.empty()) {
+        ESP_LOGW(kTag, "HTTP failed: err=%s status=%d",
+                 esp_err_to_name(open_err), status);
+        return false;
     }
 
-    ctx.buf[ctx.len < kMaxResponseBytes ? ctx.len : kMaxResponseBytes - 1] = '\0';
+    body = std::move(payload.data);
+    return true;
+}
 
-    cJSON* root = cJSON_Parse(ctx.buf);
-    if (!root) {
-        ESP_LOGW(kTag, "json parse failed: '%s'", ctx.buf);
-        return Result<MarketSummary>::fail(ErrorCode::Parse, "coingecko json parse failed");
+}  // namespace
+
+bool CoinGeckoProvider::fetch(MarketSummary& out, uint32_t now_ms)
+{
+    std::string body;
+    if (!fetch_http(kUrl, body)) {
+        return false;
     }
 
-    cJSON* bitcoin = cJSON_GetObjectItemCaseSensitive(root, "bitcoin");
-    cJSON* usd = bitcoin ? cJSON_GetObjectItemCaseSensitive(bitcoin, "usd") : nullptr;
-    cJSON* change = bitcoin ? cJSON_GetObjectItemCaseSensitive(bitcoin, "usd_24h_change") : nullptr;
-
-    if (!cJSON_IsNumber(usd)) {
-        ESP_LOGW(kTag, "json missing usd field");
-        cJSON_Delete(root);
-        return Result<MarketSummary>::fail(ErrorCode::Parse, "coingecko json missing fields");
+    double btc_usd = 0.0;
+    double change_24h = 0.0;
+    if (!parse_double(body, "usd", btc_usd) ||
+        !parse_double(body, "usd_24h_change", change_24h)) {
+        ESP_LOGW(kTag, "JSON parse failed");
+        return false;
     }
 
-    MarketSummary s{};
-    s.btc_usd = usd->valuedouble;
-    s.btc_change_24h = cJSON_IsNumber(change) ? change->valuedouble : 0.0;
-    s.valid = true;
-    s.stale = false;
-    s.source = DataSource::Live;
+    out.btc_usd = btc_usd;
+    out.btc_change_24h = change_24h;
+    out.valid = true;
+    out.stale = false;
+    out.source = DataSource::Live;
+    out.last_update_ms = now_ms;
 
-    cJSON_Delete(root);
-    return Result<MarketSummary>::ok(s);
+    ESP_LOGI(kTag, "BTC=%.2f change=%.2f%%",
+             out.btc_usd, out.btc_change_24h);
+    return true;
 }
 
 }  // namespace nova

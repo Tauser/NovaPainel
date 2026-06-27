@@ -38,7 +38,7 @@ Fase H   - Consolidacao tecnica/documental pos-Fase 0                   [feito]
 Fase 1   - Consolidacao documental e baseline canonico                  [feito]
 Fase 2   - Estabilizacao do reboot do firmware                          [pendente]
 Fase 3   - Setup, conectividade e tempo                                 [pendente]
-Fase 4   - Dados reais e cache offline                                  [pendente]
+Fase 4   - Dados reais e cache offline                                  [feito]
 Fase 5   - Telas funcionais centrais do MVP                             [pendente]
 Fase 6   - Observabilidade e resiliencia de operacao                    [pendente]
 Fase 7   - Hardening de release e seguranca PROD                        [pendente]
@@ -128,6 +128,7 @@ Escopo:
 
 - estabilizar `main/`
 - religar `ServiceManager` ao runtime
+- reintroduzir os servicos basicos de bootstrap, sistema e clock
 - decidir e reinstalar a camada `board/` no tree novo
 - revisar contratos de `AppState`, `EventType` e `UiDispatcher`
 - garantir host-check e build IDF coerentes com o baseline
@@ -163,6 +164,8 @@ Criterio de saida:
 
 ## 9. Fase 4 - Dados reais e cache offline
 
+Status: **feito**
+
 Objetivo:
 
 - restaurar utilidade concreta do painel sem quebrar o offline-first
@@ -183,6 +186,24 @@ Criterio de saida:
 - Home mostra dados reais
 - sem internet, o painel continua util via cache
 - o comportamento degradado fica claro para o usuario
+
+Resultado:
+
+- concluida no `firmware/` ativo com `WeatherService`, `MarketService`,
+  `ForexService`, `OpenMeteoProvider`, `CoinGeckoProvider`, `ForexProvider`,
+  `CacheStore` em LittleFS e `RequestOrchestrator` no caminho de requests
+- Home consome estado real/cache de clima, BTC e USD/BRL sem requests diretos,
+  com `live/cache/mock`, `stale/source/last_update` e degradacao visivel
+- cache dividido por dominio (`market`, `forex`, `weather`) para evitar que
+  atualizacoes independentes se sobrescrevam
+- validada com `bash tools/scripts/host_check.sh --app` e build ESP-IDF
+  `idf.py build` em `firmware/` no target `esp32p4`
+
+Checkpoint de campo:
+
+- flash/monitor em hardware real deve ser usado como evidencia operacional
+  antes de encerrar uma rodada de release, mas nao bloqueia a conclusao
+  funcional da fase no tree ativo
 
 ## 10. Fase 5 - Telas funcionais centrais do MVP
 

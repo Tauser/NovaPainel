@@ -1,66 +1,135 @@
-// NovaPainel - services/market_service.cpp
 #include "market_service.hpp"
 
+#if defined(ESP_PLATFORM)
+
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace nova {
 
 namespace {
 constexpr const char* kTag = "MarketService";
+constexpr uint32_t kRetryDelayMs = 5000;
+constexpr uint32_t kIdleDelayMs = 1000;
+constexpr uint32_t kTaskStackWords = 8192;
+constexpr int kTaskPriority = 4;
 }
 
-namespace {
-struct CachedBtc {
-    double   btc_usd;
-    double   btc_change_24h;
-    uint32_t last_update_ms;
-};
-constexpr const char* kCacheKey = "market_btc";
-constexpr uint16_t    kCacheSchemaVersion = 1;
-}  // namespace
+MarketService::MarketService(StateStore& store,
+                             RequestOrchestrator& orchestrator,
+                             CacheStore& cache,
+                             CoinGeckoProvider& provider)
+    : store_(store), orchestrator_(orchestrator), cache_(cache), provider_(provider)
+{
+}
 
-bool MarketService::init() {
-    ESP_LOGI(kTag, "using provider: %s (MVP: CoinGecko REST in a later phase)",
-             provider_.name());
+const char* MarketService::name() const
+{
+    return "MarketService";
+}
 
-    CachedBtc cached{};
-    if (cache_.read(kCacheKey, kCacheSchemaVersion, &cached, sizeof(cached))) {
-        MarketSummary summary{};
-        summary.btc_usd = cached.btc_usd;
-        summary.btc_change_24h = cached.btc_change_24h;
-        summary.last_update_ms = cached.last_update_ms;
-        summary.valid = true;
-        summary.stale = true;
-        summary.source = DataSource::Cache;
-        store_.set_market(summary);
-        ESP_LOGI(kTag, "seeded from cache (last_update_ms=%lu)",
-                 static_cast<unsigned long>(cached.last_update_ms));
+bool MarketService::init()
+{
+    MarketSummary cached{};
+    if (cache_.load_market(cached)) {
+        cached.stale = true;
+        cached.source = DataSource::Cache;
+        store_.set_market(cached);
     }
     return true;
 }
 
-void MarketService::tick(uint32_t now_ms) {
-    // See WeatherService::tick() - same fix, same reasoning: wait for an
-    // actual STA+IP connection before spending the request budget.
-    if (store_.state().onboarding.wifi_status != WifiConnectStatus::Connected) return;
-    if (!orchestrator_.can_request(DataDomain::MarketSummary)) return;
-
-    auto result = provider_.fetch_summary();
-    orchestrator_.note_request(DataDomain::MarketSummary, now_ms, result.is_ok());
-
-    if (!result) {
-        ESP_LOGW(kTag, "fetch failed: %s", to_string(result.error().code));
+void MarketService::start()
+{
+    if (started_) {
         return;
     }
-    MarketSummary summary = result.value();
-    summary.last_update_ms = now_ms;
-    store_.set_market(summary);
+    started_ = true;
+    BaseType_t ok = xTaskCreate(task_entry, "market_service", kTaskStackWords, this, kTaskPriority,
+                                reinterpret_cast<TaskHandle_t*>(&task_handle_));
+    if (ok != pdPASS) {
+        ESP_LOGE(kTag, "failed to create task");
+        task_handle_ = nullptr;
+        started_ = false;
+    }
+}
 
-    const CachedBtc cached{summary.btc_usd, summary.btc_change_24h, summary.last_update_ms};
-    cache_.write(kCacheKey, kCacheSchemaVersion, &cached, sizeof(cached));
+void MarketService::tick(uint32_t)
+{
+}
 
-    ESP_LOGI(kTag, "market updated: BTC=$%.0f  24h=%+.1f%%",
-             summary.btc_usd, summary.btc_change_24h);
+void MarketService::task_entry(void* arg)
+{
+    static_cast<MarketService*>(arg)->run();
+}
+
+bool MarketService::refresh(uint32_t now_ms)
+{
+    MarketSummary market{};
+    if (!provider_.fetch(market, now_ms)) {
+        MarketSummary cached{};
+        if (cache_.load_market(cached)) {
+            cached.stale = true;
+            cached.source = DataSource::Cache;
+            store_.set_market(cached);
+        }
+        orchestrator_.note_request(DataDomain::MarketSummary, now_ms, false);
+        return false;
+    }
+
+    store_.set_market(market);
+    cache_.save_market(market);
+    orchestrator_.note_request(DataDomain::MarketSummary, now_ms, true);
+    return true;
+}
+
+void MarketService::run()
+{
+    while (true) {
+        const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
+        orchestrator_.update_clock(now_ms);
+
+        const auto state = store_.snapshot();
+        if (state.onboarding.wifi_status != WifiConnectStatus::Connected) {
+            vTaskDelay(pdMS_TO_TICKS(kIdleDelayMs));
+            continue;
+        }
+
+        if (!orchestrator_.can_request(DataDomain::MarketSummary)) {
+            vTaskDelay(pdMS_TO_TICKS(kIdleDelayMs));
+            continue;
+        }
+
+        if (!refresh(now_ms)) {
+            vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
+            continue;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
+    }
 }
 
 }  // namespace nova
+
+#else
+
+namespace nova {
+
+MarketService::MarketService(StateStore& store,
+                             RequestOrchestrator& orchestrator,
+                             CacheStore& cache,
+                             CoinGeckoProvider& provider)
+    : store_(store), orchestrator_(orchestrator), cache_(cache), provider_(provider)
+{
+}
+
+const char* MarketService::name() const { return "MarketService"; }
+bool MarketService::init() { return true; }
+void MarketService::start() {}
+void MarketService::tick(uint32_t) {}
+
+}  // namespace nova
+
+#endif

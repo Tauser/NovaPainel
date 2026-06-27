@@ -1,6 +1,3 @@
-// NovaPainel - services/system_service.cpp
-// Hardware-only: esp_system.h (esp_reset_reason) + nvs.h, neither of which
-// have a host shim (see tools/scripts/host_check.sh SKIP_FILES).
 #include "system_service.hpp"
 
 #include "esp_log.h"
@@ -11,12 +8,11 @@ namespace nova {
 
 namespace {
 constexpr const char* kTag = "SystemService";
-constexpr const char* kNvsNamespace = "sysdiag";  // separate from SetupService's "novapanel" - unrelated concern
+constexpr const char* kNvsNamespace = "sysdiag";
 
-// Same mapping as the Fase 0 harness (gate15_main.c's reset_reason_str()) -
-// not reinvented, just reused.
-const char* reset_reason_str(esp_reset_reason_t r) {
-    switch (r) {
+const char* reset_reason_str(esp_reset_reason_t reason)
+{
+    switch (reason) {
         case ESP_RST_POWERON:   return "POWERON";
         case ESP_RST_SW:        return "SW";
         case ESP_RST_PANIC:     return "PANIC";
@@ -31,13 +27,21 @@ const char* reset_reason_str(esp_reset_reason_t r) {
 }
 }  // namespace
 
-bool SystemService::init() {
+SystemService::SystemService(StateStore& store) : store_(store) {}
+
+const char* SystemService::name() const
+{
+    return "SystemService";
+}
+
+bool SystemService::init()
+{
     const char* reason = reset_reason_str(esp_reset_reason());
 
     uint32_t reboot_count = 0;
     nvs_handle_t handle{};
     if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) == ESP_OK) {
-        nvs_get_u32(handle, "reboots", &reboot_count);  // stays 0 if absent
+        nvs_get_u32(handle, "reboots", &reboot_count);
         ++reboot_count;
         nvs_set_u32(handle, "reboots", reboot_count);
         nvs_commit(handle);
@@ -47,7 +51,9 @@ bool SystemService::init() {
     }
 
     store_.set_boot_diagnostics(reason, reboot_count);
-    ESP_LOGI(kTag, "boot #%lu reset_reason=%s", static_cast<unsigned long>(reboot_count), reason);
+    ESP_LOGI(kTag, "boot #%lu reset_reason=%s",
+             static_cast<unsigned long>(reboot_count),
+             reason);
     return true;
 }
 

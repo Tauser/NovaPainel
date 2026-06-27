@@ -1,8 +1,6 @@
-// NovaPainel - services/forex_service.hpp
-// Pulls the USD/BRL rate through a dedicated IForexProvider, but ONLY when
-// the RequestOrchestrator allows it (DataDomain::Forex: 2min interval, 6
-// req-min). Mirrors market_service.hpp/weather_service.hpp.
 #pragma once
+
+#include <cstdint>
 
 #include "cache_store.hpp"
 #include "i_forex_provider.hpp"
@@ -12,21 +10,29 @@
 
 namespace nova {
 
-class ForexService : public Service {
+class ForexService final : public Service {
 public:
-    ForexService(StateStore& store, RequestOrchestrator& orchestrator,
-                IForexProvider& provider, CacheStore& cache)
-        : store_(store), orchestrator_(orchestrator), provider_(provider), cache_(cache) {}
+    ForexService(StateStore& store,
+                 RequestOrchestrator& orchestrator,
+                 CacheStore& cache,
+                 IForexProvider& provider);
 
-    const char* name() const override { return "ForexService"; }
+    const char* name() const override;
     bool init() override;
+    void start() override;
     void tick(uint32_t now_ms) override;
 
 private:
-    StateStore&           store_;
-    RequestOrchestrator&  orchestrator_;
-    IForexProvider&       provider_;
-    CacheStore&           cache_;
+    static void task_entry(void* arg);
+    void run();
+    bool refresh(uint32_t now_ms);
+
+    StateStore&          store_;
+    RequestOrchestrator& orchestrator_;
+    CacheStore&          cache_;
+    IForexProvider&      provider_;
+    void*                task_handle_{nullptr};
+    bool                 started_{false};
 };
 
 }  // namespace nova

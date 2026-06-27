@@ -1,36 +1,40 @@
-// NovaPainel - cache/cache_store.hpp
-// Generic local cache on LittleFS (ADR-0015/0027). Knows nothing about
-// WeatherSummary/MarketSummary - just versioned, atomically-written blobs by
-// key, so it has no dependency on models/. Services define their own small
-// "Cached*" structs and schema_version constants and pass them through here.
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
+
+#include "app_state.hpp"
 
 namespace nova {
 
-class CacheStore {
+class CacheStore final {
 public:
-    // Mounts LittleFS on the "storage" partition (firmware/partitions.csv).
-    // Call once, after board bring-up. false = no cache this session (not
-    // fatal - callers just skip cache reads/writes; see app_main.cpp).
+    struct Header {
+        uint32_t magic;
+        uint16_t version;
+        uint16_t reserved;
+        uint32_t size;
+    };
+
     bool mount();
+    bool ready() const { return ready_; }
 
-    // Atomically (write to <key>.tmp, then rename) writes `size` bytes from
-    // `data`, prefixed by a small header carrying `schema_version` (so a
-    // future format change can be detected, even though there's no
-    // migration logic yet - see ADR-0027 scope note).
-    bool write(const char* key, uint16_t schema_version, const void* data, size_t size);
+    bool load_market(MarketSummary& out) const;
+    bool save_market(const MarketSummary& market) const;
 
-    // Reads back into `data` (caller-supplied buffer, exactly `size` bytes).
-    // false = no cache for this key, or it's corrupt, or schema_version/size
-    // don't match what the caller expects - all treated the same way (no
-    // migration), the caller just has nothing to seed from.
-    bool read(const char* key, uint16_t schema_version, void* data, size_t size);
+    bool load_forex(MarketSummary& out) const;
+    bool save_forex(const MarketSummary& market) const;
+
+    bool load_weather(WeatherSummary& out) const;
+    bool save_weather(const WeatherSummary& weather) const;
 
 private:
-    bool mounted_{false};
+    template <typename T>
+    bool load_blob(const char* path, T& out) const;
+
+    template <typename T>
+    bool save_blob(const char* path, const T& value) const;
+
+    bool ready_{false};
 };
 
 }  // namespace nova
