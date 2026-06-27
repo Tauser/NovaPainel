@@ -111,6 +111,28 @@ static inline lv_obj_t *np_label(lv_obj_t *parent,
     return l;
 }
 
+
+static inline lv_obj_t *np_toggle(lv_obj_t *parent, bool checked)
+{
+    const uint32_t indicator_checked =
+        static_cast<uint32_t>(LV_PART_INDICATOR) | static_cast<uint32_t>(LV_STATE_CHECKED);
+    const uint32_t knob_checked =
+        static_cast<uint32_t>(LV_PART_KNOB) | static_cast<uint32_t>(LV_STATE_CHECKED);
+
+    lv_obj_t *sw = lv_switch_create(parent);
+    lv_obj_set_size(sw, 44, 24);
+    lv_obj_set_style_bg_color(sw, NP_C_ITEM_BG2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(sw, NP_C_BORDER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(sw, 1, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0x2C3820), static_cast<int>(indicator_checked));
+    lv_obj_set_style_bg_color(sw, NP_C_TEXT_DIM, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(sw, NP_C_ACCENT, static_cast<int>(knob_checked));
+    lv_obj_set_style_pad_all(sw, 2, LV_PART_KNOB);
+    if (checked) {
+        lv_obj_add_state(sw, LV_STATE_CHECKED);
+    }
+    return sw;
+}
 static inline lv_obj_t *np_hsep(lv_obj_t *parent)
 {
     lv_obj_t *s = lv_obj_create(parent);

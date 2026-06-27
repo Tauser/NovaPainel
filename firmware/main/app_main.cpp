@@ -8,6 +8,7 @@
 #include "event_bus.hpp"
 #include "clock_service.hpp"
 #include "bootstrap_service.hpp"
+#include "notification_service.hpp"
 #include "request_orchestrator.hpp"
 #include "cache_store.hpp"
 #include "market_service.hpp"
@@ -66,12 +67,20 @@ static void start_display(void)
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 4),
-        .double_buffer = false,
+        // Full-screen double buffer + PPA rotation.
+        //
+        // Display: MIPI DSI, EK79007 controller, 1024x600 @ 60 Hz.
+        // sw_rotate=true uses ESP32-P4 PPA hardware for 180 deg rotation;
+        // bypasses esp_lcd_panel_swap_xy which EK79007 does not implement.
+        // lv_display_set_render_mode(FULL) is called after init to force a
+        // single full-screen flush per render cycle (no partial-flush flicker).
+        // Memory: 3 x (1024*600*2) ~ 3.6 MB PSRAM (2 draw + 1 PPA rotation).
+        .buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES,
+        .double_buffer = true,
         .flags = {
-            .buff_dma = true,
+            .buff_dma    = true,
             .buff_spiram = true,
-            .sw_rotate = true,
+            .sw_rotate   = true,
         },
     };
     cfg.lvgl_port_cfg.task_stack = 16384;
@@ -83,7 +92,15 @@ static void start_display(void)
     }
 
     bsp_display_rotate(display, NOVAPANEL_DISPLAY_ROTATION);
-    ESP_LOGI(TAG, "display rotation=%d sw_rotate=1 double_buffer=0", (int)NOVAPANEL_DISPLAY_ROTATION);
+#if defined(ESP_PLATFORM)
+    // Force RENDER_MODE_FULL: LVGL renders the entire screen in one flush pass.
+    // Eliminates multi-pass partial flush artifacts (intermediate states visible
+    // between region 1 and region 2 flushes). Buffer is already full-screen
+    // sized, so no extra memory cost. bsp_display_cfg_t does not expose
+    // full_refresh, so we set it here via the LVGL v9 API directly.
+    lv_display_set_render_mode(display, LV_DISPLAY_RENDER_MODE_FULL);
+#endif
+    ESP_LOGI(TAG, "display rotation=%d sw_rotate=1(PPA) full_refresh=1 double_buf=1 buf=%ux%u", (int)NOVAPANEL_DISPLAY_ROTATION, (unsigned)BSP_LCD_H_RES, (unsigned)BSP_LCD_V_RES);
 }
 
 static bool with_lvgl_lock(const char* phase, int& consecutive_failures,
@@ -170,6 +187,7 @@ extern "C" void app_main(void)
     BootstrapService bootstrap(state, bus);
     SetupService setup(state, bus);
     SystemService system_service(state);
+    NotificationService notification_service(state, bus);
     ClockService clock_service(state);
     CoinGeckoProvider coingecko_provider;
     ForexProvider forex_provider;
@@ -181,6 +199,7 @@ extern "C" void app_main(void)
     services.add(&setup);
     services.add(&bootstrap);
     services.add(&system_service);
+    services.add(&notification_service);
     services.add(&clock_service);
     services.add(&market_service);
     services.add(&forex_service);
@@ -210,13 +229,21 @@ extern "C" void app_main(void)
     np_bind_setup_step([&](OnboardingStep step) {
         state.set_onboarding_step(step);
     });
+    np_bind_notifications_open([&]() {
+        enqueue_action([&state]() {
+            state.mark_all_notifications_read();
+        });
+    });
 
     // Flag compartilhado entre o render callback e o loop principal (mesma
     // thread). Evita múltiplas chamadas a np_update_home() dentro da mesma
     // janela de process_pending() quando vários providers publicam em burst
     // (Market, Weather, Clock, System na mesma frame de 200ms → flicker).
     bool home_needs_update = false;
+    bool market_needs_update = false;
     bool shell_needs_update = false;
+    bool settings_needs_update = false;
+    bool weather_needs_update = false;
 
     ui.bind_render([&](const UiEvent& event) {
         ESP_LOGI(TAG, "ui event queued from %s (i32=%" PRId32 ")", to_string(event.source), event.i32);
@@ -225,17 +252,34 @@ extern "C" void app_main(void)
             np_navigate_to(screen);
             if (screen == ScreenId::Home) {
                 home_needs_update = true;  // atualiza após navegar, fora do loop de eventos
+            } else if (screen == ScreenId::Market) {
+                market_needs_update = true;
+            } else if (screen == ScreenId::Settings) {
+                settings_needs_update = true;
+            } else if (screen == ScreenId::Weather) {
+                weather_needs_update = true;
             }
         } else if (event.source == EventType::BootStateChanged) {
             np_update_boot(state.state().boot);
         } else if (event.source == EventType::ClockUpdated       ||
                    event.source == EventType::MarketUpdated      ||
                    event.source == EventType::ForexUpdated       ||
-                   event.source == EventType::WeatherUpdated     ||
-                   event.source == EventType::SystemStatusChanged) {
+                   event.source == EventType::WeatherUpdated) {
             home_needs_update = true;  // coalesced: chamada única após drenar a fila
+            if (event.source == EventType::MarketUpdated ||
+                event.source == EventType::ForexUpdated) {
+                market_needs_update = true;
+            }
+        } else if (event.source == EventType::NotificationCreated ||
+                   event.source == EventType::SystemStatusChanged) {
+            shell_needs_update = true;
+            home_needs_update = true;
+            settings_needs_update = true;
+            weather_needs_update = true;
         } else if (event.source == EventType::OnboardingStateChanged) {
             shell_needs_update = true;
+            settings_needs_update = true;
+            weather_needs_update = true;
             np_update_setup(state.state());
         }
     });
@@ -295,18 +339,32 @@ extern "C" void app_main(void)
         services.tick_all(now_ms);
         with_lvgl_lock("periodic UI tick", lvgl_lock_failures, [&]() {
             np_tick();
-            home_needs_update = false;
-            shell_needs_update = false;
+            home_needs_update    = false;
+            market_needs_update  = false;
+            shell_needs_update   = false;
+            settings_needs_update = false;
+            weather_needs_update = false;
             ui.process_pending();
+            const AppState current = state.state();
             if (shell_needs_update) {
-                np_update_shell(state.state());
+                np_update_shell(current);
                 shell_needs_update = false;
             }
             if (home_needs_update) {
-                const AppState current = state.state();
-                np_update_shell(current);
                 np_update_home(current);
                 home_needs_update = false;
+            }
+            if (market_needs_update) {
+                np_update_market(current);
+                market_needs_update = false;
+            }
+            if (settings_needs_update) {
+                np_update_settings(current);
+                settings_needs_update = false;
+            }
+            if (weather_needs_update) {
+                np_update_weather(current);
+                weather_needs_update = false;
             }
         });
         if (now_ms - last_alive_log_ms >= 1000u) {

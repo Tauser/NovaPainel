@@ -42,12 +42,6 @@ static void build_placeholder(ScreenId screen,
 
 }  // namespace
 
-void np_screen_market(lv_obj_t *)
-{
-    build_placeholder(ScreenId::Market, "Mercado", "Tela em construcao",
-        NP_I_CHART, NP_C_GREEN);
-}
-
 void np_screen_devices(lv_obj_t *)
 {
     build_placeholder(ScreenId::Devices, "Casa", "Tela em construcao",
@@ -70,18 +64,6 @@ void np_screen_routines(lv_obj_t *)
 {
     build_placeholder(ScreenId::Routines, "Rotinas", "Tela em construcao",
         NP_I_REFRESH, NP_C_RED);
-}
-
-void np_screen_settings(lv_obj_t *)
-{
-    build_placeholder(ScreenId::Settings, "Configuracoes", "Tela em construcao",
-        NP_I_SETTINGS, NP_C_ACCENT);
-}
-
-void np_screen_system(lv_obj_t *)
-{
-    build_placeholder(ScreenId::System, "Sistema", "Tela em construcao",
-        NP_I_INFO, NP_C_GREEN);
 }
 
 }  // namespace nova

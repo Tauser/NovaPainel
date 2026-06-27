@@ -251,6 +251,17 @@ void np_screen_home(lv_obj_t *parent)
     g_clock_seconds = np_label(clk_row, "--", NP_F_3XL, lv_color_hex(0x3A4252));
     lv_obj_set_style_pad_bottom(g_clock_seconds, 8, 0);
 
+    // Lock width of clock labels to prevent flex recalculation every second.
+    // Measure with widest digit text, then fix the width so LVGL never needs
+    // to re-run flex layout when the text changes (00->01->...).
+    lv_label_set_text(g_clock_time, "00:00");
+    lv_label_set_text(g_clock_seconds, "00");
+    lv_obj_update_layout(scr);
+    lv_obj_set_width(g_clock_time, lv_obj_get_width(g_clock_time));
+    lv_obj_set_width(g_clock_seconds, lv_obj_get_width(g_clock_seconds));
+    lv_label_set_text(g_clock_time, "--:--");
+    lv_label_set_text(g_clock_seconds, "--");
+
     g_clock_date = np_label(left, "aguardando relogio",
         NP_F_SM, NP_C_TEXT_DIM);
     lv_obj_set_style_margin_top(g_clock_date, 6, 0);

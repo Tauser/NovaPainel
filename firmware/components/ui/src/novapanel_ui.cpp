@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <utility>
 
 #include "esp_log.h"
 
@@ -23,7 +24,7 @@ constexpr NavItem kNavItems[] = {
     { ScreenId::Market,    NP_I_CHART },
     { ScreenId::Devices,   NP_I_DEVICE },
     { ScreenId::Routines,  NP_I_REFRESH },
-    { ScreenId::System,    NP_I_SETTINGS },
+    { ScreenId::Weather,   NP_I_SUN },
     { ScreenId::Focus,     NP_I_FOCUS },
 };
 
@@ -36,11 +37,17 @@ static lv_obj_t *g_topbar_greeting = nullptr;
 static lv_obj_t *g_topbar_clock = nullptr;
 static lv_obj_t *g_topbar_greeting_chip = nullptr;
 static lv_obj_t *g_topbar_notification_badge = nullptr;
+static lv_obj_t *g_topbar_notification_badge_label = nullptr;
 static lv_obj_t *g_shell_col = nullptr;
 static lv_obj_t *g_menu_btn = nullptr;
 static lv_obj_t *g_menu_icon = nullptr;
+static lv_obj_t *g_notifications_overlay = nullptr;
+static lv_obj_t *g_notifications_modal = nullptr;
+static lv_obj_t *g_notifications_list = nullptr;
+static bool g_notifications_open = false;
 static bool g_menu_open = false;
 static ScreenId g_current_screen = ScreenId::Boot;
+static NotificationsOpenFn g_notifications_open_fn = nullptr;
 
 static const char *kWeekdaysPt[] = {
     "Domingo", "Segunda-Feira", "Terca-Feira", "Quarta-Feira",
@@ -51,6 +58,11 @@ static const char *kMonthsPt[] = {
     "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 };
+
+static ScreenId canonical_screen(ScreenId screen)
+{
+    return screen;
+}
 
 static const char *greet_by_hour(int hour)
 {
@@ -68,6 +80,119 @@ static void set_topbar_line_if_changed(lv_obj_t *label, const char *text)
     const char *current = lv_label_get_text(label);
     if (!current || std::strcmp(current, text) != 0) {
         lv_label_set_text(label, text);
+    }
+}
+
+static lv_color_t color_for_notification(const NotificationItem& item)
+{
+    switch (item.level) {
+        case NotificationLevel::Danger:  return NP_C_RED;
+        case NotificationLevel::Warning: return NP_C_ACCENT;
+        case NotificationLevel::Success: return NP_C_GREEN;
+        case NotificationLevel::Info:    return NP_C_BLUE;
+        case NotificationLevel::Silent:  return NP_C_TEXT_MUTED;
+    }
+    return NP_C_TEXT_MUTED;
+}
+
+static const char* category_label(NotificationCategory category)
+{
+    switch (category) {
+        case NotificationCategory::System:  return "Sistema";
+        case NotificationCategory::Agenda:  return "Agenda";
+        case NotificationCategory::Alarm:   return "Alarme";
+        case NotificationCategory::Market:  return "Mercado";
+        case NotificationCategory::Weather: return "Clima";
+        case NotificationCategory::Device:  return "Casa";
+        case NotificationCategory::Network: return "Rede";
+    }
+    return "Painel";
+}
+
+static void set_notifications_modal_visible(bool visible)
+{
+    g_notifications_open = visible;
+    if (!g_notifications_overlay || !g_notifications_modal) {
+        return;
+    }
+
+    if (visible) {
+        lv_obj_clear_flag(g_notifications_overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_notifications_modal, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(g_notifications_overlay);
+        lv_obj_move_foreground(g_notifications_modal);
+    } else {
+        lv_obj_add_flag(g_notifications_overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_notifications_modal, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void close_notifications_cb(lv_event_t *)
+{
+    set_notifications_modal_visible(false);
+}
+
+static void render_notifications_modal(const AppState& state)
+{
+    if (!g_notifications_list) {
+        return;
+    }
+
+    lv_obj_clean(g_notifications_list);
+
+    const std::size_t max_items = state.notifications.items.size() < 6
+        ? state.notifications.items.size()
+        : 6;
+
+    if (max_items == 0) {
+        lv_obj_t* empty = np_card(g_notifications_list);
+        lv_obj_set_size(empty, lv_pct(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_pad_ver(empty, 16, 0);
+        lv_obj_set_flex_flow(empty, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(empty,
+            LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        np_label(empty, "Sem notificacoes recentes", NP_F_SM, NP_C_TEXT_MUTED);
+        return;
+    }
+
+    for (std::size_t i = 0; i < max_items; ++i) {
+        const NotificationItem& item = state.notifications.items[i];
+        lv_obj_t* card = np_card(g_notifications_list);
+        lv_obj_set_size(card, lv_pct(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_pad_hor(card, 16, 0);
+        lv_obj_set_style_pad_ver(card, 14, 0);
+
+        lv_obj_t* row = np_row(card);
+        lv_obj_set_flex_align(row,
+            LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_column(row, 12, 0);
+
+        lv_obj_t* dot = lv_obj_create(row);
+        lv_obj_set_size(dot, 8, 8);
+        lv_obj_set_style_bg_color(dot, color_for_notification(item), 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(dot, 0, 0);
+        lv_obj_set_style_radius(dot, 4, 0);
+        lv_obj_set_style_margin_top(dot, 4, 0);
+
+        lv_obj_t* info = np_col(row);
+        lv_obj_set_style_flex_grow(info, 1, 0);
+        lv_obj_set_size(info, 0, LV_SIZE_CONTENT);
+        lv_obj_t* title = np_label(info, item.title.c_str(), NP_F_MD, NP_C_TEXT);
+        lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+        lv_obj_set_width(title, 360);
+
+        char detail[160];
+        if (!item.body.empty()) {
+            std::snprintf(detail, sizeof(detail), "%s / %s",
+                          category_label(item.category), item.body.c_str());
+        } else {
+            std::snprintf(detail, sizeof(detail), "%s", category_label(item.category));
+        }
+        lv_obj_t* desc = np_label(info, detail, NP_F_SM, lv_color_hex(0x7A8298));
+        lv_obj_set_style_margin_top(desc, 3, 0);
+
+        np_label(row, item.read ? "lida" : "nova", NP_F_XS, NP_C_TEXT_MUTED);
     }
 }
 
@@ -89,10 +214,10 @@ static void refresh_clock_label()
     const char *month =
         (tm_now.tm_mon >= 0 && tm_now.tm_mon < 12) ? kMonthsPt[tm_now.tm_mon] : "Mes";
     std::snprintf(buffer, sizeof(buffer), "%s, %02d de %s", weekday, tm_now.tm_mday, month);
-    lv_label_set_text(g_topbar_clock, buffer);
+    set_topbar_line_if_changed(g_topbar_clock, buffer);
 
     if (g_topbar_greeting) {
-        lv_label_set_text(g_topbar_greeting, greet_by_hour(tm_now.tm_hour));
+        set_topbar_line_if_changed(g_topbar_greeting, greet_by_hour(tm_now.tm_hour));
     }
 }
 
@@ -163,7 +288,11 @@ static void gear_cb(lv_event_t *)
 
 static void bell_cb(lv_event_t *)
 {
-    np_navigate_to(ScreenId::System);
+    const bool opening = !g_notifications_open;
+    set_notifications_modal_visible(opening);
+    if (opening && g_notifications_open_fn) {
+        g_notifications_open_fn();
+    }
 }
 
 static void menu_cb(lv_event_t *)
@@ -312,8 +441,9 @@ static void build_topbar()
     lv_obj_set_style_margin_top(g_topbar_notification_badge, -10, 0);
     lv_obj_set_scrollbar_mode(g_topbar_notification_badge, LV_SCROLLBAR_MODE_OFF);
     lv_obj_add_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t *badge_label = np_label(g_topbar_notification_badge, "3", NP_F_XS, NP_C_DARK_FG);
-    lv_obj_align(badge_label, LV_ALIGN_CENTER, 0, 0);
+    g_topbar_notification_badge_label =
+        np_label(g_topbar_notification_badge, "0", NP_F_XS, NP_C_DARK_FG);
+    lv_obj_align(g_topbar_notification_badge_label, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t *vs = lv_obj_create(np_topbar);
     lv_obj_set_size(vs, 1, 18);
@@ -402,6 +532,41 @@ static void build_root()
 
     build_dots(g_shell_col);
 
+    g_notifications_overlay = lv_obj_create(np_root);
+    lv_obj_set_size(g_notifications_overlay, NP_W, NP_H);
+    lv_obj_set_pos(g_notifications_overlay, 0, 0);
+    lv_obj_set_style_bg_color(g_notifications_overlay, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(g_notifications_overlay, LV_OPA_30, 0);
+    lv_obj_set_style_border_width(g_notifications_overlay, 0, 0);
+    lv_obj_set_style_radius(g_notifications_overlay, 0, 0);
+    lv_obj_add_flag(g_notifications_overlay, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(g_notifications_overlay, close_notifications_cb, LV_EVENT_CLICKED, nullptr);
+
+    g_notifications_modal = np_card(np_root);
+    lv_obj_set_size(g_notifications_modal, 460, 420);
+    lv_obj_set_pos(g_notifications_modal, NP_W - 460 - 18, NP_TOPBAR_H + 10);
+    lv_obj_set_style_bg_color(g_notifications_modal, NP_C_CARD2, 0);
+    lv_obj_set_style_pad_all(g_notifications_modal, 14, 0);
+    lv_obj_set_flex_flow(g_notifications_modal, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(g_notifications_modal, 9, 0);
+    lv_obj_add_flag(g_notifications_modal, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t* notif_header = np_row(g_notifications_modal);
+    lv_obj_set_flex_align(notif_header,
+        LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    np_label(notif_header, "Notificacoes", NP_F_LG, NP_C_TEXT);
+    lv_obj_t* close_btn = np_icon_btn(notif_header, NP_I_CHEV_R, NP_C_TEXT_DIM);
+    lv_obj_add_event_cb(close_btn, close_notifications_cb, LV_EVENT_CLICKED, nullptr);
+
+    g_notifications_list = lv_obj_create(g_notifications_modal);
+    np_obj_clear_style(g_notifications_list);
+    lv_obj_set_size(g_notifications_list, lv_pct(100), 340);
+    lv_obj_set_flex_flow(g_notifications_list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(g_notifications_list,
+        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(g_notifications_list, 9, 0);
+    lv_obj_set_scrollbar_mode(g_notifications_list, LV_SCROLLBAR_MODE_AUTO);
+
     g_menu_open = false;
     apply_shell_layout();
 }
@@ -417,12 +582,13 @@ static void hide_all_screens()
 
 static void ensure_screen_built(ScreenId screen)
 {
-    const auto index = static_cast<std::size_t>(screen);
+    const ScreenId effective_screen = canonical_screen(screen);
+    const auto index = static_cast<std::size_t>(effective_screen);
     if (index >= kUiScreenCount || np_screens[index]) {
         return;
     }
 
-    switch (screen) {
+    switch (effective_screen) {
         case ScreenId::Boot:
             np_screen_boot(np_root);
             break;
@@ -453,8 +619,8 @@ static void ensure_screen_built(ScreenId screen)
         case ScreenId::Settings:
             np_screen_settings(np_content);
             break;
-        case ScreenId::System:
-            np_screen_system(np_content);
+        case ScreenId::Weather:
+            np_screen_weather(np_content);
             break;
     }
 }
@@ -481,16 +647,17 @@ const char *np_screen_title(ScreenId screen)
         case ScreenId::PhotoFrame: return "Photo";
         case ScreenId::Routines:   return "Rotinas";
         case ScreenId::Settings:   return "Configuracoes";
-        case ScreenId::System:     return "Sistema";
+        case ScreenId::Weather:    return "Meteorologia";
     }
     return "NovaPanel";
 }
 
 void np_navigate_to(ScreenId screen)
 {
-    const auto target = static_cast<std::size_t>(screen);
+    const ScreenId effective_screen = canonical_screen(screen);
+    const auto target = static_cast<std::size_t>(effective_screen);
     if (target >= kUiScreenCount) return;
-    ensure_screen_built(screen);
+    ensure_screen_built(effective_screen);
     if (!np_screens[target]) return;
 
     const auto current = static_cast<std::size_t>(g_current_screen);
@@ -501,7 +668,7 @@ void np_navigate_to(ScreenId screen)
         lv_obj_clear_state(g_nav_buttons[current], LV_STATE_CHECKED);
     }
 
-    g_current_screen = screen;
+    g_current_screen = effective_screen;
 
     lv_obj_clear_flag(np_screens[target], LV_OBJ_FLAG_HIDDEN);
     if (g_nav_buttons[target]) {
@@ -525,8 +692,27 @@ void np_update_shell(const AppState& state)
     set_topbar_line_if_changed(g_topbar_title, display_name);
 
     if (g_topbar_notification_badge) {
-        lv_obj_add_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
+        if (state.notifications.unread_count == 0) {
+            lv_obj_add_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            char unread[4];
+            if (state.notifications.unread_count > 99) {
+                std::snprintf(unread, sizeof(unread), "99+");
+            } else {
+                std::snprintf(unread, sizeof(unread), "%u",
+                              static_cast<unsigned>(state.notifications.unread_count));
+            }
+            set_topbar_line_if_changed(g_topbar_notification_badge_label, unread);
+            lv_obj_clear_flag(g_topbar_notification_badge, LV_OBJ_FLAG_HIDDEN);
+        }
     }
+
+    render_notifications_modal(state);
+}
+
+void np_bind_notifications_open(NotificationsOpenFn fn)
+{
+    g_notifications_open_fn = std::move(fn);
 }
 
 void np_init()

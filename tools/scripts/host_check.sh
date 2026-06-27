@@ -243,8 +243,10 @@ constexpr int LV_ALIGN_CENTER = 0;
 constexpr int LV_BORDER_SIDE_BOTTOM = 1;
 constexpr int LV_BORDER_SIDE_LEFT = 2;
 constexpr int LV_STATE_CHECKED = 1;
+constexpr int LV_STATE_DISABLED = 2;
 constexpr int LV_PART_MAIN = 0;
 constexpr int LV_PART_INDICATOR = 1;
+constexpr int LV_PART_KNOB = 2;
 constexpr int LV_OBJ_FLAG_HIDDEN = 1 << 0;
 constexpr int LV_OBJ_FLAG_CHECKABLE = 1 << 1;
 constexpr int LV_LABEL_LONG_DOT = 0;
@@ -266,6 +268,7 @@ static inline lv_coord_t lv_pct(int32_t value) {
 
 extern "C" lv_obj_t* lv_obj_create(lv_obj_t* parent);
 extern "C" lv_obj_t* lv_button_create(lv_obj_t* parent);
+extern "C" lv_obj_t* lv_switch_create(lv_obj_t* parent);
 extern "C" lv_obj_t* lv_label_create(lv_obj_t* parent);
 extern "C" lv_obj_t* lv_bar_create(lv_obj_t* parent);
 extern "C" lv_obj_t* lv_screen_active(void);
@@ -360,6 +363,9 @@ SKIP_FILES=(
   "screen_boot.cpp"       # real LVGL widgets (Fase 5) - host shim would be large
   "screen_setup.cpp"      # real LVGL widgets (Fase 5) - host shim would be large
   "screen_agenda.cpp"     # real LVGL widgets (Fase 5) - host shim would be large
+  "screen_market.cpp"     # real LVGL widgets (Fase 5) - host shim would be large
+  "screen_settings.cpp"   # real LVGL widgets (Fase 5) - host shim would be large
+  "screen_weather.cpp"    # real LVGL widgets (Fase 5) - host shim would be large
   "screen_placeholders.cpp" # real LVGL widgets (Fase 5) - host shim would be large
   "nova_keyboard_manager.cpp" # real LVGL keyboard manager - host shim would be large
   "setup_service.cpp"    # real NVS + esp_wifi (Fase 5, ADR-0017) - hardware only
