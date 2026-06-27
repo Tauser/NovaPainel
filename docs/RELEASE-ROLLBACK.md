@@ -44,6 +44,21 @@ Fase futura:
 - manter imagem anterior assinada para rollback
 - versionar `security_version` junto do processo de release
 
+Planejamento tecnico recomendado para essa migracao:
+
+- manter `nvs`, `nvs_keys`, `phy_init` e `coredump`
+- introduzir `otadata`
+- substituir `factory` unico por `ota_0` e `ota_1`
+- validar espaco de app, cache e coredump antes de qualquer corte final
+- integrar `esp_ota_ops` somente junto do fluxo completo de validacao,
+  confirmacao e rollback
+
+Layout alvo de referencia:
+
+```text
+nvs | nvs_keys | otadata | phy_init | ota_0 | ota_1 | littlefs | coredump
+```
+
 ## Regra de rollback
 
 Rollback so e permitido para imagem:
@@ -84,6 +99,20 @@ Antes de marcar uma release como pronta:
 
 - `H7`: fechado como plano operacional
 - a implementacao tecnica de OTA fica para uma fase futura de firmware/release
+
+## Panic, coredump e diagnostico
+
+No baseline atual, o caminho robusto para falhas criticas deve continuar sendo:
+
+- `reset_reason` persistido no boot seguinte
+- `reboot_count` persistido em NVS
+- particao `coredump` preservada para coleta em campo
+
+Nao foi adotado um hook customizado de panic no `firmware/` novo nesta rodada,
+porque gravar backtrace manualmente no caminho de panic aumenta risco
+operacional se nao vier junto de validacao especifica do ESP-IDF e do layout de
+flash final. A estrategia recomendada e consolidar primeiro OTA/particoes e
+usar o fluxo oficial de coredump + diagnostico de boot como base de operacao.
 
 ## Relacao com o roadmap atual
 
