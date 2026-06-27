@@ -295,7 +295,7 @@ void np_screen_home(lv_obj_t *parent)
     lv_obj_t *wr = np_row(wx);
     lv_obj_set_flex_align(wr,
         LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    g_weather_temp = np_label(wr, "--", NP_F_4XL, NP_C_TEXT);
+    g_weather_temp = np_label(wr, "--", NP_F_TITLE_LG, NP_C_TEXT);
 
     lv_obj_t *city_col = np_col(wr);
     lv_obj_set_size(city_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
@@ -342,7 +342,7 @@ void np_screen_home(lv_obj_t *parent)
     lv_obj_set_style_pad_column(agh, 9, 0);
     lv_obj_set_style_margin_bottom(agh, 8, 0);
     np_label(agh, NP_I_LIST, NP_F_ICON, NP_C_ACCENT);
-    lv_obj_t *ag_t = np_label(agh, "Agenda de hoje", NP_F_MD, NP_C_TEXT);
+    lv_obj_t *ag_t = np_label(agh, "Agenda de hoje", NP_F_TITLE_SM, NP_C_TEXT);
     lv_obj_set_style_flex_grow(ag_t, 1, 0);
     np_label(agh, "4 eventos", NP_F_XS, NP_C_TEXT_MUTED);
     np_chip(agh, "Ver tudo");

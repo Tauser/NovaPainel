@@ -45,18 +45,22 @@
 #define NP_BDW            1
 #define NP_DOTS_H         16
 
-#define NP_F_XS    (&lv_font_montserrat_14)
-#define NP_F_SM    (&lv_font_montserrat_14)
-#define NP_F_MD    (&lv_font_montserrat_14)
-#define NP_F_LG    (&lv_font_montserrat_16)
-#define NP_F_XL    (&lv_font_montserrat_20)
-#define NP_F_2XL   (&lv_font_montserrat_24)
-#define NP_F_3XL   (&lv_font_montserrat_28)
-#define NP_F_4XL   (&lv_font_montserrat_32)
+#define NP_F_XS    (&nova_font_14)
+#define NP_F_SM    (&nova_font_14)
+#define NP_F_MD    (&nova_font_14)
+#define NP_F_LG    (&nova_font_16)
+#define NP_F_XL    (&nova_font_20)
+#define NP_F_2XL   (&nova_font_24)
+#define NP_F_3XL   (&nova_font_28)
+#define NP_F_4XL   (&nova_font_32)
+#define NP_F_TITLE_SM (&nova_font_bold_20)
+#define NP_F_TITLE_MD (&nova_font_bold_24)
+#define NP_F_TITLE_LG (&nova_font_bold_28)
 #define NP_F_ICON_SM (&fontawesome_16)
 #define NP_F_ICON    (&fontawesome_20)
-#define NP_F_HERO  (&lv_font_montserrat_48)
-#define NP_F_CLOCK  (&lv_font_montserrat_bold_94)
+#define NP_F_HERO  (&nova_font_48)
+#define NP_F_TEMP   (&nova_font_extrabold_64)
+#define NP_F_CLOCK  (&nova_font_extrabold_92)
 
 #define NP_I_HOME      "\xEF\x80\x95"
 #define NP_I_LIST      "\xEF\x80\xBA"

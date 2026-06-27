@@ -217,7 +217,7 @@ void np_screen_weather(lv_obj_t* parent)
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(big, 6, 0);
 
-    g_weather_temp = np_label(big, "--", NP_F_HERO, NP_C_TEXT);
+    g_weather_temp = np_label(big, "--", NP_F_TEMP, NP_C_TEXT);
     g_weather_desc = np_label(big, "Aguardando clima", NP_F_SM, NP_C_TEXT_DIM);
     lv_label_set_long_mode(g_weather_desc, LV_LABEL_LONG_DOT);
     lv_obj_set_width(g_weather_desc, 160);

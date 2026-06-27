@@ -295,7 +295,7 @@ void render_name_panel(lv_obj_t* panel)
     lv_obj_t* badge_text = np_label(badge, "?", NP_F_3XL, NP_C_ACCENT);
     lv_obj_align(badge_text, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t* title = np_label(panel, "Como quer ser chamado?", NP_F_2XL, NP_C_TEXT);
+    lv_obj_t* title = np_label(panel, "Como quer ser chamado?", NP_F_TITLE_MD, NP_C_TEXT);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_margin_bottom(title, 8, 0);
 
@@ -539,7 +539,7 @@ void render_format_option(lv_obj_t* parent, const char* title, const char* examp
     lv_obj_add_event_cb(box, format_pick_cb, LV_EVENT_CLICKED,
         reinterpret_cast<void*>(static_cast<uintptr_t>(is_24h ? 1 : 0)));
 
-    lv_obj_t* label = np_label(box, title, NP_F_LG, active ? NP_C_ACCENT : NP_C_TEXT);
+    lv_obj_t* label = np_label(box, title, NP_F_TITLE_SM, active ? NP_C_ACCENT : NP_C_TEXT);
     lv_obj_set_style_margin_bottom(label, 3, 0);
     np_label(box, example, NP_F_XS, NP_C_TEXT_MUTED);
 }
@@ -623,7 +623,7 @@ void render_confirmation_panel(lv_obj_t* panel)
     lv_obj_t* ok = np_label(badge, LV_SYMBOL_OK, NP_F_LG, NP_C_GREEN);
     lv_obj_align(ok, LV_ALIGN_CENTER, 0, 0);
 
-    np_label(title_row, "Tudo pronto!", NP_F_2XL, NP_C_TEXT);
+    np_label(title_row, "Tudo pronto!", NP_F_TITLE_MD, NP_C_TEXT);
 
     lv_obj_t* subtitle = np_label(panel,
         "Seu NovaPanel esta configurado e pronto para iniciar.",

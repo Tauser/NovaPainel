@@ -406,7 +406,7 @@ static void build_topbar()
         LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(title_row, 8, 0);
 
-    g_topbar_title = np_label(title_row, "NovaPanel", NP_F_LG, NP_C_TEXT);
+    g_topbar_title = np_label(title_row, "NovaPanel", NP_F_TITLE_SM, NP_C_TEXT);
     g_topbar_greeting_chip = lv_obj_create(title_row);
     lv_obj_set_size(g_topbar_greeting_chip, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(g_topbar_greeting_chip, NP_C_ACCENT_BG, 0);
@@ -554,7 +554,7 @@ static void build_root()
     lv_obj_t* notif_header = np_row(g_notifications_modal);
     lv_obj_set_flex_align(notif_header,
         LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    np_label(notif_header, "Notificacoes", NP_F_LG, NP_C_TEXT);
+    np_label(notif_header, "Notificacoes", NP_F_TITLE_SM, NP_C_TEXT);
     lv_obj_t* close_btn = np_icon_btn(notif_header, NP_I_CHEV_R, NP_C_TEXT_DIM);
     lv_obj_add_event_cb(close_btn, close_notifications_cb, LV_EVENT_CLICKED, nullptr);
 

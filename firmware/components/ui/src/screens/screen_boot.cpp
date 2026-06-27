@@ -83,7 +83,7 @@ void np_screen_boot(lv_obj_t *parent)
     lv_obj_set_style_text_letter_space(badge_label, 2, 0);
     lv_obj_align(badge_label, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t *name = np_label(col, "NovaPanel", NP_F_3XL, NP_C_TEXT);
+    lv_obj_t *name = np_label(col, "NovaPanel", NP_F_TITLE_LG, NP_C_TEXT);
     lv_obj_set_style_margin_bottom(name, 6, 0);
 
     lv_obj_t *version = np_label(col, "SISTEMA EMBARCADO / V1.3",
