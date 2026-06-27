@@ -1,4 +1,0 @@
-# Managed dep for CacheStore (LittleFS, ADR-0015/0027).
-dependencies:
-  idf: ">=5.5.0"
-  joltwallet/littlefs: "*"

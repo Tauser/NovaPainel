@@ -34,3 +34,6 @@ firmware/secure_boot_signing_key.pem
 
 # Logs
 *.log
+
+# Referencia legada mantida apenas localmente
+firmware_legacy_reference/
