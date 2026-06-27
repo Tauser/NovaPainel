@@ -3,6 +3,7 @@ idf_component_register(
         "src/bootstrap_service.cpp"
         "src/setup_service.cpp"
         "src/system_service.cpp"
+        "src/notification_service.cpp"
         "src/clock_service.cpp"
         "src/market_service.cpp"
         "src/forex_service.cpp"

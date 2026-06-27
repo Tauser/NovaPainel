@@ -19,7 +19,7 @@ enum class ScreenId {
     PhotoFrame,
     Routines,
     Settings,
-    System,
+    Weather,
 };
 
 const char* to_string(ScreenId id);
@@ -82,6 +82,39 @@ struct WeatherSummary {
     bool             stale{false};
     DataSource       source{DataSource::Mock};
     uint32_t         last_update_ms{0};
+};
+
+enum class NotificationLevel {
+    Info,
+    Success,
+    Warning,
+    Danger,
+    Silent,
+};
+
+enum class NotificationCategory {
+    System,
+    Agenda,
+    Alarm,
+    Market,
+    Weather,
+    Device,
+    Network,
+};
+
+struct NotificationItem {
+    uint32_t             id{0};
+    NotificationLevel    level{NotificationLevel::Info};
+    NotificationCategory category{NotificationCategory::System};
+    std::string          title;
+    std::string          body;
+    bool                 read{false};
+    uint32_t             timestamp_ms{0};
+};
+
+struct NotificationState {
+    std::vector<NotificationItem> items{};
+    uint32_t                      unread_count{0};
 };
 
 struct SystemStatus {
@@ -149,6 +182,7 @@ struct AppState {
     CryptoSummary   crypto{};
     ForexSummary    forex{};
     WeatherSummary  weather{};
+    NotificationState notifications{};
     SystemStatus    system{};
     UserPreferences preferences{};
     OnboardingState onboarding{};

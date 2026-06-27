@@ -15,7 +15,7 @@ const char* to_string(ScreenId id) {
         case ScreenId::PhotoFrame: return "PhotoFrame";
         case ScreenId::Routines:   return "Routines";
         case ScreenId::Settings:   return "Settings";
-        case ScreenId::System:     return "System";
+        case ScreenId::Weather:    return "Weather";
     }
     return "Unknown";
 }

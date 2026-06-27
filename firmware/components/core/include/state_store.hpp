@@ -22,6 +22,8 @@ public:
     void set_crypto(const CryptoSummary& crypto);
     void set_forex(const ForexSummary& forex);
     void set_weather(const WeatherSummary& weather);
+    uint32_t push_notification(const NotificationItem& notification);
+    void mark_all_notifications_read();
     void set_system_status(const SystemStatus& status);
     void set_boot_diagnostics(const char* reset_reason, uint32_t reboot_count);
     void submit_onboarding(const OnboardingSubmission& submission);
@@ -34,8 +36,8 @@ public:
 
 private:
     EventBus& bus_;
-    mutable std::mutex mutex_;
-    AppState  state_{};
+    mutable std::recursive_mutex mutex_;
+    AppState                     state_{};
 };
 
 }  // namespace nova
