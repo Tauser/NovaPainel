@@ -2,20 +2,7 @@
 
 #if defined(ESP_PLATFORM)
 
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
 namespace nova {
-
-namespace {
-constexpr const char* kTag = "MarketService";
-constexpr uint32_t kRetryDelayMs = 5000;
-constexpr uint32_t kIdleDelayMs = 1000;
-constexpr uint32_t kTaskStackWords = 8192;
-constexpr int kTaskPriority = 4;
-}
 
 MarketService::MarketService(StateStore& store,
                              RequestOrchestrator& orchestrator,
@@ -41,30 +28,6 @@ bool MarketService::init()
     return true;
 }
 
-void MarketService::start()
-{
-    if (started_) {
-        return;
-    }
-    started_ = true;
-    BaseType_t ok = xTaskCreate(task_entry, "market_service", kTaskStackWords, this, kTaskPriority,
-                                &task_handle_);
-    if (ok != pdPASS) {
-        ESP_LOGE(kTag, "failed to create task");
-        task_handle_ = nullptr;
-        started_ = false;
-    }
-}
-
-void MarketService::tick(uint32_t)
-{
-}
-
-void MarketService::task_entry(void* arg)
-{
-    static_cast<MarketService*>(arg)->run();
-}
-
 bool MarketService::refresh(uint32_t now_ms)
 {
     CryptoSummary market{};
@@ -85,32 +48,6 @@ bool MarketService::refresh(uint32_t now_ms)
     return true;
 }
 
-void MarketService::run()
-{
-    while (true) {
-        const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
-        orchestrator_.update_clock(now_ms);
-
-        const auto state = store_.snapshot();
-        if (state.onboarding.wifi_status != WifiConnectStatus::Connected) {
-            vTaskDelay(pdMS_TO_TICKS(kIdleDelayMs));
-            continue;
-        }
-
-        if (!orchestrator_.can_request(DataDomain::MarketSummary)) {
-            vTaskDelay(pdMS_TO_TICKS(kIdleDelayMs));
-            continue;
-        }
-
-        if (!refresh(now_ms)) {
-            vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
-            continue;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
-    }
-}
-
 }  // namespace nova
 
 #else
@@ -127,8 +64,7 @@ MarketService::MarketService(StateStore& store,
 
 const char* MarketService::name() const { return "MarketService"; }
 bool MarketService::init() { return true; }
-void MarketService::start() {}
-void MarketService::tick(uint32_t) {}
+bool MarketService::refresh(uint32_t) { return false; }
 
 }  // namespace nova
 

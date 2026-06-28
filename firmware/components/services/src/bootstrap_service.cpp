@@ -56,7 +56,7 @@ void BootstrapService::finish_boot()
     if (switched_to_home_) return;
 
     store_.set_boot_state(BootState{100, BootStage::Ready});
-    const bool onboarding_needed = store_.state().onboarding.needed;
+    const bool onboarding_needed = store_.onboarding_needed();
     store_.set_screen(onboarding_needed ? ScreenId::Setup : ScreenId::Home);
     switched_to_home_ = true;
     bus_.publish(EventType::BootCompleted);

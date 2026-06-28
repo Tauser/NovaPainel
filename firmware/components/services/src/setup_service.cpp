@@ -184,7 +184,7 @@ bool SetupService::init()
 
     sub_id_ = bus_.subscribe([this](const Event& e) {
         if (e.type == EventType::OnboardingStepSubmitted) {
-            handle_submission(store_.snapshot().onboarding.pending_submission);
+            handle_submission(store_.pending_onboarding_submission());
         } else if (e.type == EventType::WifiScanRequested) {
             handle_wifi_scan_request();
         }
@@ -226,6 +226,8 @@ bool SetupService::init()
 
 void SetupService::tick(uint32_t now_ms)
 {
+    drain_async_events(now_ms);
+
     if (wifi_connect_pending_ && now_ms >= wifi_reconnect_due_ms_) {
         begin_wifi_connect();
     }
@@ -269,6 +271,21 @@ void SetupService::tick(uint32_t now_ms)
              static_cast<unsigned long>(elapsed));
     wifi_timeout_armed_ = false;
     schedule_wifi_reconnect(now_ms);
+}
+
+void SetupService::drain_async_events(uint32_t now_ms)
+{
+    if (wifi_scan_done_pending_.exchange(false)) {
+        complete_wifi_scan();
+    }
+
+    if (wifi_connected_pending_.exchange(false)) {
+        handle_wifi_connected();
+    }
+
+    if (wifi_disconnected_pending_.exchange(false)) {
+        handle_wifi_disconnected(now_ms);
+    }
 }
 
 void SetupService::handle_submission(const OnboardingSubmission& submission)
@@ -434,17 +451,22 @@ void SetupService::complete_wifi_scan()
 
 void SetupService::on_wifi_scan_done()
 {
-    complete_wifi_scan();
+    wifi_scan_done_pending_.store(true);
 }
 
 void SetupService::on_wifi_connected()
+{
+    wifi_connected_pending_.store(true);
+}
+
+void SetupService::handle_wifi_connected()
 {
     ESP_LOGI(kTag, "Wi-Fi connected (got IP)");
     wifi_retry_count_ = 0;
     wifi_connect_pending_ = false;
     wifi_timeout_armed_ = false;
     store_.set_wifi_status(WifiConnectStatus::Connected);
-    if (store_.snapshot().onboarding.step == OnboardingStep::Wifi) {
+    if (store_.onboarding_step() == OnboardingStep::Wifi) {
         store_.set_onboarding_step(OnboardingStep::TimezoneAndFormat);
     }
     esp_netif_sntp_start();
@@ -453,14 +475,18 @@ void SetupService::on_wifi_connected()
 
 void SetupService::on_wifi_disconnected()
 {
+    wifi_disconnected_pending_.store(true);
+}
+
+void SetupService::handle_wifi_disconnected(uint32_t now_ms)
+{
     if (!wifi_auto_reconnect_enabled_) {
         return;
     }
 
-    const WifiConnectStatus current = store_.snapshot().onboarding.wifi_status;
+    const WifiConnectStatus current = store_.wifi_status();
     if (current == WifiConnectStatus::Connected ||
         current == WifiConnectStatus::Connecting) {
-        const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
         schedule_wifi_reconnect(now_ms);
     }
 }

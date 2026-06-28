@@ -8,6 +8,7 @@ idf_component_register(
         "src/market_service.cpp"
         "src/forex_service.cpp"
         "src/weather_service.cpp"
+        "src/network_worker.cpp"
     INCLUDE_DIRS "include"
     REQUIRES core models cache providers esp_system esp_timer nvs_flash esp_wifi esp_event esp_netif
 )

@@ -2,13 +2,6 @@
 
 #include <cstdint>
 
-#if defined(ESP_PLATFORM)
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#else
-using TaskHandle_t = void*;
-#endif
-
 #include "cache_store.hpp"
 #include "i_forex_provider.hpp"
 #include "request_orchestrator.hpp"
@@ -17,6 +10,8 @@ using TaskHandle_t = void*;
 
 namespace nova {
 
+// Atualiza o cambio USD/BRL. Sem task propria: o NetworkWorker chama refresh()
+// serializado e por prioridade (ADR-0035, fase 2).
 class ForexService final : public Service {
 public:
     ForexService(StateStore& store,
@@ -26,20 +21,14 @@ public:
 
     const char* name() const override;
     bool init() override;
-    void start() override;
-    void tick(uint32_t now_ms) override;
 
-private:
-    static void task_entry(void* arg);
-    void run();
     bool refresh(uint32_t now_ms);
 
+private:
     StateStore&          store_;
     RequestOrchestrator& orchestrator_;
     CacheStore&          cache_;
     IForexProvider&      provider_;
-    TaskHandle_t         task_handle_{nullptr};
-    bool                 started_{false};
 };
 
 }  // namespace nova

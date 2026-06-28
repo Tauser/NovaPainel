@@ -32,22 +32,47 @@ const char* ClockService::name() const
 bool ClockService::init()
 {
     clock_ = ClockState{};
-    clock_.year = 2026;
-    clock_.month = 6;
-    clock_.day = 25;
-    clock_.hour = 12;
-    clock_.minute = 0;
-    clock_.second = 0;
-    clock_.weekday = 3;
-    clock_.synced = false;
+    apply_timezone_if_changed();
+
+    // Confia no RTC do SoC (com bateria nesta placa): se ele reteve uma hora
+    // plausivel de um NTP anterior, mostramos a hora certa IMEDIATAMENTE, sem
+    // esperar Wi-Fi/NTP. offline-first: nao bloqueia o boot esperando rede; o
+    // NTP apenas refina depois (via tick).
+    const time_t now = time(nullptr);
+    if (now >= kMinPlausibleEpoch) {
+        struct tm local{};
+        localtime_r(&now, &local);
+        clock_.year = local.tm_year + 1900;
+        clock_.month = local.tm_mon + 1;
+        clock_.day = local.tm_mday;
+        clock_.hour = local.tm_hour;
+        clock_.minute = local.tm_min;
+        clock_.second = local.tm_sec;
+        clock_.weekday = local.tm_wday;
+        clock_.synced = true;
+        ESP_LOGI(kTag, "boot time from RTC: %04d-%02d-%02d %02d:%02d (plausible)",
+                 clock_.year, clock_.month, clock_.day, clock_.hour, clock_.minute);
+    } else {
+        // Sem hora confiavel (primeiro boot / bateria morta): relogio local
+        // nao-sincronizado ate o NTP subir. Nao inventamos uma data "real".
+        clock_.year = 2026;
+        clock_.month = 1;
+        clock_.day = 1;
+        clock_.hour = 0;
+        clock_.minute = 0;
+        clock_.second = 0;
+        clock_.weekday = 4;  // 2026-01-01 = quinta
+        clock_.synced = false;
+        ESP_LOGI(kTag, "no plausible RTC time at boot; local clock until NTP");
+    }
+    last_synced_ = clock_.synced;
     store_.set_clock(clock_);
-    ESP_LOGI(kTag, "seeded mock time");
     return true;
 }
 
 void ClockService::apply_timezone_if_changed()
 {
-    const std::string wanted = store_.state().preferences.timezone;
+    const std::string wanted = store_.preferences().timezone;
     if (wanted == applied_timezone_) {
         return;
     }
