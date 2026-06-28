@@ -2,6 +2,7 @@
 # ESP32-P4-WIFI6-Touch-LCD-7B, ESP-IDF 5.5.x.
 
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 CONFIG_COMPILER_CXX_RTTI=n
 
 # Board flash/PSRAM baseline validated during Phase 0.
@@ -18,7 +19,11 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 
-# Display/LVGL baseline: avoid experimental anti-tear paths during rebring-up.
+# Display/LVGL baseline (producao): 1 framebuffer + rotacao 180 por PPA.
+# avoid_tearing NAO e usado: e incompativel com sw_rotate/PPA neste BSP, e
+# este painel EK79007 (DSI video-mode) nao gira por mirror de hardware,
+# entao a rotacao 180 precisa do PPA. O flicker observado e do backlight
+# (GPIO32), nao tearing.
 CONFIG_BSP_LCD_DPI_BUFFER_NUMS=1
 # CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR is not set
 # CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH is not set
@@ -35,3 +40,8 @@ CONFIG_LV_FONT_MONTSERRAT_32=y
 CONFIG_LV_FONT_MONTSERRAT_48=y
 
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Rede/TLS: libera os buffers grandes do TLS apos o handshake (economia de
+# RAM interna). Com as requisicoes serializadas (http_gate em http_client),
+# evita a pressao de RAM do boot que abria o circuit breaker dos providers.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y

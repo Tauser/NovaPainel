@@ -2,6 +2,7 @@
 
 #if defined(ESP_PLATFORM)
 
+#include <mutex>
 #include <utility>
 
 #include "esp_crt_bundle.h"
@@ -12,6 +13,18 @@
 namespace nova {
 
 namespace {
+
+// Serializa TODAS as requisicoes HTTP do firmware. Como cada provider passa
+// por aqui, este mutex garante no maximo 1 handshake TLS por vez. Sem ele,
+// Market+Forex+Weather abrem 3 TLS simultaneos no boot (~130 KB de RAM cada),
+// espremendo a RAM interna -> falhas -> circuit breaker abre -> "nao carrega".
+// Tambem reduz a contencao de barramento que causa o flash do DSI. A
+// serializacao por prioridade/escalonamento fica no NetworkWorker (ver ADR).
+std::mutex& http_gate()
+{
+    static std::mutex gate;
+    return gate;
+}
 
 struct HttpBody {
     std::string data;
@@ -35,6 +48,9 @@ esp_err_t http_event_handler(esp_http_client_event_t* evt)
 bool http_get(const char* tag, const char* url, std::string& body,
               int timeout_ms, int buffer_size)
 {
+    // 1 requisicao HTTP por vez em todo o firmware (ver http_gate()).
+    std::lock_guard<std::mutex> serialize(http_gate());
+
     HttpBody payload;
     esp_http_client_config_t config{};
     config.url = url;
