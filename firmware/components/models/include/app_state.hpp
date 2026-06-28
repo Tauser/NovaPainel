@@ -53,6 +53,10 @@ enum class DataSource { Live, Cache, Mock };
 struct CryptoSummary {
     double    btc_usd{0.0};
     double    btc_change_24h{0.0};
+    double    btc_open_24h{0.0};
+    double    btc_high_24h{0.0};
+    double    btc_low_24h{0.0};
+    double    btc_volume_24h{0.0};
     bool      valid{false};
     bool      stale{false};
     DataSource source{DataSource::Mock};
@@ -61,6 +65,9 @@ struct CryptoSummary {
 
 struct ForexSummary {
     double    usd_brl{0.0};
+    double    usd_brl_change_pct_24h{0.0};
+    double    usd_brl_high_24h{0.0};
+    double    usd_brl_low_24h{0.0};
     bool      usd_brl_valid{false};
     bool      usd_brl_stale{false};
     DataSource usd_brl_source{DataSource::Mock};
@@ -68,6 +75,26 @@ struct ForexSummary {
 };
 
 enum class WeatherCondition { Clear, Cloudy, Fog, Drizzle, Rain, Snow, Thunderstorm, Unknown };
+
+constexpr std::size_t kWeatherHourlySlots = 8;
+constexpr std::size_t kWeatherDailySlots = 5;
+
+struct WeatherHourlyPoint {
+    int              hour{0};
+    double           temperature_c{0.0};
+    int              precip_pct{0};
+    WeatherCondition condition{WeatherCondition::Unknown};
+    bool             valid{false};
+};
+
+struct WeatherDailyPoint {
+    int              weekday{0};
+    double           temp_min_c{0.0};
+    double           temp_max_c{0.0};
+    int              precip_pct{0};
+    WeatherCondition condition{WeatherCondition::Unknown};
+    bool             valid{false};
+};
 
 struct WeatherSummary {
     double           temperature_c{0.0};
@@ -77,7 +104,11 @@ struct WeatherSummary {
     double           uv_index{0.0};
     int              humidity_pct{0};
     double           wind_speed_kmh{0.0};
+    int              sunrise_minutes{-1};
+    int              sunset_minutes{-1};
     WeatherCondition condition{WeatherCondition::Unknown};
+    WeatherHourlyPoint hourly[kWeatherHourlySlots]{};
+    WeatherDailyPoint  daily[kWeatherDailySlots]{};
     bool             valid{false};
     bool             stale{false};
     DataSource       source{DataSource::Mock};

@@ -22,6 +22,10 @@ constexpr uint16_t kVersion = 1;
 struct MarketBlob {
     double    btc_usd;
     double    btc_change_24h;
+    double    btc_open_24h;
+    double    btc_high_24h;
+    double    btc_low_24h;
+    double    btc_volume_24h;
     bool      valid;
     bool      stale;
     DataSource source;
@@ -30,6 +34,9 @@ struct MarketBlob {
 
 struct ForexBlob {
     double    usd_brl;
+    double    usd_brl_change_pct_24h;
+    double    usd_brl_high_24h;
+    double    usd_brl_low_24h;
     bool      usd_brl_valid;
     bool      usd_brl_stale;
     DataSource usd_brl_source;
@@ -44,7 +51,11 @@ struct WeatherBlob {
     double           uv_index;
     int              humidity_pct;
     double           wind_speed_kmh;
+    int              sunrise_minutes;
+    int              sunset_minutes;
     WeatherCondition condition;
+    WeatherHourlyPoint hourly[kWeatherHourlySlots];
+    WeatherDailyPoint  daily[kWeatherDailySlots];
     bool             valid;
     bool             stale;
     DataSource       source;
@@ -167,6 +178,10 @@ bool CacheStore::load_crypto(CryptoSummary& out) const
 
     out.btc_usd = blob.btc_usd;
     out.btc_change_24h = blob.btc_change_24h;
+    out.btc_open_24h = blob.btc_open_24h;
+    out.btc_high_24h = blob.btc_high_24h;
+    out.btc_low_24h = blob.btc_low_24h;
+    out.btc_volume_24h = blob.btc_volume_24h;
     out.valid = blob.valid;
     out.stale = blob.stale;
     out.source = blob.source;
@@ -179,6 +194,10 @@ bool CacheStore::save_crypto(const CryptoSummary& market) const
     MarketBlob blob{
         market.btc_usd,
         market.btc_change_24h,
+        market.btc_open_24h,
+        market.btc_high_24h,
+        market.btc_low_24h,
+        market.btc_volume_24h,
         market.valid,
         market.stale,
         market.source,
@@ -195,6 +214,9 @@ bool CacheStore::load_forex(ForexSummary& out) const
     }
 
     out.usd_brl = blob.usd_brl;
+    out.usd_brl_change_pct_24h = blob.usd_brl_change_pct_24h;
+    out.usd_brl_high_24h = blob.usd_brl_high_24h;
+    out.usd_brl_low_24h = blob.usd_brl_low_24h;
     out.usd_brl_valid = blob.usd_brl_valid;
     out.usd_brl_stale = blob.usd_brl_stale;
     out.usd_brl_source = blob.usd_brl_source;
@@ -206,6 +228,9 @@ bool CacheStore::save_forex(const ForexSummary& market) const
 {
     ForexBlob blob{
         market.usd_brl,
+        market.usd_brl_change_pct_24h,
+        market.usd_brl_high_24h,
+        market.usd_brl_low_24h,
         market.usd_brl_valid,
         market.usd_brl_stale,
         market.usd_brl_source,
@@ -228,7 +253,11 @@ bool CacheStore::load_weather(WeatherSummary& out) const
     out.uv_index = blob.uv_index;
     out.humidity_pct = blob.humidity_pct;
     out.wind_speed_kmh = blob.wind_speed_kmh;
+    out.sunrise_minutes = blob.sunrise_minutes;
+    out.sunset_minutes = blob.sunset_minutes;
     out.condition = blob.condition;
+    std::memcpy(out.hourly, blob.hourly, sizeof(out.hourly));
+    std::memcpy(out.daily, blob.daily, sizeof(out.daily));
     out.valid = blob.valid;
     out.stale = blob.stale;
     out.source = blob.source;
@@ -246,12 +275,18 @@ bool CacheStore::save_weather(const WeatherSummary& weather) const
         weather.uv_index,
         weather.humidity_pct,
         weather.wind_speed_kmh,
+        weather.sunrise_minutes,
+        weather.sunset_minutes,
         weather.condition,
+        {},
+        {},
         weather.valid,
         weather.stale,
         weather.source,
         weather.last_update_ms,
     };
+    std::memcpy(blob.hourly, weather.hourly, sizeof(blob.hourly));
+    std::memcpy(blob.daily, weather.daily, sizeof(blob.daily));
     return save_blob(PayloadTraits<WeatherBlob>::path, blob);
 }
 
