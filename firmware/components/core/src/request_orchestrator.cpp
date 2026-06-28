@@ -48,11 +48,11 @@ const char* to_string(CircuitState state) {
 }
 
 RequestOrchestrator::RequestOrchestrator() {
-    policies_[static_cast<int>(DataDomain::Weather)]        = {true,  RequestPriority::Normal, 10u * 60u * 1000u, 6};
-    policies_[static_cast<int>(DataDomain::MarketSummary)]  = {true,  RequestPriority::Normal, 60u * 1000u,       6};
+    policies_[static_cast<int>(DataDomain::Weather)]        = {true,  RequestPriority::Normal, 30u * 60u * 1000u, 6};
+    policies_[static_cast<int>(DataDomain::MarketSummary)]  = {true,  RequestPriority::Normal, 3u * 60u * 1000u,  6};
     policies_[static_cast<int>(DataDomain::MarketRealtime)] = {false, RequestPriority::Paused, 0,                0};
     policies_[static_cast<int>(DataDomain::MarketCandles)]  = {false, RequestPriority::Low,    60u * 1000u,      6};
-    policies_[static_cast<int>(DataDomain::Forex)]          = {true,  RequestPriority::Normal, 120u * 1000u,     6};
+    policies_[static_cast<int>(DataDomain::Forex)]          = {true,  RequestPriority::Normal, 60u * 60u * 1000u, 6};
     policies_[static_cast<int>(DataDomain::Calendar)]       = {true,  RequestPriority::Low,    5u * 60u * 1000u, 0};
     policies_[static_cast<int>(DataDomain::Notifications)]  = {true,  RequestPriority::Low,    0,                0};
     policies_[static_cast<int>(DataDomain::Photos)]         = {true,  RequestPriority::Low,    0,                0};

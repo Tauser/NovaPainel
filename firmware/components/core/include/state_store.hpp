@@ -14,6 +14,15 @@ public:
 
     AppState state() const { return snapshot(); }
     AppState snapshot() const;
+    ScreenId current_screen() const;
+    ClockState clock() const;
+    WeatherSummary weather() const;
+    SystemStatus system_status() const;
+    UserPreferences preferences() const;
+    bool onboarding_needed() const;
+    OnboardingStep onboarding_step() const;
+    WifiConnectStatus wifi_status() const;
+    OnboardingSubmission pending_onboarding_submission() const;
 
     void set_screen(ScreenId screen);
     void set_boot_state(const BootState& boot);

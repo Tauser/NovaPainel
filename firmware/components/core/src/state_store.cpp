@@ -39,6 +39,51 @@ AppState StateStore::snapshot() const {
     return state_;
 }
 
+ScreenId StateStore::current_screen() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.current_screen;
+}
+
+ClockState StateStore::clock() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.clock;
+}
+
+WeatherSummary StateStore::weather() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.weather;
+}
+
+SystemStatus StateStore::system_status() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.system;
+}
+
+UserPreferences StateStore::preferences() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.preferences;
+}
+
+bool StateStore::onboarding_needed() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.onboarding.needed;
+}
+
+OnboardingStep StateStore::onboarding_step() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.onboarding.step;
+}
+
+WifiConnectStatus StateStore::wifi_status() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.onboarding.wifi_status;
+}
+
+OnboardingSubmission StateStore::pending_onboarding_submission() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return state_.onboarding.pending_submission;
+}
+
 void StateStore::set_screen(ScreenId screen) {
     {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
