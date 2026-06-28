@@ -1,8 +1,8 @@
 #include "coingecko_provider.hpp"
 
-#include <cerrno>
-#include <cstdlib>
 #include <string>
+
+#include <cJSON.h>
 
 #include "esp_log.h"
 #include "http_client.hpp"
@@ -12,42 +12,16 @@ namespace nova {
 namespace {
 constexpr const char* kTag = "CoinGeckoProvider";
 constexpr const char* kUrl =
-    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true";
+    "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin&price_change_percentage=24h";
 
-const char* find_value_start(const std::string& json, const char* key)
+bool read_number(const cJSON* object, const char* key, double& value)
 {
-    const std::string needle = std::string("\"") + key + "\"";
-    const std::size_t key_pos = json.find(needle);
-    if (key_pos == std::string::npos) {
-        return nullptr;
-    }
-
-    const std::size_t colon_pos = json.find(':', key_pos + needle.size());
-    if (colon_pos == std::string::npos) {
-        return nullptr;
-    }
-
-    const char* value = json.c_str() + colon_pos + 1;
-    while (*value == ' ' || *value == '\n' || *value == '\r' || *value == '\t') {
-        ++value;
-    }
-    return value;
-}
-
-bool parse_double(const std::string& json, const char* key, double& value)
-{
-    const char* start = find_value_start(json, key);
-    if (!start) {
+    const cJSON* item = cJSON_GetObjectItemCaseSensitive(const_cast<cJSON*>(object), key);
+    if (!cJSON_IsNumber(item)) {
+        ESP_LOGW(kTag, "JSON payload missing numeric field: %s", key);
         return false;
     }
-
-    char* end = nullptr;
-    errno = 0;
-    const double parsed = std::strtod(start, &end);
-    if (end == start || errno == ERANGE) {
-        return false;
-    }
-    value = parsed;
+    value = item->valuedouble;
     return true;
 }
 
@@ -60,23 +34,52 @@ bool CoinGeckoProvider::fetch(CryptoSummary& out, uint32_t now_ms)
         return false;
     }
 
+    cJSON* root = cJSON_ParseWithLength(body.c_str(), body.size());
+    if (!root) {
+        const char* parse_error = cJSON_GetErrorPtr();
+        if (parse_error) {
+            ESP_LOGW(kTag, "JSON parse failed near: %.120s", parse_error);
+        } else {
+            ESP_LOGW(kTag, "JSON parse failed");
+        }
+        return false;
+    }
+
+    const cJSON* first = cJSON_GetArrayItem(root, 0);
+    if (!cJSON_IsObject(first)) {
+        ESP_LOGW(kTag, "JSON payload missing market object");
+        cJSON_Delete(root);
+        return false;
+    }
+
     double btc_usd = 0.0;
     double change_24h = 0.0;
-    if (!parse_double(body, "usd", btc_usd) ||
-        !parse_double(body, "usd_24h_change", change_24h)) {
-        ESP_LOGW(kTag, "JSON parse failed");
+    double high_24h = 0.0;
+    double low_24h = 0.0;
+    double volume_24h = 0.0;
+    if (!read_number(first, "current_price", btc_usd) ||
+        !read_number(first, "price_change_percentage_24h", change_24h) ||
+        !read_number(first, "high_24h", high_24h) ||
+        !read_number(first, "low_24h", low_24h) ||
+        !read_number(first, "total_volume", volume_24h)) {
+        cJSON_Delete(root);
         return false;
     }
 
     out.btc_usd = btc_usd;
     out.btc_change_24h = change_24h;
+    out.btc_open_24h = change_24h <= -99.0 ? 0.0 : (btc_usd / (1.0 + (change_24h / 100.0)));
+    out.btc_high_24h = high_24h;
+    out.btc_low_24h = low_24h;
+    out.btc_volume_24h = volume_24h;
     out.valid = true;
     out.stale = false;
     out.source = DataSource::Live;
     out.last_update_ms = now_ms;
+    cJSON_Delete(root);
 
-    ESP_LOGI(kTag, "BTC=%.2f change=%.2f%%",
-             out.btc_usd, out.btc_change_24h);
+    ESP_LOGI(kTag, "BTC=%.2f change=%.2f%% high=%.2f low=%.2f",
+             out.btc_usd, out.btc_change_24h, out.btc_high_24h, out.btc_low_24h);
     return true;
 }
 
