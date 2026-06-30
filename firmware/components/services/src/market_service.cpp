@@ -45,7 +45,32 @@ bool MarketService::refresh(uint32_t now_ms)
     store_.set_crypto(market);
     cache_.save_crypto(market);
     orchestrator_.note_request(DataDomain::MarketSummary, now_ms, true);
+
+    // Busca OHLC na primeira vez e depois a cada kOhlcIntervalMs.
+    // Feito aqui (apos atualizar preco) para nao atrasar o pipeline principal.
+    // Se falhar, o grafico mantem o ultimo dado valido.
+    if (last_ohlc_ms_ == 0 || (now_ms - last_ohlc_ms_) >= kOhlcIntervalMs) {
+        refresh_ohlc(now_ms, pending_period_);
+    }
+
     return true;
+}
+
+bool MarketService::refresh_ohlc(uint32_t now_ms, OhlcPeriod period)
+{
+    OhlcSeries ohlc{};
+    if (!provider_.fetch_ohlc(ohlc, period, now_ms)) {
+        return false;
+    }
+    store_.set_btc_ohlc(ohlc);
+    last_ohlc_ms_ = now_ms;
+    return true;
+}
+
+void MarketService::request_ohlc_period(OhlcPeriod period)
+{
+    pending_period_ = period;
+    last_ohlc_ms_   = 0;  // forca re-fetch no proximo refresh()
 }
 
 }  // namespace nova
@@ -65,6 +90,8 @@ MarketService::MarketService(StateStore& store,
 const char* MarketService::name() const { return "MarketService"; }
 bool MarketService::init() { return true; }
 bool MarketService::refresh(uint32_t) { return false; }
+bool MarketService::refresh_ohlc(uint32_t, OhlcPeriod) { return false; }
+void MarketService::request_ohlc_period(OhlcPeriod) {}
 
 }  // namespace nova
 

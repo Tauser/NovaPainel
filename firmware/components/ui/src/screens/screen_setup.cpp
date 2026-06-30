@@ -347,7 +347,7 @@ void render_wifi_row(lv_obj_t* parent, const WifiNetwork& network, std::size_t i
     lv_obj_set_style_border_width(icon_box, 0, 0);
     lv_obj_set_style_radius(icon_box, 9, 0);
     lv_obj_set_style_pad_all(icon_box, 0, 0);
-    lv_obj_t* icon = np_label(icon_box, LV_SYMBOL_WIFI, NP_F_LG,
+    lv_obj_t* icon = np_label(icon_box, NP_I_WIFI, NP_F_ICON,
         selected ? NP_C_ACCENT : NP_C_TEXT_DIM);
     lv_obj_align(icon, LV_ALIGN_CENTER, 0, 0);
 
@@ -369,7 +369,7 @@ void render_wifi_row(lv_obj_t* parent, const WifiNetwork& network, std::size_t i
     lv_obj_set_style_border_width(check, 0, 0);
     lv_obj_set_style_radius(check, 11, 0);
     lv_obj_set_style_pad_all(check, 0, 0);
-    lv_obj_t* ok = np_label(check, LV_SYMBOL_OK, NP_F_XS, NP_C_DARK_FG);
+    lv_obj_t* ok = np_label(check, NP_I_CHECK, NP_F_ICON_XS, NP_C_DARK_FG);
     lv_obj_align(ok, LV_ALIGN_CENTER, 0, 0);
     if (!selected) {
         lv_obj_add_flag(check, LV_OBJ_FLAG_HIDDEN);
@@ -518,7 +518,7 @@ void render_timezone_option(lv_obj_t* parent, const TimezoneOption& option, std:
     lv_obj_set_style_border_width(check, 0, 0);
     lv_obj_set_style_radius(check, 10, 0);
     lv_obj_set_style_pad_all(check, 0, 0);
-    lv_obj_t* ok = np_label(check, LV_SYMBOL_OK, NP_F_XS, NP_C_DARK_FG);
+    lv_obj_t* ok = np_label(check, NP_I_CHECK, NP_F_ICON_XS, NP_C_DARK_FG);
     lv_obj_align(ok, LV_ALIGN_CENTER, 0, 0);
     if (!selected) {
         lv_obj_add_flag(check, LV_OBJ_FLAG_HIDDEN);
@@ -620,7 +620,7 @@ void render_confirmation_panel(lv_obj_t* panel)
     lv_obj_set_style_border_width(badge, 2, 0);
     lv_obj_set_style_radius(badge, 23, 0);
     lv_obj_set_style_pad_all(badge, 0, 0);
-    lv_obj_t* ok = np_label(badge, LV_SYMBOL_OK, NP_F_LG, NP_C_GREEN);
+    lv_obj_t* ok = np_label(badge, NP_I_CHECK, NP_F_ICON_SM, NP_C_GREEN);
     lv_obj_align(ok, LV_ALIGN_CENTER, 0, 0);
 
     np_label(title_row, "Tudo pronto!", NP_F_TITLE_MD, NP_C_TEXT);

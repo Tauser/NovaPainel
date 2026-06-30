@@ -61,17 +61,37 @@ void np_screen_calendar(lv_obj_t *parent)
     lv_obj_set_style_border_side(nxt, LV_BORDER_SIDE_LEFT, 0);
     lv_obj_set_style_pad_all(nxt, 14, 0);
     lv_obj_set_style_pad_left(nxt, 17, 0);
+    lv_obj_set_flex_flow(nxt, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(nxt,
+        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(nxt, 4, 0);
 
-    np_label(nxt, "Proximo evento", NP_F_XS, NP_C_TEXT_MUTED);
+    lv_obj_t *nxt_head = np_row(nxt);
+    lv_obj_set_width(nxt_head, lv_pct(100));
+    lv_obj_set_style_pad_column(nxt_head, 8, 0);
+    np_label(nxt_head, NP_I_CALENDAR, NP_F_ICON_XS, NP_C_ACCENT);
+    np_label(nxt_head, "Próximo evento", NP_F_XS_BOLD, NP_C_TEXT_MUTED);
 
     lv_obj_t *nx_row = np_row(nxt);
+    lv_obj_set_width(nx_row, lv_pct(100));
+    lv_obj_set_flex_align(nx_row,
+        LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(nx_row, 10, 0);
-    lv_obj_set_style_margin_top(nx_row, 6, 0);
-    np_label(nx_row, "15:30", NP_F_4XL, NP_C_ACCENT);
-    np_label(nx_row, "Reuniao - NoiseBot team", NP_F_MD, NP_C_TEXT);
+    lv_obj_set_style_margin_top(nx_row, 2, 0);
+    lv_obj_t *nx_time = np_label(nx_row, "15:30", NP_F_4XL, NP_C_ACCENT);
+    lv_obj_set_width(nx_time, 86);
+    lv_obj_t *nx_info = np_col(nx_row);
+    lv_obj_set_width(nx_info, 0);
+    lv_obj_set_style_flex_grow(nx_info, 1, 0);
 
-    np_label(nxt, "Sala virtual - 45 min - em 1h 12min",
+    lv_obj_t *nx_title = np_label(nx_info, "Reunião - NoiseBot team", NP_F_SM_BOLD, NP_C_TEXT);
+    lv_obj_set_width(nx_title, lv_pct(100));
+    lv_label_set_long_mode(nx_title, LV_LABEL_LONG_WRAP);
+
+    lv_obj_t *nx_meta = np_label(nxt, "Sala virtual - 45 min - em 1h 12min",
         NP_F_SM, lv_color_hex(0x5A6478));
+    lv_obj_set_width(nx_meta, lv_pct(100));
+    lv_label_set_long_mode(nx_meta, LV_LABEL_LONG_WRAP);
 
     lv_obj_t *ec = np_card(left);
     lv_obj_set_size(ec, lv_pct(100), 0);
@@ -85,11 +105,11 @@ void np_screen_calendar(lv_obj_t *parent)
     lv_obj_set_flex_align(ech,
         LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_margin_bottom(ech, 10, 0);
-    np_label(ech, "quarta-feira, 18 de junho", NP_F_XS, NP_C_TEXT_MUTED);
+    np_label(ech, "quarta-feira, 18 de junho", NP_F_XS_BOLD, NP_C_TEXT_MUTED);
     np_chip(ech, "+ Adicionar");
 
     static const AgendaItem evts[] = {
-        { "15:30", "Reuniao - NoiseBot team", "Trabalho - 45 min", 0xE8A83C },
+        { "15:30", "Reunião - NoiseBot team", "Trabalho - 45 min", 0xE8A83C },
         { "17:00", "Academia",                "Pessoal - 1h",      0x4ABB78 },
         { "19:30", "Jantar com Marina",       "Pessoal - 2h",      0x4F7ECB },
         { "21:00", "Revisar firmware v1.4",   "Projeto - 30 min",  0xB77ABB },
@@ -101,9 +121,9 @@ void np_screen_calendar(lv_obj_t *parent)
         lv_obj_set_style_border_color(row, NP_C_SEP, 0);
         lv_obj_set_style_border_width(row, 1, 0);
         lv_obj_set_style_pad_column(row, 11, 0);
-        lv_obj_set_style_pad_ver(row, 10, 0);
+        lv_obj_set_style_pad_ver(row, 9, 0);
 
-        lv_obj_t *tm = np_label(row, evts[i].time, NP_F_SM, NP_C_TEXT_MED);
+        lv_obj_t *tm = np_label(row, evts[i].time, NP_F_SM_BOLD, NP_C_TEXT_MED);
         lv_obj_set_width(tm, 40);
 
         lv_obj_t *bar = lv_obj_create(row);
@@ -116,10 +136,10 @@ void np_screen_calendar(lv_obj_t *parent)
         lv_obj_t *info = np_col(row);
         lv_obj_set_style_flex_grow(info, 1, 0);
         lv_obj_set_size(info, 0, LV_SIZE_CONTENT);
-        np_label(info, evts[i].title, NP_F_SM, NP_C_TEXT);
+        np_label(info, evts[i].title, NP_F_SM_BOLD, NP_C_TEXT);
         lv_obj_t *sub = np_label(info, evts[i].subtitle, NP_F_XS,
                                  lv_color_hex(0x5A6478));
-        lv_obj_set_style_margin_top(sub, 2, 0);
+        lv_obj_set_style_margin_top(sub, 0, 0);
 
         np_label(row, NP_I_BELL, NP_F_ICON_SM, NP_C_TEXT_MUTED);
     }
@@ -133,7 +153,10 @@ void np_screen_calendar(lv_obj_t *parent)
 
     lv_obj_t *sg = np_card(right);
     lv_obj_set_size(sg, lv_pct(100), LV_SIZE_CONTENT);
-    np_label(sg, "Resumo", NP_F_XS, NP_C_TEXT_MUTED);
+    lv_obj_t *sg_head = np_row(sg);
+    lv_obj_set_style_pad_column(sg_head, 8, 0);
+    np_label(sg_head, NP_I_LIST, NP_F_ICON_XS, NP_C_ACCENT);
+    np_label(sg_head, "Resumo", NP_F_XS_BOLD, NP_C_TEXT_MUTED);
 
     static int32_t cols[] = { LV_PCT(50), LV_PCT(50), LV_GRID_TEMPLATE_LAST };
     static int32_t rows[] = { LV_GRID_CONTENT, LV_GRID_CONTENT, LV_GRID_TEMPLATE_LAST };
@@ -158,7 +181,10 @@ void np_screen_calendar(lv_obj_t *parent)
     lv_obj_set_size(tom, lv_pct(100), 0);
     lv_obj_set_style_flex_grow(tom, 1, 0);
     lv_obj_set_flex_flow(tom, LV_FLEX_FLOW_COLUMN);
-    np_label(tom, "Amanha", NP_F_XS, NP_C_TEXT_MUTED);
+    lv_obj_t *tom_head = np_row(tom);
+    lv_obj_set_style_pad_column(tom_head, 8, 0);
+    np_label(tom_head, NP_I_CALENDAR, NP_F_ICON_XS, NP_C_ACCENT);
+    np_label(tom_head, "Amanhã", NP_F_XS_BOLD, NP_C_TEXT_MUTED);
 
     lv_obj_t *empty = lv_obj_create(tom);
     lv_obj_set_size(empty, lv_pct(100), 0);
@@ -173,8 +199,8 @@ void np_screen_calendar(lv_obj_t *parent)
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(empty, 8, 0);
     lv_obj_set_scrollbar_mode(empty, LV_SCROLLBAR_MODE_OFF);
-    np_label(empty, NP_I_LIST, NP_F_ICON, lv_color_hex(0x363C52));
-    np_label(empty, "Sem compromissos", NP_F_SM, NP_C_TEXT_MUTED);
+    np_label(empty, NP_I_LIST, NP_F_ICON_LG, lv_color_hex(0x363C52));
+    np_label(empty, "Sem compromissos", NP_F_SM_BOLD, NP_C_TEXT_MUTED);
 }
 
 }  // namespace nova

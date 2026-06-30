@@ -23,6 +23,7 @@ public:
 private:
     void drain_async_events(uint32_t now_ms);
     void handle_submission(const OnboardingSubmission& submission);
+    void save_runtime_preferences(const UserPreferences& prefs);
     void handle_wifi_scan_request();
     bool try_wifi_scan();
     void complete_wifi_scan();

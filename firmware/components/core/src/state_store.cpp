@@ -120,6 +120,19 @@ void StateStore::set_crypto(const CryptoSummary& crypto) {
     bus_.publish(EventType::MarketUpdated);
 }
 
+void StateStore::set_btc_ohlc(const OhlcSeries& ohlc) {
+    {
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
+        ohlc_ = ohlc;
+    }
+    bus_.publish(EventType::OhlcUpdated);
+}
+
+OhlcSeries StateStore::btc_ohlc() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return ohlc_;
+}
+
 void StateStore::set_forex(const ForexSummary& forex) {
     {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -240,6 +253,7 @@ void StateStore::set_preferences(const UserPreferences& preferences) {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         state_.preferences = preferences;
     }
+    bus_.publish(EventType::PreferencesChanged);
     bus_.publish(EventType::OnboardingStateChanged);
 }
 

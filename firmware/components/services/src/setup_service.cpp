@@ -25,6 +25,7 @@ constexpr const char* kKeyTimeFormat24h = "time_24h";
 constexpr const char* kKeyTheme = "theme";
 constexpr const char* kKeyWifiSsid = "wifi_ssid";
 constexpr const char* kKeyWifiPassword = "wifi_pass";
+constexpr const char* kKeyBrightness = "brightness";
 
 constexpr uint16_t kCurrentNvsSchemaVersion = 1;
 constexpr uint32_t kWifiConnectTimeoutMs = 20000;
@@ -166,6 +167,12 @@ bool SetupService::init()
     }
     prefs_.theme = static_cast<ThemeMode>(theme);
 
+    uint8_t brightness = 78;  // default 78%
+    if (schema_supported) {
+        nvs_get_u8(handle, kKeyBrightness, &brightness);
+    }
+    prefs_.brightness = static_cast<int>(brightness);
+
     std::string saved_ssid;
     std::string saved_password;
     const bool have_saved_wifi = schema_supported && onboarding_done != 0 &&
@@ -187,6 +194,8 @@ bool SetupService::init()
             handle_submission(store_.pending_onboarding_submission());
         } else if (e.type == EventType::WifiScanRequested) {
             handle_wifi_scan_request();
+        } else if (e.type == EventType::PreferencesChanged) {
+            save_runtime_preferences(store_.preferences());
         }
     });
 
@@ -365,6 +374,22 @@ void SetupService::handle_submission(const OnboardingSubmission& submission)
     }
 
     nvs_close(handle);
+}
+
+void SetupService::save_runtime_preferences(const UserPreferences& prefs)
+{
+    nvs_handle_t handle{};
+    if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
+        ESP_LOGW(kTag, "nvs_open (runtime prefs) failed");
+        return;
+    }
+    nvs_set_u8(handle, kKeyBrightness, static_cast<uint8_t>(
+        prefs.brightness < 0 ? 0 : prefs.brightness > 100 ? 100 : prefs.brightness));
+    nvs_set_u8(handle, kKeyTheme, static_cast<uint8_t>(prefs.theme));
+    nvs_set_u8(handle, kKeyTimeFormat24h, prefs.time_format_24h ? 1 : 0);
+    nvs_commit(handle);
+    nvs_close(handle);
+    ESP_LOGD(kTag, "runtime prefs saved: brightness=%d", prefs.brightness);
 }
 
 void SetupService::handle_wifi_scan_request()

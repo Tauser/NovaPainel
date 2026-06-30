@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Size: 14 px
  * Bpp: 4
- * Opts: --bpp 4 --size 14 --no-compress --stride 1 --align 1 --font Montserrat-Bold.ttf --range 32-127,160-255 --format lvgl -o lv_font_montserrat_bold_14.c
+ * Opts: --bpp 4 --size 14 --no-compress --stride 1 --align 1 --font Montserrat-Bold.ttf --range 32-127,160-255 --format lvgl -o nova_font_bold_14.c
  ******************************************************************************/
 
 #ifdef __has_include
@@ -20,11 +20,11 @@
 
 
 
-#ifndef LV_FONT_MONTSERRAT_BOLD_14
-#define LV_FONT_MONTSERRAT_BOLD_14 1
+#ifndef NOVA_FONT_BOLD_14
+#define NOVA_FONT_BOLD_14 1
 #endif
 
-#if LV_FONT_MONTSERRAT_BOLD_14
+#if NOVA_FONT_BOLD_14
 
 /*-----------------
  *    BITMAPS
@@ -1804,9 +1804,9 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
 
 /*Initialize a public general font descriptor*/
 #if LVGL_VERSION_MAJOR >= 8
-const lv_font_t lv_font_montserrat_bold_14 = {
+const lv_font_t nova_font_bold_14 = {
 #else
-lv_font_t lv_font_montserrat_bold_14 = {
+lv_font_t nova_font_bold_14 = {
 #endif
     .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt,    /*Function pointer to get glyph's data*/
     .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt,    /*Function pointer to get glyph's bitmap*/
@@ -1829,4 +1829,4 @@ lv_font_t lv_font_montserrat_bold_14 = {
 
 
 
-#endif /*#if LV_FONT_MONTSERRAT_BOLD_14*/
+#endif /*#if NOVA_FONT_BOLD_14*/

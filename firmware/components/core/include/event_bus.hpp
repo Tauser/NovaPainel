@@ -25,6 +25,8 @@ enum class EventType {
     OnboardingStepSubmitted,
     OnboardingStateChanged,
     WifiScanRequested,
+    OhlcUpdated,
+    PreferencesChanged,
 };
 
 const char* to_string(EventType type);

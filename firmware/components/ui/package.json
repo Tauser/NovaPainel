@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@fontsource/montserrat": "^5.2.8",
+    "lv_font_conv": "^1.5.3"
+  }
+}

@@ -18,6 +18,9 @@ venv/
 .env
 *.egg-info/
 
+# Tooling local de geracao de fontes LVGL
+firmware/components/ui/node_modules/
+
 # OS / editores
 .DS_Store
 .vscode/

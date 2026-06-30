@@ -19,13 +19,11 @@ struct NavItem {
 };
 
 constexpr NavItem kNavItems[] = {
-    { ScreenId::Home,      NP_I_HOME },
-    { ScreenId::Calendar,  NP_I_CALENDAR },
-    { ScreenId::Market,    NP_I_CHART },
-    { ScreenId::Devices,   NP_I_DEVICE },
-    { ScreenId::Routines,  NP_I_REFRESH },
-    { ScreenId::Weather,   NP_I_SUN },
-    { ScreenId::Focus,     NP_I_FOCUS },
+    { ScreenId::Home,      NP_I_MENU_HOME },
+    { ScreenId::Calendar,  NP_I_MENU_AGENDA },
+    { ScreenId::Market,    NP_I_MENU_MARKET },
+    { ScreenId::Focus,     NP_I_BELL },
+    { ScreenId::Weather,   NP_I_MENU_WEATHER },
 };
 
 constexpr std::size_t kNavCount = sizeof(kNavItems) / sizeof(kNavItems[0]);
@@ -38,6 +36,8 @@ static lv_obj_t *g_topbar_clock = nullptr;
 static lv_obj_t *g_topbar_greeting_chip = nullptr;
 static lv_obj_t *g_topbar_notification_badge = nullptr;
 static lv_obj_t *g_topbar_notification_badge_label = nullptr;
+static lv_obj_t *g_topbar_wifi_btn = nullptr;
+static lv_obj_t *g_topbar_wifi_icon = nullptr;
 static lv_obj_t *g_shell_col = nullptr;
 static lv_obj_t *g_menu_btn = nullptr;
 static lv_obj_t *g_menu_icon = nullptr;
@@ -48,6 +48,18 @@ static bool g_notifications_open = false;
 static bool g_menu_open = false;
 static ScreenId g_current_screen = ScreenId::Boot;
 static NotificationsOpenFn g_notifications_open_fn = nullptr;
+static NavigateRequestFn g_navigate_fn = nullptr;
+
+// Troca de tela: feedback visual imediato (np_navigate_to) + pedido ao
+// StateStore (publica ScreenChanged) para o app repintar a tela de destino
+// com o estado atual na hora. Sem requisicao de rede nova - so repintura.
+static void request_navigate(ScreenId screen)
+{
+    np_navigate_to(screen);
+    if (g_navigate_fn) {
+        g_navigate_fn(screen);
+    }
+}
 
 static const char *kWeekdaysPt[] = {
     "Domingo", "Segunda-Feira", "Terca-Feira", "Quarta-Feira",
@@ -221,14 +233,49 @@ static void refresh_clock_label()
     }
 }
 
+static void update_topbar_wifi(const AppState& state)
+{
+    if (!g_topbar_wifi_icon || !g_topbar_wifi_btn) {
+        return;
+    }
+
+    const bool connected =
+        state.onboarding.wifi_status == WifiConnectStatus::Connected &&
+        state.system.network_ready;
+    const bool scanning = state.onboarding.wifi_scan_status == WifiScanStatus::Scanning;
+    const bool failed = state.onboarding.wifi_status == WifiConnectStatus::Failed ||
+        state.onboarding.wifi_scan_status == WifiScanStatus::Failed;
+    const bool no_network_found =
+        state.onboarding.wifi_scan_status == WifiScanStatus::Done &&
+        state.onboarding.wifi_networks.empty();
+
+    const char* symbol = NP_I_WIFI_OFF;
+    lv_color_t color = NP_C_TEXT_MUTED;
+
+    if (connected) {
+        symbol = NP_I_WIFI;
+        color = NP_C_GREEN;
+    } else if (scanning) {
+        symbol = NP_I_WIFI_1;
+        color = NP_C_BLUE;
+    } else if (failed || no_network_found) {
+        symbol = NP_I_WIFI_ALERT;
+        color = NP_C_ACCENT;
+    }
+
+    set_topbar_line_if_changed(g_topbar_wifi_icon, symbol);
+    lv_obj_set_style_text_color(g_topbar_wifi_icon, color, 0);
+}
+
 static void update_dots()
 {
     for (std::size_t i = 0; i < kNavCount; ++i) {
-        if (!g_dot_items[i]) continue;
+        const auto screen_index = static_cast<std::size_t>(kNavItems[i].screen);
+        if (screen_index >= kUiScreenCount || !g_dot_items[screen_index]) continue;
         const bool active = (kNavItems[i].screen == g_current_screen);
-        lv_obj_set_width(g_dot_items[i], active ? 18 : 5);
+        lv_obj_set_width(g_dot_items[screen_index], active ? 18 : 5);
         lv_obj_set_style_bg_color(
-            g_dot_items[i], active ? NP_C_ACCENT : lv_color_hex(0x252A3C), 0);
+            g_dot_items[screen_index], active ? NP_C_ACCENT : lv_color_hex(0x252A3C), 0);
     }
 }
 
@@ -278,12 +325,12 @@ static void nav_cb(lv_event_t *e)
 {
     const ScreenId screen = static_cast<ScreenId>(
         reinterpret_cast<uintptr_t>(lv_event_get_user_data(e)));
-    np_navigate_to(screen);
+    request_navigate(screen);
 }
 
 static void gear_cb(lv_event_t *)
 {
-    np_navigate_to(ScreenId::Settings);
+    request_navigate(ScreenId::Settings);
 }
 
 static void bell_cb(lv_event_t *)
@@ -345,7 +392,7 @@ static void build_rail()
     for (std::size_t i = 0; i < kNavCount; ++i) {
         const auto screen_index = static_cast<std::size_t>(kNavItems[i].screen);
         lv_obj_t *btn = lv_button_create(np_rail);
-        lv_obj_set_size(btn, 44, 44);
+        lv_obj_set_size(btn, 50, 50);
         lv_obj_set_style_bg_color(btn, NP_C_RAIL_BG, 0);
         lv_obj_set_style_bg_color(btn, NP_C_ACCENT_BG, LV_STATE_CHECKED);
         lv_obj_set_style_border_color(btn, NP_C_BORDER, LV_STATE_CHECKED);
@@ -358,7 +405,7 @@ static void build_rail()
 
         lv_obj_t *ic = lv_label_create(btn);
         lv_label_set_text(ic, kNavItems[i].symbol);
-        lv_obj_set_style_text_font(ic, NP_F_ICON, 0);
+        lv_obj_set_style_text_font(ic, NP_F_ICON_LG, 0);
         lv_obj_set_style_text_color(ic, NP_C_TEXT_MUTED, 0);
         lv_obj_set_style_text_color(ic, NP_C_ACCENT, LV_STATE_CHECKED);
         lv_obj_align(ic, LV_ALIGN_CENTER, 0, 0);
@@ -426,7 +473,8 @@ static void build_topbar()
     g_topbar_clock = np_label(title_box, "", NP_F_XS, NP_C_TEXT_MUTED);
     lv_obj_set_style_margin_top(g_topbar_clock, -1, 0);
 
-    np_icon_btn(np_topbar, NP_I_WIFI, NP_C_GREEN);
+    g_topbar_wifi_btn = np_icon_btn(np_topbar, NP_I_WIFI_OFF, NP_C_TEXT_MUTED);
+    g_topbar_wifi_icon = lv_obj_get_child(g_topbar_wifi_btn, 0);
 
     lv_obj_t *bell = np_icon_btn(np_topbar, NP_I_BELL);
     lv_obj_add_event_cb(bell, bell_cb, LV_EVENT_CLICKED, nullptr);
@@ -475,7 +523,10 @@ static void build_dots(lv_obj_t *col)
         lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(d, 0, 0);
         lv_obj_set_style_radius(d, 3, 0);
-        g_dot_items[i] = d;
+        const auto screen_index = static_cast<std::size_t>(kNavItems[i].screen);
+        if (screen_index < kUiScreenCount) {
+            g_dot_items[screen_index] = d;
+        }
     }
 }
 
@@ -643,7 +694,7 @@ const char *np_screen_title(ScreenId screen)
         case ScreenId::Market:    return "Market";
         case ScreenId::Calendar:  return "Agenda";
         case ScreenId::Devices:   return "Casa";
-        case ScreenId::Focus:     return "Focus";
+        case ScreenId::Focus:     return "Alarmes e Timer";
         case ScreenId::PhotoFrame: return "Photo";
         case ScreenId::Routines:   return "Rotinas";
         case ScreenId::Settings:   return "Configuracoes";
@@ -678,6 +729,105 @@ void np_navigate_to(ScreenId screen)
     update_dots();
 }
 
+// ---------------------------------------------------------------------------
+// Toast overlay — aparece sobre qualquer tela via lv_layer_top()
+// ---------------------------------------------------------------------------
+
+namespace {
+
+static lv_obj_t*   g_toast       = nullptr;
+static lv_obj_t*   g_toast_dot   = nullptr;
+static lv_obj_t*   g_toast_title = nullptr;
+static lv_obj_t*   g_toast_body  = nullptr;
+static lv_timer_t* g_toast_timer = nullptr;
+
+static lv_color_t toast_level_color(NotificationLevel lvl)
+{
+    switch (lvl) {
+        case NotificationLevel::Success: return lv_color_hex(0x4CAF50);
+        case NotificationLevel::Warning: return lv_color_hex(0xF5AC37);
+        case NotificationLevel::Danger:  return lv_color_hex(0xFF5252);
+        default:                         return lv_color_hex(0x5C7CFA);  // Info / Silent
+    }
+}
+
+static void toast_dismiss_cb(lv_timer_t* t)
+{
+    lv_timer_del(t);
+    g_toast_timer = nullptr;
+    if (g_toast) lv_obj_add_flag(g_toast, LV_OBJ_FLAG_HIDDEN);
+}
+
+}  // namespace
+
+void np_show_toast(const char* title, const char* body,
+                   NotificationLevel level, uint32_t duration_ms)
+{
+    if (!g_toast) {
+        // Criado uma vez em lv_layer_top() — sempre acima de tudo.
+        g_toast = lv_obj_create(lv_layer_top());
+        lv_obj_set_size(g_toast, 500, 68);
+        lv_obj_align(g_toast, LV_ALIGN_BOTTOM_MID, 0, -72);
+        lv_obj_set_style_bg_color(g_toast, lv_color_hex(0x1A1D2C), 0);
+        lv_obj_set_style_bg_opa(g_toast, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(g_toast, lv_color_hex(0x252A3C), 0);
+        lv_obj_set_style_border_width(g_toast, 1, 0);
+        lv_obj_set_style_radius(g_toast, 14, 0);
+        lv_obj_set_style_shadow_width(g_toast, 20, 0);
+        lv_obj_set_style_shadow_color(g_toast, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_shadow_opa(g_toast, LV_OPA_50, 0);
+        lv_obj_set_style_pad_hor(g_toast, 16, 0);
+        lv_obj_set_style_pad_ver(g_toast, 0, 0);
+        lv_obj_set_scrollbar_mode(g_toast, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_clear_flag(g_toast, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(g_toast, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(g_toast,
+            LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(g_toast, 12, 0);
+
+        // Indicador de nível (bolinha colorida)
+        g_toast_dot = lv_obj_create(g_toast);
+        lv_obj_set_size(g_toast_dot, 8, 8);
+        lv_obj_set_style_radius(g_toast_dot, 4, 0);
+        lv_obj_set_style_border_width(g_toast_dot, 0, 0);
+        lv_obj_set_style_pad_all(g_toast_dot, 0, 0);
+        lv_obj_set_scrollbar_mode(g_toast_dot, LV_SCROLLBAR_MODE_OFF);
+
+        // Coluna de texto
+        lv_obj_t* col = lv_obj_create(g_toast);
+        np_obj_clear_style(col);
+        lv_obj_set_style_flex_grow(col, 1, 0);
+        lv_obj_set_size(col, 0, LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_scrollbar_mode(col, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_set_style_pad_row(col, 3, 0);
+
+        g_toast_title = np_label(col, "", NP_F_SM, NP_C_TEXT);
+        g_toast_body  = np_label(col, "", NP_F_XS, NP_C_TEXT_DIM);
+        lv_label_set_long_mode(g_toast_title, LV_LABEL_LONG_DOT);
+        lv_label_set_long_mode(g_toast_body,  LV_LABEL_LONG_DOT);
+        lv_obj_set_width(g_toast_title, 440);
+        lv_obj_set_width(g_toast_body,  440);
+    }
+
+    // Atualiza conteúdo
+    lv_obj_set_style_bg_color(g_toast_dot, toast_level_color(level), 0);
+    lv_label_set_text(g_toast_title, title ? title : "");
+    lv_label_set_text(g_toast_body,  body  ? body  : "");
+
+    // Exibe e traz para frente
+    lv_obj_clear_flag(g_toast, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(g_toast);
+
+    // (Re)inicia timer de dismissal
+    if (g_toast_timer) {
+        lv_timer_reset(g_toast_timer);
+    } else {
+        g_toast_timer = lv_timer_create(toast_dismiss_cb, duration_ms, nullptr);
+        lv_timer_set_repeat_count(g_toast_timer, 1);
+    }
+}
+
 void np_tick()
 {
     refresh_clock_label();
@@ -708,11 +858,25 @@ void np_update_shell(const AppState& state)
     }
 
     render_notifications_modal(state);
+    update_topbar_wifi(state);
 }
 
 void np_bind_notifications_open(NotificationsOpenFn fn)
 {
     g_notifications_open_fn = std::move(fn);
+}
+
+void np_bind_navigate(NavigateRequestFn fn)
+{
+    g_navigate_fn = std::move(fn);
+}
+
+void np_bind_ohlc_period(OhlcPeriodFn fn)
+{
+    // Delegado à screen_market via variável estática naquele TU.
+    // A declaração extern permite o acesso sem expor o símbolo no header.
+    extern void np_screen_market_bind_period(OhlcPeriodFn);
+    np_screen_market_bind_period(std::move(fn));
 }
 
 void np_init()

@@ -29,6 +29,8 @@ public:
     void request_boot_skip();
     void set_clock(const ClockState& clock);
     void set_crypto(const CryptoSummary& crypto);
+    void set_btc_ohlc(const OhlcSeries& ohlc);
+    OhlcSeries btc_ohlc() const;   // separate accessor - not part of snapshot()
     void set_forex(const ForexSummary& forex);
     void set_weather(const WeatherSummary& weather);
     uint32_t push_notification(const NotificationItem& notification);
@@ -47,6 +49,7 @@ private:
     EventBus& bus_;
     mutable std::recursive_mutex mutex_;
     AppState                     state_{};
+    OhlcSeries                   ohlc_{};   // kept separate so snapshot() stays small
 };
 
 }  // namespace nova

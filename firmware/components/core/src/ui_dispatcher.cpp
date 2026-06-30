@@ -22,6 +22,7 @@ bool is_ui_relevant(EventType type) {
         case EventType::ScreenChanged:
         case EventType::UiInvalidated:
         case EventType::OnboardingStateChanged:
+        case EventType::OhlcUpdated:
             return true;
         default:
             return false;
@@ -41,6 +42,7 @@ bool is_coalescible(EventType type) {
         case EventType::UiInvalidated:
         case EventType::BootStateChanged:
         case EventType::OnboardingStateChanged:
+        case EventType::OhlcUpdated:
             return true;
         default:
             return false;

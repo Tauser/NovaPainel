@@ -48,12 +48,6 @@ void np_screen_devices(lv_obj_t *)
         NP_I_DEVICE, NP_C_PURPLE);
 }
 
-void np_screen_focus(lv_obj_t *)
-{
-    build_placeholder(ScreenId::Focus, "Focus", "Tela em construcao",
-        NP_I_FOCUS, NP_C_ACCENT);
-}
-
 void np_screen_photoframe(lv_obj_t *)
 {
     build_placeholder(ScreenId::PhotoFrame, "Photo", "Tela em construcao",

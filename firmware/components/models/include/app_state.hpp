@@ -50,6 +50,35 @@ struct ClockState {
 
 enum class DataSource { Live, Cache, Mock };
 
+// ---------------------------------------------------------------------------
+// OHLC candlestick data
+// ---------------------------------------------------------------------------
+enum class OhlcPeriod : uint8_t { H1 = 0, H4 = 1, D1 = 2, W1 = 3 };
+
+// Hint used for vector::reserve() in the provider - not a hard limit.
+// 120 = enough for D1/120d, H4/84 candles, W1/52 candles.
+constexpr std::size_t kOhlcMaxCandles = 120;
+
+struct OhlcCandle {
+    int64_t ts_ms{0};
+    float   o{0.0f};
+    float   h{0.0f};
+    float   l{0.0f};
+    float   c{0.0f};
+    float   v{0.0f};
+};
+
+// Candles live in the heap (std::vector) so OhlcSeries itself is tiny (~40 B).
+// Keeping it small avoids bloating AppState snapshots and StateStore stack usage.
+struct OhlcSeries {
+    std::vector<OhlcCandle> candles;
+    OhlcPeriod  period{OhlcPeriod::D1};
+    bool        valid{false};
+    bool        stale{false};
+    DataSource  source{DataSource::Mock};
+    uint32_t    last_update_ms{0};
+};
+
 struct CryptoSummary {
     double    btc_usd{0.0};
     double    btc_change_24h{0.0};
@@ -61,6 +90,8 @@ struct CryptoSummary {
     bool      stale{false};
     DataSource source{DataSource::Mock};
     uint32_t  last_update_ms{0};
+    // OhlcSeries is NOT stored inside AppState to avoid bloating snapshot copies.
+    // It is held separately in StateStore and accessed via StateStore::btc_ohlc().
 };
 
 struct ForexSummary {
@@ -168,6 +199,7 @@ struct UserPreferences {
     double      longitude{-47.882778};
     bool        time_format_24h{true};
     ThemeMode   theme{ThemeMode::Auto};
+    int         brightness{78};   // 0-100; persiste via StateStore
 };
 
 enum class OnboardingStep {
@@ -207,16 +239,16 @@ struct OnboardingState {
 };
 
 struct AppState {
-    ScreenId        current_screen{ScreenId::Boot};
-    BootState       boot{};
-    ClockState      clock{};
-    CryptoSummary   crypto{};
-    ForexSummary    forex{};
-    WeatherSummary  weather{};
+    ScreenId          current_screen{ScreenId::Boot};
+    BootState         boot{};
+    ClockState        clock{};
+    CryptoSummary     crypto{};
+    ForexSummary      forex{};
+    WeatherSummary    weather{};
     NotificationState notifications{};
-    SystemStatus    system{};
-    UserPreferences preferences{};
-    OnboardingState onboarding{};
+    SystemStatus      system{};
+    UserPreferences   preferences{};
+    OnboardingState   onboarding{};
 };
 
 }  // namespace nova

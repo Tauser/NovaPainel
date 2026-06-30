@@ -836,3 +836,50 @@ ambíguos em upgrade ou corrupção por power loss. Do lado de rede, a heurísti
 primeiro boot, mas não sustentava reconexão estável ao longo da vida do
 dispositivo nem detectava tentativas que simplesmente penduravam sem callback
 útil em tempo razoável.
+
+## ADR-0035 - Endurecimento da camada REST: serialização global + NetworkWorker
+
+**Contexto:** hoje cada serviço de dados (Market, Forex, Weather) roda em sua
+própria task FreeRTOS e chama `http_get` de forma síncrona. O
+`RequestOrchestrator` faz bem o papel de *gatekeeper* por domínio (intervalo,
+rate-limit, circuit breaker com backoff), mas não executa nem coordena: nada
+limita a concorrência global nem usa a `RequestPriority`. No boot os três
+serviços disparam quase juntos, abrindo ~3 handshakes TLS simultâneos (~130 KB
+de RAM interna cada). A RAM interna cai a ~173 KB (visto no boot log), gerando
+falhas → circuit breaker abre → serviços "não carregam". A mesma rajada de
+barramento (SDIO/Wi-Fi + TLS) contende com a leitura do framebuffer em PSRAM
+pelo MIPI-DSI e contribui para o flash do painel.
+
+**Decisão (fase 1 - aplicada):**
+- Serialização global no ponto único `http_get` (`utils/http_client.cpp`):
+  um `std::mutex` (`http_gate`) garante no máximo **1 requisição HTTP/TLS por
+  vez** em todo o firmware. Elimina os TLS simultâneos do boot, a pressão de
+  RAM e parte da contenção de barramento, sem reescrever o modelo de tasks.
+- `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y`: libera os buffers grandes do TLS após o
+  handshake, reduzindo o pico de RAM interna por conexão.
+
+**Decisão (fase 2 - aplicada):** introduzido o `NetworkWorker`
+(`components/services/network_worker.{hpp,cpp}`), uma única task que centraliza
+a execução. Os serviços (Market/Forex/Weather) deixaram de ter task própria;
+agora só expõem `init()` (carga de cache) + `refresh()` público, e o `app_main`
+registra cada um como *fetcher* `{DataDomain, refresh}`. O worker, em laço
+único: atualiza o relógio do orquestrador, checa Wi-Fi, e entre os domínios
+"due" (`can_request`) executa **o de maior prioridade** (menor ordinal de
+`RequestPriority`; empate pela ordem de registro), serializado, com gap de
+~400 ms entre buscas → **escalonamento natural** no boot (Market → Forex →
+Weather, um de cada vez, sem TLS simultâneo). Mantém a regra "todo request
+passa pelo RequestOrchestrator".
+
+**Keep-alive / reuso de sessão TLS: descartado (por ora).** Com os intervalos
+de produção (BTC 3 min, Dólar 60 min, Clima 30 min - ver políticas no
+`RequestOrchestrator`), conexão keep-alive não se sustenta: o servidor fecha a
+conexão ociosa em segundos, então o handshake refaz de qualquer forma. O ganho
+de RAM por conexão já vem do `CONFIG_MBEDTLS_DYNAMIC_BUFFER`. Reavaliar só se
+algum domínio voltar a ter intervalo curto (ex.: `MarketRealtime`/`focused`).
+
+**Motivo:** a fase 1 resolve o sintoma crítico (serviços não carregando por
+contenção de RAM/rede no boot) com risco mínimo e sem mudança estrutural. A
+fase 2 entrega o desenho sustentável pedido pelo AGENTS.md (escalabilidade,
+robustez, manutenção): concorrência controlada, prioridade real e menos custo
+de TLS por ciclo. Separar em duas fases permite validar a serialização em
+campo antes do refactor das tasks.

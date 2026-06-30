@@ -28,6 +28,8 @@ const char* to_string(EventType type) {
         case EventType::OnboardingStepSubmitted: return "OnboardingStepSubmitted";
         case EventType::OnboardingStateChanged:  return "OnboardingStateChanged";
         case EventType::WifiScanRequested:       return "WifiScanRequested";
+        case EventType::OhlcUpdated:             return "OhlcUpdated";
+        case EventType::PreferencesChanged:      return "PreferencesChanged";
     }
     return "Unknown";
 }
