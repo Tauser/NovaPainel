@@ -125,7 +125,7 @@ int main() {
         nova::ScreenId::Home, "Dup", 2u, build_stub, update_stub, nullptr, nullptr}));
 
     const nova::BootViewModel boot_vm = nova::make_boot_view_model(state_store.snapshot());
-    assert(std::string(boot_vm.headline) == "Tentando iniciar display");
+    assert(std::string(boot_vm.headline) == "Display pronto");
     system.display_ready = true;
     state_store.set_system(system);
     const nova::HomeViewModel home_vm = nova::make_home_view_model(state_store.snapshot());

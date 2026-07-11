@@ -66,6 +66,17 @@ cat > "$SHIM/esp_timer.h" <<'EOF'
 extern "C" int64_t esp_timer_get_time(void);
 EOF
 
+mkdir -p "$SHIM/freertos"
+cat > "$SHIM/freertos/FreeRTOS.h" <<'EOF'
+#pragma once
+#define pdMS_TO_TICKS(ms) (ms)
+EOF
+
+cat > "$SHIM/freertos/task.h" <<'EOF'
+#pragma once
+extern "C" void vTaskDelay(int);
+EOF
+
 INCLUDES=("-I$SHIM")
 for include_dir in "$FIRMWARE"/components/*/include; do
   [ -d "$include_dir" ] && INCLUDES+=("-I$include_dir")

@@ -5,7 +5,7 @@
 namespace nova {
 
 BootViewModel make_boot_view_model(const AppState& state) {
-    if (state.system.display_ready) {
+    if (state.ui.boot_complete || state.system.display_ready) {
         return BootViewModel{
             strings_ptbr::kBootHeadlineReady,
             strings_ptbr::kBootDetailReady,

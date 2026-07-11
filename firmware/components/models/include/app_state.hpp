@@ -54,6 +54,9 @@ struct SystemState : DataStatus {
 struct UiState {
     ScreenId active_screen{ScreenId::Boot};
     bool shell_ready{false};
+    bool boot_complete{false};
+    bool display_breadcrumb{false};
+    uint32_t display_retry_count{0};
 };
 
 struct AppState {

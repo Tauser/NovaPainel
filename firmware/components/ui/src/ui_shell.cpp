@@ -97,19 +97,19 @@ void UiShell::build_shell() {
         lv_obj_center(label);
     }
 
-    lv_obj_t* topbar = lv_obj_create(root_);
-    lv_obj_set_pos(topbar, ui_theme::kRailWidth, 0);
-    lv_obj_set_size(topbar, ui_theme::kScreenWidth - ui_theme::kRailWidth, ui_theme::kTopbarHeight);
-    lv_obj_set_style_bg_color(topbar, ui_theme::color_panel_alt(), 0);
-    lv_obj_set_style_border_width(topbar, 0, 0);
-    lv_obj_set_style_pad_all(topbar, 16, 0);
+    topbar_ = lv_obj_create(root_);
+    lv_obj_set_pos(topbar_, ui_theme::kRailWidth, 0);
+    lv_obj_set_size(topbar_, ui_theme::kScreenWidth - ui_theme::kRailWidth, ui_theme::kTopbarHeight);
+    lv_obj_set_style_bg_color(topbar_, ui_theme::color_panel_alt(), 0);
+    lv_obj_set_style_border_width(topbar_, 0, 0);
+    lv_obj_set_style_pad_all(topbar_, 16, 0);
 
-    topbar_title_ = lv_label_create(topbar);
+    topbar_title_ = lv_label_create(topbar_);
     lv_obj_set_style_text_font(topbar_title_, ui_theme::font_body(), 0);
     lv_obj_set_style_text_color(topbar_title_, ui_theme::color_text(), 0);
     lv_obj_align(topbar_title_, LV_ALIGN_LEFT_MID, 0, 0);
 
-    toast_label_ = lv_label_create(topbar);
+    toast_label_ = lv_label_create(topbar_);
     lv_obj_set_style_text_font(toast_label_, ui_theme::font_small(), 0);
     lv_obj_set_style_text_color(toast_label_, ui_theme::color_muted(), 0);
     lv_obj_align(toast_label_, LV_ALIGN_RIGHT_MID, 0, 0);
@@ -124,18 +124,18 @@ void UiShell::build_shell() {
     lv_obj_set_style_border_width(content_, 0, 0);
     lv_obj_set_style_pad_all(content_, 0, 0);
 
-    lv_obj_t* dots_row = lv_obj_create(root_);
-    lv_obj_set_pos(dots_row, ui_theme::kRailWidth, ui_theme::kScreenHeight - 24);
-    lv_obj_set_size(dots_row, ui_theme::kScreenWidth - ui_theme::kRailWidth, 24);
-    lv_obj_set_style_bg_opa(dots_row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(dots_row, 0, 0);
-    lv_obj_set_style_pad_all(dots_row, 0, 0);
-    lv_obj_set_flex_flow(dots_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(dots_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(dots_row, 6, 0);
+    dots_row_ = lv_obj_create(root_);
+    lv_obj_set_pos(dots_row_, ui_theme::kRailWidth, ui_theme::kScreenHeight - 24);
+    lv_obj_set_size(dots_row_, ui_theme::kScreenWidth - ui_theme::kRailWidth, 24);
+    lv_obj_set_style_bg_opa(dots_row_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dots_row_, 0, 0);
+    lv_obj_set_style_pad_all(dots_row_, 0, 0);
+    lv_obj_set_flex_flow(dots_row_, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(dots_row_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(dots_row_, 6, 0);
 
     for (std::size_t index = 0; index < screen_registry_.size(); ++index) {
-        dots_[index] = lv_obj_create(dots_row);
+        dots_[index] = lv_obj_create(dots_row_);
         lv_obj_set_size(dots_[index], 8, 8);
         lv_obj_set_style_radius(dots_[index], 4, 0);
         lv_obj_set_style_border_width(dots_[index], 0, 0);
@@ -202,10 +202,14 @@ void UiShell::update_dots(ScreenId active_screen) {
 void UiShell::set_boot_mode(bool boot_mode) {
     if (boot_mode) {
         lv_obj_add_flag(rail_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(topbar_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(dots_row_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(content_, 0, 0);
         lv_obj_set_size(content_, ui_theme::kScreenWidth, ui_theme::kScreenHeight);
     } else {
         lv_obj_clear_flag(rail_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(topbar_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(dots_row_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(content_, ui_theme::kRailWidth, ui_theme::kTopbarHeight);
         lv_obj_set_size(content_,
                         ui_theme::kScreenWidth - ui_theme::kRailWidth,

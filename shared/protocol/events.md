@@ -6,6 +6,7 @@ pelo `UiDispatcher` para a futura `lvgl_task` (ADR-0007).
 
 | Evento           | Quem publica            | Significado                                  | Relevante p/ UI |
 |------------------|-------------------------|----------------------------------------------|:---------------:|
+| `ScreenChanged`  | StateStore              | Tela ativa mudou                             | sim             |
 | `ClockChanged`   | StateStore              | Snapshot de relógio mudou                    | sim             |
 | `MarketChanged`  | StateStore              | Snapshot de mercado/câmbio mudou             | sim             |
 | `WeatherChanged` | StateStore              | Snapshot de clima mudou                      | sim             |

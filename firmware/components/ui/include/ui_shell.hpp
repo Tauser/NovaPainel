@@ -44,8 +44,10 @@ private:
     ScreenId active_screen_{ScreenId::Boot};
     lv_obj_t* root_{nullptr};
     lv_obj_t* rail_{nullptr};
+    lv_obj_t* topbar_{nullptr};
     lv_obj_t* topbar_title_{nullptr};
     lv_obj_t* content_{nullptr};
+    lv_obj_t* dots_row_{nullptr};
     lv_obj_t* toast_label_{nullptr};
     std::array<lv_obj_t*, 12> dots_{};
     std::array<NavTarget, 12> nav_targets_{};

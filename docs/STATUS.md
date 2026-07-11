@@ -95,6 +95,9 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `UiShell` que itera o `ScreenRegistry`.
 - Telas `Boot`, `Home` e um placeholder de navegação foram registradas; o
   shell publica navegação via `StateStore`/`EventType::ScreenChanged`.
+- `app_main` agora entra em loop de boot/UI com splash curto, transição
+  automática de Boot→Home e retry de display com backoff, deixando o
+  breadcrumb no `UiState` enquanto a persistência em NVS ainda não existe.
 - View-models puros de Boot/Home foram adicionados ao host-check com cobertura
   nativa.
 - `sdkconfig.defaults` passou a habilitar as fontes LVGL usadas pelo shell.

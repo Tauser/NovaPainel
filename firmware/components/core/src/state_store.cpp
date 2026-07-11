@@ -78,6 +78,9 @@ void StateStore::navigate_to(ScreenId screen_id) {
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         state_.ui.active_screen = screen_id;
+        if (screen_id != ScreenId::Boot) {
+            state_.ui.boot_complete = true;
+        }
     }
     event_bus_.publish(Event{EventType::ScreenChanged, static_cast<int32_t>(screen_id)});
 }
