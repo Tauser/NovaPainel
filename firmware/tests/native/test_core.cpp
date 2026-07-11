@@ -1,6 +1,7 @@
 #include "action_queue.hpp"
 #include "app_state.hpp"
 #include "event_bus.hpp"
+#include "http_client.hpp"
 #include "mock_board.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
@@ -74,6 +75,11 @@ int main() {
     assert(orchestrator.mark_started(nova::RequestDomain::Weather, 10).ok());
     assert(!orchestrator.can_start(nova::RequestDomain::Weather, 500));
     assert(orchestrator.can_start(nova::RequestDomain::Weather, 1010));
+
+    nova::HttpClient http_client;
+    const auto too_large = http_client.get("https://example.invalid/data", nova::kHttpBodyCapBytes + 1);
+    assert(!too_large.ok());
+    assert(too_large.status().code() == nova::StatusCode::Truncated);
 
     nova::MockBoard board;
     const nova::BoardStatus status = board.bring_up();

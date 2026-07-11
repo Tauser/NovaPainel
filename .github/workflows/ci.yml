@@ -13,3 +13,5 @@ jobs:
         run: bash tools/scripts/host_check.sh --tests
       - name: Repository hygiene
         run: bash tools/scripts/ci_hygiene.sh
+      - name: Architecture rules
+        run: bash tools/scripts/architecture_check.sh

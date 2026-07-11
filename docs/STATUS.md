@@ -63,6 +63,8 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   MockBoard e ScreenRegistry.
 - `idf.py build` passou localmente para `esp32p4` com ESP-IDF v5.5.4.
 - Tabela A/B fixada em `firmware/partitions.csv` e registrada no ADR-0016.
+- Gate `architecture_check.sh` adicionado para validar `app_main < 300` e
+  dependências CMake/include da Fase 1 no CI.
 
 ## Dívidas conhecidas / riscos abertos
 

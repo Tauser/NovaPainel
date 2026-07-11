@@ -6,6 +6,9 @@
   pode syntax-checkar `main/app_main.cpp` com `--app`.
 - `ci_hygiene.sh` - bloqueia artefatos gerados, arquivos grandes fora de
   `reference/` e padrões básicos de segredo em conteúdo rastreado.
+- `architecture_check.sh` - valida regras estruturais da Fase 1: `app_main`
+  abaixo de 300 linhas e dependências CMake/include sem atalhos entre UI,
+  providers, board e core.
 - `idf_env.ps1` - ativa o ambiente ESP-IDF v5.5.4 (PowerShell) e entra em
   `firmware/`. Precisa ser dot-sourced: `. tools\scripts\idf_env.ps1`.
   Depois disso, `idf.py build` / `idf.py -p COM8 flash` / `esptool.py`
