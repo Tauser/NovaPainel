@@ -11,18 +11,18 @@ UiDispatcher::UiDispatcher(EventBus& event_bus) {
 }
 
 void UiDispatcher::process_pending(RenderFn render) {
-    if (pending_mask_ == 0) {
+    const uint32_t pending = pending_mask_.exchange(0);
+    if (pending == 0) {
         return;
     }
     if (render != nullptr) {
         render();
     }
-    pending_mask_ = 0;
 }
 
 void UiDispatcher::on_event(const Event& event, void* context) {
     auto* dispatcher = static_cast<UiDispatcher*>(context);
-    dispatcher->pending_mask_ |= mask_for(event.type);
+    dispatcher->pending_mask_.fetch_or(mask_for(event.type));
 }
 
 uint32_t UiDispatcher::mask_for(EventType type) {

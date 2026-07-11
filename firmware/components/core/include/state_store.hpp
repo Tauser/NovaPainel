@@ -3,17 +3,19 @@
 #include "app_state.hpp"
 #include "event_bus.hpp"
 
+#include <mutex>
+
 namespace nova {
 
 class StateStore {
 public:
     explicit StateStore(EventBus& event_bus);
 
-    AppState snapshot() const { return state_; }
-    ClockState clock() const { return state_.clock; }
-    MarketState market() const { return state_.market; }
-    WeatherState weather() const { return state_.weather; }
-    SystemState system() const { return state_.system; }
+    AppState snapshot() const;
+    ClockState clock() const;
+    MarketState market() const;
+    WeatherState weather() const;
+    SystemState system() const;
 
     void set_clock(ClockState clock);
     void set_market(MarketState market);
@@ -23,6 +25,9 @@ public:
 
 private:
     EventBus& event_bus_;
+    // Shared by main_loop and future net_worker/service tasks. All access goes
+    // through state_mutex_ so EventBus remains signal-only and data stays here.
+    mutable std::mutex state_mutex_{};
     AppState state_{};
 };
 

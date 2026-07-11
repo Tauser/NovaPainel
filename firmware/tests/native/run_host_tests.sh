@@ -9,7 +9,19 @@ BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/novapanel-native-tests.XXXXXX")"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
 CXX="${CXX:-g++}"
+SHIM_DIR="$BUILD_DIR/shim"
+mkdir -p "$SHIM_DIR"
+
+cat > "$SHIM_DIR/esp_log.h" <<'EOF'
+#pragma once
+#define ESP_LOGD(...) do {} while (0)
+#define ESP_LOGI(...) do {} while (0)
+#define ESP_LOGW(...) do {} while (0)
+#define ESP_LOGE(...) do {} while (0)
+EOF
+
 INCLUDES=()
+INCLUDES+=("-I$SHIM_DIR")
 for include_dir in "$FIRMWARE"/components/*/include; do
   [ -d "$include_dir" ] && INCLUDES+=("-I$include_dir")
 done

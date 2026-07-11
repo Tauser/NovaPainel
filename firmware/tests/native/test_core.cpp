@@ -57,6 +57,8 @@ int main() {
     dispatcher.process_pending(&count_render);
     assert(renders == 1);
     assert(dispatcher.pending_mask() == 0);
+    state_store.set_action_queue_overflows(4);
+    assert(dispatcher.pending_mask() != 0);
 
     nova::ActionQueue queue;
     for (int i = 0; i < 16; ++i) {
@@ -67,6 +69,8 @@ int main() {
     queue.drain(&count_action);
     assert(drained_actions == 16);
     assert(queue.size() == 0);
+    state_store.set_action_queue_overflows(queue.overflow_count());
+    assert(state_store.system().action_queue_overflows == 1);
 
     nova::RequestOrchestrator orchestrator;
     assert(orchestrator.configure(nova::RequestPolicy{

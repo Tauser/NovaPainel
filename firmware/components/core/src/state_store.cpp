@@ -4,28 +4,68 @@ namespace nova {
 
 StateStore::StateStore(EventBus& event_bus) : event_bus_(event_bus) {}
 
+AppState StateStore::snapshot() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_;
+}
+
+ClockState StateStore::clock() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.clock;
+}
+
+MarketState StateStore::market() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.market;
+}
+
+WeatherState StateStore::weather() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.weather;
+}
+
+SystemState StateStore::system() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.system;
+}
+
 void StateStore::set_clock(ClockState clock) {
-    state_.clock = clock;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.clock = clock;
+    }
     event_bus_.publish(Event{EventType::ClockChanged, 0});
 }
 
 void StateStore::set_market(MarketState market) {
-    state_.market = market;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.market = market;
+    }
     event_bus_.publish(Event{EventType::MarketChanged, 0});
 }
 
 void StateStore::set_weather(WeatherState weather) {
-    state_.weather = weather;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.weather = weather;
+    }
     event_bus_.publish(Event{EventType::WeatherChanged, 0});
 }
 
 void StateStore::set_system(SystemState system) {
-    state_.system = system;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.system = system;
+    }
     event_bus_.publish(Event{EventType::SystemChanged, 0});
 }
 
 void StateStore::set_action_queue_overflows(uint32_t overflow_count) {
-    state_.system.action_queue_overflows = overflow_count;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.system.action_queue_overflows = overflow_count;
+    }
     event_bus_.publish(Event{EventType::SystemChanged, static_cast<int32_t>(overflow_count)});
 }
 

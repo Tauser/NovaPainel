@@ -67,6 +67,9 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   dependências CMake/include da Fase 1 no CI.
 - `RequestOrchestrator` cobre políticas default do `RESOURCE-BUDGET`, gap
   global de 400 ms, rate limit por minuto e circuit breaker.
+- `core/` declara ownership/sincronização no código: `ActionQueue` protegido
+  por mutex com log de overflow, `UiDispatcher` com máscara atômica e
+  `StateStore` com acesso sincronizado.
 
 ## Dívidas conhecidas / riscos abertos
 
