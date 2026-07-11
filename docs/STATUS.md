@@ -13,7 +13,7 @@
 | Item | Estado | Desde |
 |---|---|---|
 | Baseline vigente | **v4 (reconstrução total)** | 2026-07-02 |
-| Fase atual | **Fase 1 — Esqueleto arquitetural + board/ + CI host** | 2026-07-11 |
+| Fase atual | **Fase 2 — Boot, display e shell de UI registrável** | 2026-07-11 |
 | Firmware ativo | esqueleto v4 criado em `firmware/` (Fase 1) | 2026-07-11 |
 | Hardware | validado (herdado da Fase 0 do baseline v3) | 2026 |
 | Build PROD validado em bancada | não | — |
@@ -24,8 +24,8 @@
 
 ```text
 Fase 0  - Preparação do repositório e tooling            [concluída em 2026-07-11]
-Fase 1  - Esqueleto arquitetural + board/ + CI host      [em andamento]
-Fase 2  - Boot, display, shell de UI registrável         [pendente]
+Fase 1  - Esqueleto arquitetural + board/ + CI host      [concluída em 2026-07-11]
+Fase 2  - Boot, display, shell de UI registrável         [em andamento]
 Fase 3  - Conectividade, tempo e onboarding              [pendente]
 Fase 4  - Dados reais, cache offline e degradação        [pendente]
 Fase 5  - Telas funcionais do MVP                        [pendente]
@@ -54,7 +54,7 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `https://github.com/Tauser/NovaPainel/actions/runs/29149942477`.
 - Skills versionadas e `.gitignore` atualizados para o layout v4.
 
-## Evidência parcial da Fase 1
+## Evidência de encerramento da Fase 1
 
 - Esqueleto ESP-IDF v4 criado em `firmware/` com componentes `core`,
   `models`, `utils`, `board`, `providers` e `ui`.
@@ -70,8 +70,15 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - `core/` declara ownership/sincronização no código: `ActionQueue` protegido
   por mutex com log de overflow, `UiDispatcher` com máscara atômica e
   `StateStore` com acesso sincronizado.
+- `app_main.cpp` tem 46 linhas, abaixo do limite de 300 linhas da fase.
+- CI Linux passou para os commits de fechamento da fase:
+  `https://github.com/Tauser/NovaPainel/actions/runs/29152773320`,
+  `https://github.com/Tauser/NovaPainel/actions/runs/29158721839`,
+  `https://github.com/Tauser/NovaPainel/actions/runs/29158876630` e
+  `https://github.com/Tauser/NovaPainel/actions/runs/29159062385`.
 
 ## Dívidas conhecidas / riscos abertos
 
-- Fase 1 ainda não possui validação de display real, rede real ou build PROD.
+- Fase 2 ainda não possui validação de display real, shell UI registrável ou
+  boot resiliente em bancada.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
