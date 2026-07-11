@@ -1,0 +1,15 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host check and native tests
+        run: bash tools/scripts/host_check.sh --tests
+      - name: Repository hygiene
+        run: bash tools/scripts/ci_hygiene.sh

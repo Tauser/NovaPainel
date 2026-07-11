@@ -47,5 +47,7 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 
 ## Dívidas conhecidas / riscos abertos
 
-- Reescrever `host_check.sh` em bash portátil e ativar o CI Linux da Fase 0.
+- Workflow de CI criado; primeira execução Linux ainda depende do próximo push.
+- `host_check.sh` passou no Git Bash local; validar em Linux antes de fechar a
+  Fase 0.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.

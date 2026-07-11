@@ -28,7 +28,8 @@ Read these before making changes:
 - Gate outbound requests through `RequestOrchestrator` before provider calls.
 - Keep providers as adapters behind interfaces; services depend on interfaces, not concrete API clients.
 - Use `Result<T>` / `Status`; do not add exceptions as control flow.
-- Treat `firmware/partitions.csv` and hardware flags as preliminary until Fase 0 validates real hardware.
+- Treat `firmware/partitions.csv` and hardware flags as preliminary until Fase 1
+  fixes them from the hardware contract.
 
 ## Normal workflow
 
@@ -46,6 +47,8 @@ Read these before making changes:
 
 - ESP-IDF: `v5.5.4`
 - Target: `esp32p4`
-- Main project dir for IDF commands: `firmware/`
-- Current closed phase: Fase 2, firmware core with mocks
-- Next hardware-heavy work: Fase 0 / Fase 3 risk gates and board/BSP validation
+- Main project dir for IDF commands: `firmware/` (created in Fase 1).
+- Current phase: Fase 0 — repository and tooling preparation.
+- Current firmware: none. The v3 trees under `reference/` are read-only.
+- Next implementation phase: Fase 1, architectural skeleton plus `board/` and
+  host CI.

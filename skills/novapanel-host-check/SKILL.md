@@ -12,15 +12,19 @@ Use this as the fast C++ pre-flight.
 From repo root:
 
 ```bash
-bash tools/scripts/host_check.sh --app
+bash tools/scripts/host_check.sh --tests
 ```
 
-Omit `--app` only when you intentionally want to skip `firmware/main/app_main.cpp`.
+Use `--app` to add a syntax check for `firmware/main/app_main.cpp`.
+During Fase 0, when `firmware/` does not exist yet, the command passes after
+reporting that there is no active firmware; this validates the portable gate,
+not firmware code.
 
 ## Interpretation
 
-- `OK` means the source compiled against host shims.
-- `FAIL` prints the compiler error below the file.
+- `OK` means a source listed in `firmware/tests/host_sources.txt` compiled
+  against the host shims.
+- `FAIL` identifies the missing or invalid source.
 - Fix source/header issues; do not edit generated shim headers.
 
 ## Common failures

@@ -1,8 +1,11 @@
 # tools/scripts
 
-- `host_check.sh` - compila core/models/services/providers/utils (e
-  opcionalmente `main/app_main.cpp` com `--app`) no host via g++, sem
-  ESP-IDF. Rodar depois de qualquer mudança nesses diretórios.
+- `host_check.sh` - gate Bash portátil. Na Fase 0 valida o tooling sem
+  firmware ativo; a partir da Fase 1 compila as fontes listadas em
+  `firmware/tests/host_sources.txt`, executa o runner nativo com `--tests` e
+  pode syntax-checkar `main/app_main.cpp` com `--app`.
+- `ci_hygiene.sh` - bloqueia artefatos gerados, arquivos grandes fora de
+  `reference/` e padrões básicos de segredo em conteúdo rastreado.
 - `idf_env.ps1` - ativa o ambiente ESP-IDF v5.5.4 (PowerShell) e entra em
   `firmware/`. Precisa ser dot-sourced: `. tools\scripts\idf_env.ps1`.
   Depois disso, `idf.py build` / `idf.py -p COM8 flash` / `esptool.py`
