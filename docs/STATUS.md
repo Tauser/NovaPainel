@@ -79,6 +79,27 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 
 ## Dívidas conhecidas / riscos abertos
 
-- Fase 2 ainda não possui validação de display real, shell UI registrável ou
-  boot resiliente em bancada.
+- Fase 2 ainda não possui validação de display real nem boot resiliente em
+  bancada com retry+breadcrumb persistido.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
+- Shell da Fase 2 ainda não cobre teclado compartilhado nem toasts reais de
+  notificação; existe apenas a estrutura comum no `UiShell`.
+
+## Evidência parcial da Fase 2
+
+- `board/WaveshareBoard` agora usa buffer parcial com `double_buffer=true`,
+  `sw_rotate=true` e rotação 180° via BSP, alinhado às receitas de
+  `RESOURCE-BUDGET.md`.
+- `ui/` agora expõe `ScreenSpec` no padrão registrável do baseline v4
+  (`id/title/invalidation_mask/build/update/on_enter/on_leave`) e um
+  `UiShell` que itera o `ScreenRegistry`.
+- Telas `Boot`, `Home` e um placeholder de navegação foram registradas; o
+  shell publica navegação via `StateStore`/`EventType::ScreenChanged`.
+- View-models puros de Boot/Home foram adicionados ao host-check com cobertura
+  nativa.
+- `sdkconfig.defaults` passou a habilitar as fontes LVGL usadas pelo shell.
+- Validações verdes no tree local após o avanço:
+  `tools/scripts/host_check.sh --app --tests`,
+  `tools/scripts/ci_hygiene.sh`,
+  `tools/scripts/architecture_check.sh`,
+  `idf.py build`.

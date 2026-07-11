@@ -41,7 +41,13 @@ fi
 CXX="${CXX:-g++}"
 STD="${CXXSTD:-c++17}"
 MANIFEST="$FIRMWARE/tests/host_sources.txt"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/novapanel-host-check.XXXXXX")"
+if command -v mktemp >/dev/null 2>&1; then
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/novapanel-host-check.XXXXXX")"
+else
+  WORK="${TMPDIR:-/tmp}/novapanel-host-check.$$"
+  rm -rf "$WORK"
+  mkdir -p "$WORK"
+fi
 trap 'rm -rf "$WORK"' EXIT
 SHIM="$WORK/shim"
 mkdir -p "$SHIM"

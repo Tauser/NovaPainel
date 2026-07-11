@@ -5,6 +5,14 @@
 
 namespace nova {
 
+enum class ScreenId : uint8_t {
+    Boot = 0,
+    Home = 1,
+    Placeholder = 2,
+};
+
+const char* to_string(ScreenId screen_id);
+
 enum class DataSource : uint8_t {
     None,
     Live,
@@ -43,11 +51,17 @@ struct SystemState : DataStatus {
     uint32_t action_queue_overflows{0};
 };
 
+struct UiState {
+    ScreenId active_screen{ScreenId::Boot};
+    bool shell_ready{false};
+};
+
 struct AppState {
     ClockState clock{};
     MarketState market{};
     WeatherState weather{};
     SystemState system{};
+    UiState ui{};
 };
 
 }  // namespace nova

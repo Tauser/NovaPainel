@@ -6,6 +6,8 @@
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "state_store.hpp"
+#include "boot_view_model.hpp"
+#include "home_view_model.hpp"
 #include "ui_dispatcher.hpp"
 
 #include <cassert>
@@ -50,6 +52,8 @@ int main() {
     assert(counter.count == 1);
     assert(state_store.system().valid);
     assert(std::string(nova::to_string(state_store.system().source)) == "mock");
+    state_store.navigate_to(nova::ScreenId::Home);
+    assert(state_store.ui().active_screen == nova::ScreenId::Home);
 
     nova::UiDispatcher dispatcher(event_bus);
     state_store.set_action_queue_overflows(3);
@@ -109,10 +113,24 @@ int main() {
     board.unlock_shared_i2c();
 
     nova::ScreenRegistry registry;
-    assert(registry.register_screen(nova::ScreenSpec{"boot", 1u, nullptr, nullptr}));
-    assert(registry.size() == 1);
-    assert(registry.at(0) != nullptr);
-    assert(registry.at(1) == nullptr);
+    const auto build_stub = +[](lv_obj_t*) -> lv_obj_t* { return nullptr; };
+    const auto update_stub = +[](const nova::AppState&) {};
+    assert(registry.register_screen(nova::ScreenSpec{
+        nova::ScreenId::Boot, "Boot", 1u, build_stub, update_stub, nullptr, nullptr}));
+    assert(registry.register_screen(nova::ScreenSpec{
+        nova::ScreenId::Home, "Home", 2u, build_stub, update_stub, nullptr, nullptr}));
+    assert(registry.size() == 2);
+    assert(registry.find(nova::ScreenId::Home) != nullptr);
+    assert(!registry.register_screen(nova::ScreenSpec{
+        nova::ScreenId::Home, "Dup", 2u, build_stub, update_stub, nullptr, nullptr}));
+
+    const nova::BootViewModel boot_vm = nova::make_boot_view_model(state_store.snapshot());
+    assert(std::string(boot_vm.headline) == "Tentando iniciar display");
+    system.display_ready = true;
+    state_store.set_system(system);
+    const nova::HomeViewModel home_vm = nova::make_home_view_model(state_store.snapshot());
+    assert(std::string(home_vm.title) == "Inicio");
+    assert(std::string(home_vm.status) == "Display ativo");
 
     return 0;
 }

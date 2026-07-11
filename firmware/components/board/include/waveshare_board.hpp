@@ -19,6 +19,7 @@ public:
 
 private:
     BoardStatus status_{};
+    bool display_initialized_{false};
 };
 
 }  // namespace nova

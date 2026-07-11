@@ -29,6 +29,11 @@ SystemState StateStore::system() const {
     return state_.system;
 }
 
+UiState StateStore::ui() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.ui;
+}
+
 void StateStore::set_clock(ClockState clock) {
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -59,6 +64,22 @@ void StateStore::set_system(SystemState system) {
         state_.system = system;
     }
     event_bus_.publish(Event{EventType::SystemChanged, 0});
+}
+
+void StateStore::set_ui(UiState ui) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.ui = ui;
+    }
+    event_bus_.publish(Event{EventType::ScreenChanged, static_cast<int32_t>(ui.active_screen)});
+}
+
+void StateStore::navigate_to(ScreenId screen_id) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.ui.active_screen = screen_id;
+    }
+    event_bus_.publish(Event{EventType::ScreenChanged, static_cast<int32_t>(screen_id)});
 }
 
 void StateStore::set_action_queue_overflows(uint32_t overflow_count) {

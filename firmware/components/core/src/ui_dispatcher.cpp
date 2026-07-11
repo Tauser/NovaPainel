@@ -7,11 +7,12 @@ UiDispatcher::UiDispatcher(EventBus& event_bus) {
     event_bus.subscribe(EventType::MarketChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::WeatherChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::SystemChanged, &UiDispatcher::on_event, this);
+    event_bus.subscribe(EventType::ScreenChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::ResourceWarning, &UiDispatcher::on_event, this);
 }
 
 void UiDispatcher::process_pending(RenderFn render) {
-    const uint32_t pending = pending_mask_.exchange(0);
+    const uint32_t pending = take_pending_mask();
     if (pending == 0) {
         return;
     }
@@ -26,7 +27,7 @@ void UiDispatcher::on_event(const Event& event, void* context) {
 }
 
 uint32_t UiDispatcher::mask_for(EventType type) {
-    return 1u << static_cast<uint8_t>(type);
+    return ui_event_bit(type);
 }
 
 }  // namespace nova

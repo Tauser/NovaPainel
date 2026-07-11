@@ -8,4 +8,6 @@ components/core/src/state_store.cpp
 components/core/src/ui_dispatcher.cpp
 components/board/src/mock_board.cpp
 components/providers/src/provider_interfaces.cpp
+components/ui/src/boot_view_model.cpp
+components/ui/src/home_view_model.cpp
 components/ui/src/screen_registry.cpp

@@ -4,17 +4,19 @@
 
 #include <cstdint>
 
+struct _lv_obj_t;
+typedef struct _lv_obj_t lv_obj_t;
+
 namespace nova {
 
-struct ScreenViewModel {
-    AppState state{};
-};
-
 struct ScreenSpec {
-    const char* id{nullptr};
+    ScreenId id{ScreenId::Boot};
+    const char* title{nullptr};
     uint32_t invalidation_mask{0};
-    void (*build)(const ScreenViewModel& vm){nullptr};
-    void (*update)(const ScreenViewModel& vm){nullptr};
+    lv_obj_t* (*build)(lv_obj_t* parent){nullptr};
+    void (*update)(const AppState& state){nullptr};
+    void (*on_enter)(){nullptr};
+    void (*on_leave)(){nullptr};
 };
 
 }  // namespace nova

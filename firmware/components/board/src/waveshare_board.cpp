@@ -6,13 +6,18 @@
 namespace nova {
 namespace {
 constexpr const char* kTag = "WaveshareBoard";
+constexpr uint32_t kPartialRenderRows = BSP_LCD_V_RES / 10;
 }
 
 bool WaveshareBoard::init_display() {
+    if (display_initialized_) {
+        return status_.display_ready;
+    }
+
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size = BSP_LCD_H_RES * (BSP_LCD_V_RES / 8),
-        .double_buffer = false,
+        .buffer_size = BSP_LCD_H_RES * kPartialRenderRows,
+        .double_buffer = true,
         .flags = {
             .buff_dma = true,
             .buff_spiram = true,
@@ -33,11 +38,13 @@ bool WaveshareBoard::init_display() {
     bsp_display_backlight_on();
     status_.display_ready = true;
     status_.touch_ready = true;
+    display_initialized_ = true;
     return true;
 }
 
 BoardStatus WaveshareBoard::bring_up() {
     status_ = BoardStatus{};
+    display_initialized_ = false;
     init_display();
     status_.board_ready = status_.display_ready;
     return status_;

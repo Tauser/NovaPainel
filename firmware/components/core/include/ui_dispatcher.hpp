@@ -14,6 +14,7 @@ public:
     explicit UiDispatcher(EventBus& event_bus);
 
     uint32_t pending_mask() const { return pending_mask_.load(); }
+    uint32_t take_pending_mask() { return pending_mask_.exchange(0); }
     void clear() { pending_mask_.store(0); }
     void process_pending(RenderFn render);
 

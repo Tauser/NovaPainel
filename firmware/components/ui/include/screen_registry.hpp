@@ -12,6 +12,7 @@ public:
     bool register_screen(ScreenSpec spec);
     std::size_t size() const { return size_; }
     const ScreenSpec* at(std::size_t index) const;
+    const ScreenSpec* find(ScreenId id) const;
 
 private:
     static constexpr std::size_t kMaxScreens = 12;

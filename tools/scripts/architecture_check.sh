@@ -82,7 +82,7 @@ assert_no_include() {
 
 require_line_limit "$FIRMWARE/main/app_main.cpp" 300
 
-assert_requires_subset "ui" core models
+assert_requires_subset "ui" core lvgl models
 assert_requires_subset "providers" models utils
 assert_requires_subset "core" models utils
 
