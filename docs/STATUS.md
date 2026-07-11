@@ -13,7 +13,7 @@
 | Item | Estado | Desde |
 |---|---|---|
 | Baseline vigente | **v4 (reconstrução total)** | 2026-07-02 |
-| Fase atual | **Fase 0 — Preparação do repositório** | 2026-07-02 |
+| Fase atual | **Fase 1 — Esqueleto arquitetural + board/ + CI host** | 2026-07-11 |
 | Firmware ativo | inexistente (será criado em `firmware/` na Fase 1) | — |
 | Hardware | validado (herdado da Fase 0 do baseline v3) | 2026 |
 | Build PROD validado em bancada | não | — |
@@ -23,8 +23,8 @@
 ## Fases (espelho do ROADMAP — marcar apenas aqui)
 
 ```text
-Fase 0  - Preparação do repositório e tooling            [em andamento]
-Fase 1  - Esqueleto arquitetural + board/ + CI host      [pendente]
+Fase 0  - Preparação do repositório e tooling            [concluída em 2026-07-11]
+Fase 1  - Esqueleto arquitetural + board/ + CI host      [em andamento]
 Fase 2  - Boot, display, shell de UI registrável         [pendente]
 Fase 3  - Conectividade, tempo e onboarding              [pendente]
 Fase 4  - Dados reais, cache offline e degradação        [pendente]
@@ -45,9 +45,16 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - ADRs históricos do v3: preservados no histórico git (`docs/DECISIONS.md`
   anterior a 2026-07-02).
 
+## Evidência de encerramento da Fase 0
+
+- Firmware v3 arquivado em `reference/` sem builds, caches ou temporários; o
+  tree rastreado fora de `reference/` mede 519.599 bytes.
+- `bash tools/scripts/host_check.sh --tests` passou no Git Bash do Windows.
+- Workflow CI passou no Linux para o commit `e1b1d59`:
+  `https://github.com/Tauser/NovaPainel/actions/runs/29149942477`.
+- Skills versionadas e `.gitignore` atualizados para o layout v4.
+
 ## Dívidas conhecidas / riscos abertos
 
-- Workflow de CI criado; primeira execução Linux ainda depende do próximo push.
-- `host_check.sh` passou no Git Bash local; validar em Linux antes de fechar a
-  Fase 0.
+- Fase 1 ainda não possui código-fonte ativo nem build ESP-IDF v4.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
