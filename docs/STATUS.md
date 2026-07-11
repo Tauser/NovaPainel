@@ -65,6 +65,8 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - Tabela A/B fixada em `firmware/partitions.csv` e registrada no ADR-0016.
 - Gate `architecture_check.sh` adicionado para validar `app_main < 300` e
   dependências CMake/include da Fase 1 no CI.
+- `RequestOrchestrator` cobre políticas default do `RESOURCE-BUDGET`, gap
+  global de 400 ms, rate limit por minuto e circuit breaker.
 
 ## Dívidas conhecidas / riscos abertos
 

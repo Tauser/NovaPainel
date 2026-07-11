@@ -70,11 +70,28 @@ int main() {
 
     nova::RequestOrchestrator orchestrator;
     assert(orchestrator.configure(nova::RequestPolicy{
-        nova::RequestDomain::Weather, nova::RequestPriority::Normal, 1000, 6, true}).ok());
+        nova::RequestDomain::Weather, nova::RequestPriority::Normal, 1000, 6, 3, 30000, 30000, true}).ok());
     assert(orchestrator.can_start(nova::RequestDomain::Weather, 10));
     assert(orchestrator.mark_started(nova::RequestDomain::Weather, 10).ok());
+    assert(orchestrator.in_flight());
     assert(!orchestrator.can_start(nova::RequestDomain::Weather, 500));
+    orchestrator.mark_finished(nova::RequestDomain::Weather, true, 20);
     assert(orchestrator.can_start(nova::RequestDomain::Weather, 1010));
+
+    assert(orchestrator.configure(nova::RequestPolicy{
+        nova::RequestDomain::MarketSpot, nova::RequestPriority::Normal, 1, 2, 2, 1000, 2000, true}).ok());
+    assert(orchestrator.mark_started(nova::RequestDomain::MarketSpot, 2000).ok());
+    orchestrator.mark_finished(nova::RequestDomain::MarketSpot, true, 2010);
+    assert(!orchestrator.mark_started(nova::RequestDomain::MarketSpot, 2100).ok());
+    assert(orchestrator.mark_started(nova::RequestDomain::MarketSpot, 61000).ok());
+    orchestrator.mark_finished(nova::RequestDomain::MarketSpot, false, 61010);
+    assert(!orchestrator.can_start(nova::RequestDomain::MarketSpot, 61410));
+    assert(orchestrator.mark_started(nova::RequestDomain::MarketSpot, 62001).ok());
+    orchestrator.mark_finished(nova::RequestDomain::MarketSpot, false, 62010);
+    assert(orchestrator.circuit_state(nova::RequestDomain::MarketSpot) == nova::CircuitState::Open);
+    assert(!orchestrator.can_start(nova::RequestDomain::MarketSpot, 62500));
+    orchestrator.tick(63010);
+    assert(orchestrator.circuit_state(nova::RequestDomain::MarketSpot) == nova::CircuitState::HalfOpen);
 
     nova::HttpClient http_client;
     const auto too_large = http_client.get("https://example.invalid/data", nova::kHttpBodyCapBytes + 1);
