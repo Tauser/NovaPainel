@@ -1,0 +1,11 @@
+components/utils/src/status.cpp
+components/models/src/app_state.cpp
+components/core/src/action_queue.cpp
+components/core/src/event_bus.cpp
+components/core/src/request_orchestrator.cpp
+components/core/src/service_manager.cpp
+components/core/src/state_store.cpp
+components/core/src/ui_dispatcher.cpp
+components/board/src/mock_board.cpp
+components/providers/src/provider_interfaces.cpp
+components/ui/src/screen_registry.cpp

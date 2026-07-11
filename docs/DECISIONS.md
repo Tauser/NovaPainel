@@ -154,3 +154,17 @@ quebrando a promessa de validação portátil e impedindo CI Linux.
 **Decisão:** host_check em bash puro + g++ com shims; roda idêntico em Linux,
 WSL e CI. Testes nativos (core + view-models + fixtures de provider) são gate
 de merge. Nenhum script de validação pode depender de SO específico.
+
+## ADR-0016 — Tabela de partições A/B fixada na Fase 1
+
+**Contexto:** ADR-0010 exige OTA A/B desde o início e `HARDWARE.md` determina
+que as dimensões exatas sejam fixadas na Fase 1 para evitar reparticionar
+unidades em campo.
+**Decisão:** `firmware/partitions.csv` nasce com `nvs`, `nvs_keys`,
+`phy_init`, `otadata`, dois slots OTA de 8 MB, `storage` LittleFS de 10 MB,
+`coredump` de 1 MB e uma partição reservada `c6_ota` de 1 MB para o fluxo
+futuro de atualização do ESP32-C6 via ESP-Hosted.
+**Motivo:** 8 MB por app dá margem para LVGL, BSP e assets iniciais sem
+consumir todo o flash de 32 MB; 10 MB de cache sustenta uso offline sem
+pressionar os slots OTA; reservar `c6_ota` agora elimina migração destrutiva
+quando o slave-OTA entrar na Fase 7.

@@ -14,7 +14,7 @@
 |---|---|---|
 | Baseline vigente | **v4 (reconstrução total)** | 2026-07-02 |
 | Fase atual | **Fase 1 — Esqueleto arquitetural + board/ + CI host** | 2026-07-11 |
-| Firmware ativo | inexistente (será criado em `firmware/` na Fase 1) | — |
+| Firmware ativo | esqueleto v4 criado em `firmware/` (Fase 1) | 2026-07-11 |
 | Hardware | validado (herdado da Fase 0 do baseline v3) | 2026 |
 | Build PROD validado em bancada | não | — |
 | OTA operacional | não | — |
@@ -54,7 +54,17 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `https://github.com/Tauser/NovaPainel/actions/runs/29149942477`.
 - Skills versionadas e `.gitignore` atualizados para o layout v4.
 
+## Evidência parcial da Fase 1
+
+- Esqueleto ESP-IDF v4 criado em `firmware/` com componentes `core`,
+  `models`, `utils`, `board`, `providers` e `ui`.
+- `bash tools/scripts/host_check.sh --app --tests` passou localmente com
+  testes nativos de EventBus, StateStore, RequestOrchestrator, ActionQueue,
+  MockBoard e ScreenRegistry.
+- `idf.py build` passou localmente para `esp32p4` com ESP-IDF v5.5.4.
+- Tabela A/B fixada em `firmware/partitions.csv` e registrada no ADR-0016.
+
 ## Dívidas conhecidas / riscos abertos
 
-- Fase 1 ainda não possui código-fonte ativo nem build ESP-IDF v4.
+- Fase 1 ainda não possui validação de display real, rede real ou build PROD.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
