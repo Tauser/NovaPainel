@@ -1,0 +1,112 @@
+# NovaPainel firmware - DEV sdkconfig defaults.
+# Used by plain `idf.py build`. Security features (Secure Boot, Flash Encryption,
+# NVS Encryption) are intentionally OFF here so flashing/debugging stays frictionless.
+# For a PRODUCTION build, apply sdkconfig.prod on top:
+#   idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build
+# See sdkconfig.prod and ADR-0030 for the full PROD security checklist.
+
+# Target is set via `idf.py set-target esp32p4`.
+
+# Give the main task a comfortable stack for C++ / std::function usage.
+# Bumped from 6144 to 16384 (Fase 7 finding): "main" is app_main()'s own
+# task - it directly calls ui_dispatcher.process_pending() -> the active
+# screen's render()/build(), so every screen's full LVGL widget-tree
+# construction runs on THIS task's stack, not just on the BSP's own
+# taskLVGL (that one already got bumped to 16384 for the same reason in
+# ADR-0025, for a different code path - touch event callbacks). Adding
+# SystemScreen (Fase 7) - one more screen's build() on this same call
+# path - was enough to exceed the 6144 budget tuned back in Fase 0,
+# before CacheStore/ForexService/SystemService/SystemScreen existed:
+# "Guru Meditation Error: Core 0 panic'ed (Stack protection fault)...
+# Detected in task "main"" on real hardware, confirmed via serial capture.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# C++: keep RTTI off (smaller). Exceptions left at IDF default (off) - the code
+# uses Result<T>/Status instead of throwing.
+CONFIG_COMPILER_CXX_RTTI=n
+
+# Flash size: confirmed in Fase 0 (Gate 3) - the real board (Waveshare
+# ESP32-P4-WIFI6-Touch-LCD-7B) has 32MB NOR flash, not the 8MB dev-kit
+# default. Partition table (factory 3MB + storage 1MB) fits comfortably.
+CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="32MB"
+
+# Chip revision: confirmed in Fase 0 (Gate 1) - the real board's ESP32-P4
+# silicon is revision v1.3, not the v3.x production revision IDF assumes by
+# default. v0.x/v1.x and v3.x have a documented hardware difference and are
+# mutually exclusive build configs (see esp_hw_support Kconfig.hw_support).
+# Without this the bootloader rejects the chip at boot.
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# PSRAM (Gate 4): the real board has 32MB stacked PSRAM, required by the BSP
+# for the display's MIPI-DSI framebuffer (Fase 3) - without this,
+# bsp_display_new() fails with ESP_ERR_NO_MEM creating the DPI panel.
+CONFIG_SPIRAM=y
+
+# Display (blue-flash investigation, 2026-06-26): enable the BSP/esp_lvgl_port
+# "avoid tearing" path for the EK79007 MIPI-DSI panel. This makes the LCD
+# driver allocate two full-size DPI frame buffers and lets LVGL redraw a full
+# frame before the panel swaps buffers, instead of pushing partial dirty
+# rectangles into a single live scanout buffer. We prefer FULL_REFRESH over
+# DIRECT_MODE here because the observed bug is a brief whole-screen blue flash:
+# that pattern matches a stale / partially valid back buffer more than a plain
+# tear line, so forcing every swapped buffer to be complete is the safer
+# tradeoff while we stabilize the panel path. Rotation stays out of this path
+# (`sw_rotate=false` in WaveshareBoard) because the EK79007 driver does not
+# support swap_xy().
+CONFIG_BSP_LCD_DPI_BUFFER_NUMS=2
+CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR=y
+CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y
+
+# Custom partition table (see partitions.csv). Marked preliminary in HARDWARE.md.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Coredump to flash (Fase 7, ADR-0014/0028): persists a crash dump to the
+# "coredump" partition (partitions.csv) so a panic in the field isn't lost -
+# retrievable later via `idf.py coredump-info`. ELF format (IDF default once
+# enabled) - no on-device parsing/display, see ADR-0028.
+# DEV=on; PROD=off (sdkconfig.prod overrides to n - heap may contain secrets,
+# see ADR-0011/0030).
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+
+# Default log level INFO.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Keep LVGL's example sources out of the firmware build. They add compile
+# time and binary noise without helping the product.
+# CONFIG_LV_BUILD_EXAMPLES is not set
+
+# LVGL (Fase 4): font sizes used by HomeScreen, matching the design reference
+# in docs/design/lvgl_export_reference/novapanel_theme.h.
+CONFIG_LV_FONT_MONTSERRAT_10=y
+CONFIG_LV_FONT_MONTSERRAT_12=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+
+# ESP-Hosted SDIO queue size (Fase 4 finding): default 20/20 needs a
+# contiguous ~47KB block of MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA memory for
+# sdio_mempool_create() (block_size 1536 * (rx_q_size + 11)). This exact
+# mitigation is documented upstream in
+# espressif__esp_hosted/docs/performance_optimization.md ("Reduce memory
+# footprint for resource-constrained applications"). Queue depth is a
+# throughput knob (Fase 10), not a correctness requirement now.
+CONFIG_ESP_HOSTED_SDIO_TX_Q_SIZE=10
+CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=10
+
+# LVGL malloc source (Fase 4 root-cause finding): LV_USE_BUILTIN_MALLOC (the
+# default) reserves a STATIC 64KB pool (work_mem_int, lv_mem_core_builtin.c)
+# in internal RAM, present from boot regardless of actual LVGL usage. This
+# alone is most of the ~123KB .bss growth that shrank the early/pre-scheduler
+# internal-DMA pool enough to make esp_hosted's own constructor-time SDIO
+# init (which runs before app_main, before main_task is even created) fail
+# main task creation itself (esp_startup_start_app assert). Switching to the
+# standard C malloc/free turns this into on-demand dynamic allocation
+# instead of a fixed upfront reservation.
+CONFIG_LV_USE_CLIB_MALLOC=y

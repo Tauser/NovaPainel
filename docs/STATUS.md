@@ -39,13 +39,13 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - Hardware, BSP, display MIPI-DSI, touch, ESP-Hosted P4↔C6: **provados**.
 - Conhecimento de plataforma consolidado em `docs/RESOURCE-BUDGET.md` e
   `docs/HARDWARE.md` (contenção MSPI, TLS, SRAM interna).
-- Código v3 disponível para port seletivo em `reference/firmware_v3/`
-  (após a Fase 0 mover o tree; até lá, em `firmware/`).
+- Código v3 disponível para port seletivo em `reference/firmware_v3/` e no
+  snapshot de bancada `reference/firmware_v3_field_snapshot/`; ambos foram
+  preservados sem artefatos gerados em 2026-07-11.
 - ADRs históricos do v3: preservados no histórico git (`docs/DECISIONS.md`
   anterior a 2026-07-02).
 
 ## Dívidas conhecidas / riscos abertos
 
-- Reestruturação física do repositório (mover v3 para `reference/`, limpar
-  `build/`, `node_modules`, temporários) ainda não executada — ver Fase 0.
+- Reescrever `host_check.sh` em bash portátil e ativar o CI Linux da Fase 0.
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.

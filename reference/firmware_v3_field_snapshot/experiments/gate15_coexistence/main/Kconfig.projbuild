@@ -1,0 +1,15 @@
+menu "Gate 15 coexistence harness"
+
+    config GATE15_WIFI_SSID
+        string "Wi-Fi SSID for the soak test"
+        default ""
+        help
+            Set via `idf.py menuconfig` and kept only in the local, gitignored
+            sdkconfig. Never put real credentials in gate15_main.c or
+            sdkconfig.defaults.
+
+    config GATE15_WIFI_PASS
+        string "Wi-Fi password for the soak test"
+        default ""
+
+endmenu

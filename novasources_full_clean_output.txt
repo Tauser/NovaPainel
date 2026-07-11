@@ -1,3 +1,0 @@
-Unable to create process using 'python.exe "C:\esp\v5.5.4\esp-idf\tools\idf.py" fullclean --allow-dirty ': Acesso negado.
-
-

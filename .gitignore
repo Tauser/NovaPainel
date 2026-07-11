@@ -38,8 +38,11 @@ firmware/secure_boot_signing_key.pem
 # Logs
 *.log
 
-# Referencia legada mantida apenas localmente
-firmware_legacy_reference/
-
 # Arquivos temporarios do Word
 ~$*
+
+# Artefatos locais de suporte e limpeza da raiz
+.codex-remote-attachments/
+/temp_*.txt
+/backup_lines.txt
+/novasources_*.txt

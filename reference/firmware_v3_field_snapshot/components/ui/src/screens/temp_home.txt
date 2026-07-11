@@ -313,3 +313,273 @@ void HomeScreen::build(lv_obj_t* parent) {
     lv_obj_set_flex_align(feels_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     make_label(feels_col, "Sensação", &nova_font_14, kColorTextMuted);
     weather_feels_label_ = make_label(feels_col, "--", &nova_font_14, kColorText);
+    lv_obj_set_style_margin_top(weather_feels_label_, 3, 0);
+
+    lv_obj_t* uv_col = make_col(wst);
+    lv_obj_set_size(uv_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_align(uv_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    make_label(uv_col, "UV", &nova_font_14, kColorTextMuted);
+    weather_uv_label_ = make_label(uv_col, "--", &nova_font_14, kColorAccent);
+    lv_obj_set_style_margin_top(weather_uv_label_, 3, 0);
+
+    status_label_ = make_label(left, "", &nova_font_14, kColorTextMuted);
+    lv_obj_set_style_margin_top(status_label_, 10, 0);
+
+    // ====== RIGHT: agenda + scenes + (player | market) ======
+    lv_obj_t* right = lv_obj_create(parent);
+    lv_obj_set_style_flex_grow(right, 1, 0);
+    lv_obj_set_height(right, LV_PCT(100));
+    clear_style(right);
+    lv_obj_set_flex_flow(right, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(right, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(right, kColGap, 0);
+
+    // -- Agenda mini card (PLACEHOLDER: no CalendarService yet - sample
+    //    content straight from the design reference, see home_screen.hpp) --
+    lv_obj_t* ag = make_card(right);
+    lv_obj_set_size(ag, LV_PCT(100), 0);
+    lv_obj_set_style_flex_grow(ag, 2, 0);  // bigger than the player/market row below (user decision: drop Cenas Rapidas, grow Agenda)
+    lv_obj_set_style_pad_all(ag, 16, 0);
+    lv_obj_set_flex_flow(ag, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(ag, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t* agh = make_row(ag);
+    lv_obj_set_flex_align(agh, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(agh, 9, 0);
+    lv_obj_set_style_margin_bottom(agh, 10, 0);
+    make_label(agh, LV_SYMBOL_LIST, &nova_font_14, kColorAccent);
+    lv_obj_t* ag_t = make_label(agh, "Agenda de hoje", &nova_font_16, kColorText);
+    lv_obj_set_style_flex_grow(ag_t, 1, 0);
+    make_label(agh, "4 eventos", &nova_font_14, kColorTextMuted);
+    make_chip(agh, "Ver tudo >");
+
+    static const struct { const char* t; const char* title; const char* sub; uint32_t c; } kEvents[] = {
+        {"15:30", "Reunião - NoiseBot team", "Trabalho - 45 min", 0xE8A83C},
+        {"17:00", "Academia",                "Pessoal - 1h",      0x4ABB78},
+        {"19:30", "Jantar com Marina",        "Pessoal - 2h",      0x4F7ECB},
+        {"21:00", "Revisar firmware v1.4",    "Projeto - 30 min",  0xB77ABB},
+    };
+    for (const auto& ev : kEvents) {
+        lv_obj_t* row = make_row(ag);
+        lv_obj_set_style_pad_column(row, 11, 0);
+        lv_obj_set_style_border_side(row, LV_BORDER_SIDE_BOTTOM, 0);
+        lv_obj_set_style_border_color(row, lv_color_hex(kColorSep), 0);
+        lv_obj_set_style_border_width(row, 1, 0);
+        lv_obj_set_style_pad_ver(row, 8, 0);
+
+        lv_obj_t* tm = make_label(row, ev.t, &nova_font_16, kColorTextMed);
+        lv_obj_set_width(tm, 38);
+
+        lv_obj_t* bar = lv_obj_create(row);
+        lv_obj_set_size(bar, 3, 28);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(ev.c), 0);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(bar, 0, 0);
+        lv_obj_set_style_radius(bar, 2, 0);
+
+        lv_obj_t* info = make_col(row);
+        lv_obj_set_style_flex_grow(info, 1, 0);
+        lv_obj_set_size(info, 0, LV_SIZE_CONTENT);
+        lv_obj_t* ttl = make_label(info, ev.title, &nova_font_14, kColorText);
+        lv_label_set_long_mode(ttl, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_width(ttl, 260);
+        lv_obj_t* sub = make_label(info, ev.sub, &nova_font_14, 0x5A6478);
+        lv_obj_set_style_margin_top(sub, 0, 0);
+    }
+
+    // -- Bottom row: player (PLACEHOLDER: no audio feature) + market mini (real) --
+    // Quick scenes card removed (user decision) - Agenda above got the
+    // freed space via its bigger flex_grow.
+    lv_obj_t* br = lv_obj_create(right);
+    clear_style(br);
+    lv_obj_set_size(br, LV_PCT(100), 0);
+    lv_obj_set_style_flex_grow(br, 1, 0);
+    lv_obj_set_flex_flow(br, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(br, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_column(br, kColGap, 0);
+
+    lv_obj_t* pl = make_card(br);
+    lv_obj_set_style_flex_grow(pl, 1, 0);
+    lv_obj_set_height(pl, LV_PCT(100));
+    lv_obj_set_style_pad_all(pl, 13, 0);
+    lv_obj_set_flex_flow(pl, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(pl, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t* ptop = make_row(pl);
+    lv_obj_set_style_pad_column(ptop, 10, 0);
+
+    lv_obj_t* cov = lv_obj_create(ptop);
+    lv_obj_set_size(cov, 34, 34);
+    lv_obj_set_style_bg_color(cov, lv_color_hex(kColorAccent), 0);
+    lv_obj_set_style_radius(cov, 8, 0);
+    lv_obj_set_style_border_width(cov, 0, 0);
+    lv_obj_set_style_pad_all(cov, 0, 0);
+    lv_obj_set_scrollbar_mode(cov, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_t* cov_ic = make_label(cov, LV_SYMBOL_AUDIO, &nova_font_14, kColorDarkFg);
+    lv_obj_align(cov_ic, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t* si = make_col(ptop);
+    lv_obj_set_style_flex_grow(si, 1, 0);
+    lv_obj_set_size(si, 0, LV_SIZE_CONTENT);
+    make_label(si, "Labirinto", &nova_font_14, kColorText);
+    make_label(si, "Tuyo - Pra Cima de Mim", &nova_font_14, 0x5A6478);
+
+    lv_obj_t* pb = lv_bar_create(pl);
+    lv_obj_set_size(pb, LV_PCT(100), 2);
+    lv_bar_set_range(pb, 0, 100);
+    lv_bar_set_value(pb, 17, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(pb, lv_color_hex(kColorBorder), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(pb, lv_color_hex(kColorAccent), LV_PART_INDICATOR);
+    lv_obj_set_style_radius(pb, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(pb, 1, LV_PART_INDICATOR);
+
+    lv_obj_t* ctrl = make_row(pl);
+    lv_obj_set_flex_align(ctrl, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(ctrl, 14, 0);
+    make_label(ctrl, LV_SYMBOL_PREV, &nova_font_14, kColorTextMuted);
+
+    lv_obj_t* play = lv_button_create(ctrl);
+    lv_obj_set_size(play, 30, 30);
+    lv_obj_set_style_bg_color(play, lv_color_hex(kColorAccent), 0);
+    lv_obj_set_style_radius(play, 15, 0);
+    lv_obj_set_style_shadow_width(play, 0, 0);
+    lv_obj_t* play_ic = make_label(play, LV_SYMBOL_PAUSE, &nova_font_14, kColorDarkFg);
+    lv_obj_align(play_ic, LV_ALIGN_CENTER, 0, 0);
+
+    make_label(ctrl, LV_SYMBOL_NEXT, &nova_font_14, kColorTextMuted);
+
+    // -- market mini (real data: USD/BRL + BTC from CoinGeckoProvider - no
+    //    Ibovespa row, there's no stock-index provider) --
+    lv_obj_t* mk = make_card(br);
+    lv_obj_set_style_flex_grow(mk, 1, 0);
+    lv_obj_set_height(mk, LV_PCT(100));
+    lv_obj_set_style_pad_all(mk, 13, 0);
+    lv_obj_set_flex_flow(mk, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(mk, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t* mh = make_row(mk);
+    lv_obj_set_style_pad_column(mh, 6, 0);
+    lv_obj_set_style_margin_bottom(mh, 9, 0);
+    make_label(mh, LV_SYMBOL_CHARGE, &nova_font_14, kColorAccent);
+    make_label(mh, "Mercado", &nova_font_14, kColorText);
+
+    auto make_market_row = [&](const char* name, lv_obj_t** price_label, lv_obj_t** change_label) {
+        lv_obj_t* row = make_row(mk);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_margin_bottom(row, 6, 0);
+        lv_obj_t* name_label = make_label(row, name, &nova_font_14, 0x5A6478);
+        lv_obj_set_style_flex_grow(name_label, 1, 0);
+        *price_label = make_label(row, "--", &nova_font_16, kColorText);
+        lv_obj_set_style_margin_right(*price_label, 6, 0);
+        *change_label = make_label(row, "", &nova_font_16, kColorTextDim);
+    };
+    make_market_row("Dólar", &market_usd_label_, &market_usd_change_label_);
+    make_market_row("Bitcoin", &market_btc_label_, &market_btc_change_label_);
+}
+
+void HomeScreen::render(const AppState& s, lv_obj_t* content_parent) {
+    if (!built_) {
+        build(content_parent);
+        built_ = true;
+    }
+
+    const auto& c = s.clock;
+    const auto& m = s.market;
+    const auto& w = s.weather;
+    const auto& sys = s.system;
+
+    char buf[64];
+
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", c.hour, c.minute);
+    lv_label_set_text(clock_label_, buf);
+
+    std::snprintf(buf, sizeof(buf), "%02d", c.second);
+    lv_label_set_text(seconds_label_, buf);
+
+    std::snprintf(buf, sizeof(buf), "%s, %02d/%02d/%04d%s",
+                  weekday_name(c.weekday), c.day, c.month, c.year,
+                  c.synced ? "" : " (não sincronizado)");
+    lv_label_set_text(date_label_, buf);
+
+    std::snprintf(buf, sizeof(buf), "board=%d display=%d touch=%d net=%d sd=%d cache=%d",
+                  sys.board_ready, sys.display_ready, sys.touch_ready,
+                  sys.network_ready, sys.sd_ready, sys.cache_ready);
+    lv_label_set_text(status_label_, buf);
+
+    // Dolar (ForexProvider) and BTC (CoinGeckoProvider) are fetched by
+    // separate services now - each gets its own valid/source check instead
+    // of sharing m.valid (one can be fresh while the other is still loading
+    // or failing).
+    if (m.usd_brl_valid) {
+        const char* src = (m.usd_brl_source == DataSource::Cache) ? " (cache)"
+                        : (m.usd_brl_source == DataSource::Mock)  ? " (mock)"
+                        : "";
+        std::snprintf(buf, sizeof(buf), "R$ %.2f%s", m.usd_brl, src);
+        lv_label_set_text(market_usd_label_, buf);
+        lv_label_set_text(market_usd_change_label_, "");
+    } else {
+        lv_label_set_text(market_usd_label_, "--");
+        lv_label_set_text(market_usd_change_label_, "");
+    }
+
+    if (m.valid) {
+        const char* btc_src = (m.source == DataSource::Cache) ? " (cache)"
+                             : (m.source == DataSource::Mock)  ? " (mock)"
+                             : "";
+        char btc_price[24];
+        format_thousands(static_cast<long>(m.btc_usd + 0.5), btc_price, sizeof(btc_price));
+        std::snprintf(buf, sizeof(buf), "US$ %s%s", btc_price, btc_src);
+        lv_label_set_text(market_btc_label_, buf);
+
+        std::snprintf(buf, sizeof(buf), "%s %.1f%%",
+                      m.btc_change_24h >= 0.0 ? LV_SYMBOL_UP : LV_SYMBOL_DOWN,
+                      m.btc_change_24h);
+        lv_label_set_text(market_btc_change_label_, buf);
+        lv_obj_set_style_text_color(
+            market_btc_change_label_,
+            lv_color_hex(m.btc_change_24h >= 0.0 ? kColorGreen : kColorRed), 0);
+    } else {
+        lv_label_set_text(market_btc_label_, "--");
+        lv_label_set_text(market_btc_change_label_, "sem dados ainda");
+    }
+
+    if (w.valid) {
+        std::snprintf(buf, sizeof(buf), "%.0f°C", w.temperature_c);
+        lv_label_set_text(weather_temp_label_, buf);
+
+        lv_label_set_text(weather_icon_label_, weather_icon_symbol(w.condition));
+        {
+            const char* w_src = (w.source == DataSource::Cache) ? " (cache)"
+                              : (w.source == DataSource::Mock)  ? " (mock)"
+                              : "";
+            std::snprintf(buf, sizeof(buf), "%s%s", condition_name(w.condition), w_src);
+            lv_label_set_text(weather_condition_label_, buf);
+        }
+
+        std::snprintf(buf, sizeof(buf), "%.0f km/h", w.wind_speed_kmh);
+        lv_label_set_text(weather_wind_label_, buf);
+
+        std::snprintf(buf, sizeof(buf), "%d%%", w.humidity_pct);
+        lv_label_set_text(weather_humidity_label_, buf);
+
+        std::snprintf(buf, sizeof(buf), "%s %.0f°   %s %.0f°",
+                      LV_SYMBOL_UP, w.temp_max_c, LV_SYMBOL_DOWN, w.temp_min_c);
+        lv_label_set_text(weather_highlow_label_, buf);
+
+        std::snprintf(buf, sizeof(buf), "%.0f°", w.feels_like_c);
+        lv_label_set_text(weather_feels_label_, buf);
+
+        std::snprintf(buf, sizeof(buf), "%.0f", w.uv_index);
+        lv_label_set_text(weather_uv_label_, buf);
+    } else {
+        lv_label_set_text(weather_temp_label_, "--");
+        lv_label_set_text(weather_condition_label_, "sem dados ainda");
+        lv_label_set_text(weather_wind_label_, "--");
+        lv_label_set_text(weather_humidity_label_, "--");
+        lv_label_set_text(weather_highlow_label_, "");
+        lv_label_set_text(weather_feels_label_, "--");
+        lv_label_set_text(weather_uv_label_, "--");
+    }
+}
+
+}  // namespace nova
