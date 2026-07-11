@@ -1,5 +1,10 @@
 # NovaPainel - Fase 0: Checklist de Validação de Hardware
 
+> **[HISTÓRICO — validação de hardware concluída em 2026-06-26, baseline v3]**
+> Os fatos validados aqui foram consolidados em `HARDWARE.md` e
+> `RESOURCE-BUDGET.md` (baseline v4). Este checklist é evidência histórica
+> dos Gates 1–16; não é documento de estado.
+
 > **Fechada com sucesso.** A Fase 0 tratou rede e display como **risco de
 > hardware**, não detalhe posterior.
 > Fonte de verdade do hardware: `docs/HARDWARE.md`. Skill: `novapanel-hardware-risk-gate`.

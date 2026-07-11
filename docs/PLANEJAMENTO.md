@@ -1,265 +1,118 @@
-# NovaPainel - Planejamento do Projeto
+# NovaPanel — Planejamento do Produto (baseline v4)
 
-> Documento canonico do produto e da estrategia tecnica.
->
-> Este arquivo preserva a base do planejamento inicial do NovaPainel, mas
-> atualiza a leitura de status para o baseline real do repositorio em
-> 2026-06-26.
+> Documento canônico de produto. Define o que o NovaPanel é, para quem, com
+> que qualidade e o que fica de fora. Estado atual: ver `STATUS.md`.
 
-## 1. Visao do produto
+## 1. Visão do produto
 
-O **NovaPainel** e um smart display local, offline-first e orientado a uso
-diario, baseado em **ESP32-P4 + ESP32-C6**, com firmware em **ESP-IDF + LVGL**,
-arquitetura modular, cache local e integracoes futuras com automacao,
-sensores, voz e ecossistema NoiseBot.
+O **NovaPanel** é um smart display de parede/mesa de 7", local e
+offline-first, que funciona como central pessoal da casa: hora e data
+confiáveis, clima, mercado (BTC e USD/BRL), agenda, notificações e — em fases
+futuras — automação e sensores locais.
 
 Regra principal do produto:
 
 ```text
-O painel precisa continuar util, responsivo, bonito e previsivel
-mesmo quando internet, API, storage, memoria ou algum servico falhar.
+O painel precisa continuar útil, responsivo, bonito e previsível mesmo
+quando internet, API, storage, memória ou algum serviço falhar.
 ```
 
-## 2. Objetivos de engenharia
-
-O projeto deve ser:
-
-- escalavel em escopo, sem colapsar a manutencao
-- robusto contra falhas de rede, reboot e dados parciais
-- confiavel em operacao continua
-- facil de testar, evoluir e portar
-- sustentado por componentes e limites bem definidos
-
-Principios obrigatorios:
-
-- `offline-first`: o firmware nunca depende do `server/`
-- `state-driven UI`: a UI le do estado; nao faz request direto
-- `ports and adapters`: hardware e APIs externas entram por interfaces
-- `single source of truth`: `StateStore` e o estado unico da aplicacao
-- `safe concurrency`: somente a `lvgl_task` do BSP toca objetos LVGL
-- `graceful degradation`: falha externa vira cache/stale, nao travamento
-- `small recoverable steps`: fases, commits e migracoes devem ser reversiveis
-
-## 3. Escopo funcional do produto
-
-### 3.1 Mantido no projeto
-
-- Home simples e progressivamente adaptativa
-- data e hora
-- Wi-Fi com onboarding e reconfiguracao posterior
-- clima basico
-- BTC e USD/BRL
-- cache local com stale explicito
-- tela de sistema/status
-- configuracoes basicas do usuario e conectividade
-- observabilidade minima de campo
-- arquitetura modular para futuras extensoes
-- server opcional no futuro, sem dependencia do firmware
-
-### 3.2 Removido do projeto
-
-- controle de TV Samsung
-- Wake-on-LAN, SmartThings, IR para TV e tokens Samsung
-
-Motivo: risco alto demais para o valor entregue no MVP inicial.
-
-### 3.3 Futuro planejado
-
-- Sonoff LAN, Tasmota, ESPHome ou MQTT
-- cenas rapidas e automacao local
-- planta da casa e estado de dispositivos
-- sensores de presenca, luz, temperatura, umidade e qualidade do ar
-- timer, Pomodoro, modo noite, album e perfis simples
-- voz, monitoramento, camera, interfone
-- integracao opcional com NoiseBot
-
-## 4. Escopo tecnico base
-
-### 4.1 Hardware alvo
-
-- placa principal: Waveshare ESP32-P4-WIFI6-Touch-LCD-7B
-- CPU principal: ESP32-P4
-- conectividade: ESP32-C6 via ESP-Hosted/SDIO
-- display: 1024x600 via BSP oficial Waveshare
-- touch: GT911
-- armazenamento/persistencia: NVS + filesystem local
-
-### 4.2 Requisitos tecnicos obrigatorios
-
-- boot estavel e previsivel
-- coexistencia segura entre display, touch, PSRAM e rede
-- cache sobrevivendo a reboot e falta de internet
-- UI sem travar por causa de request ou service lento
-- arquitetura testavel no host sempre que possivel
-- docs, contratos e roadmap andando junto com o codigo
-
-## 5. Arquitetura alvo
-
-Fluxo principal do sistema:
-
-```text
-Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task -> UI
-```
-
-Camadas esperadas:
-
-- `board/`: HAL do hardware e pontos de sincronizacao da UI
-- `providers/`: adaptadores de APIs externas
-- `services/`: logica de dominio
-- `core/`: estado, eventos, orchestrator, wiring de runtime
-- `models/`: contratos de estado e dados
-- `ui/`: shell, telas e componentes visuais
-- `shared/`: contratos compartilhados com um server futuro
-
-Regras de arquitetura:
-
-- UI nao persiste dados e nao acessa hardware/rede diretamente
-- services nao renderizam UI
-- providers nao conhecem UI nem tela
-- toda mutacao de estado passa por `StateStore`
-- todo request externo passa por `RequestOrchestrator`
-- toda interacao com LVGL fora do BSP exige o lock apropriado
-
-## 6. Estrategia de dados
-
-### 6.1 Mercado
-
-- `CoinGecko` REST para BTC no MVP
-- `ForexProvider` dedicado para USD/BRL
-- polling conservador e budget controlado
-- cache obrigatorio
-- WebSocket e candles ficam para evolucao futura
-
-### 6.2 Clima
-
-- `Open-Meteo` no MVP
-- sem chave externa como dependencia inicial
-- localizacao configuravel depois do baseline funcional
-
-### 6.3 Persistencia
-
-- `NVS` para preferencias e conectividade
-- `LittleFS` para cache local
-- escrita atomica
-- versionamento e migracao de schema
-
-## 7. Requisitos nao funcionais
-
-### 7.1 Escalabilidade
-
-- crescer por modulos independentes
-- permitir adicionar services/providers sem refatorar o core
-- preservar contratos claros entre camadas
-
-### 7.2 Robustez e confiabilidade
-
-- circuit breaker e backoff por dominio
-- cache como fallback normal de operacao
-- reset reason, reboot count e diagnostico de campo
-- release com rollback planejado
-
-### 7.3 Manutenibilidade
-
-- baixo acoplamento entre UI, dominio e IO
-- interfaces pequenas e explicitas
-- componentes host-checkaveis
-- documentacao canonica curta, direta e coerente
-- ADRs para decisoes que mudem arquitetura, seguranca ou release
-
-### 7.4 Seguranca
-
-- segredos fora de logs
-- layout e particoes pensando em producao
-- `NVS Encryption`, `Flash Encryption` e `Secure Boot v2` para release
-
-## 8. Melhor stack e praticas para este projeto
-
-Direcao tecnologica recomendada:
-
-- **ESP-IDF 5.5.x** como base principal
-- **BSP oficial Waveshare** antes de HAL custom sem necessidade
-- **LVGL 9.x** como stack de UI
-- **C++ moderno e simples** no firmware, privilegiando RAII, tipos fortes e
-  interfaces pequenas
-- **NVS + LittleFS** para persistencia
-- **contratos em `shared/`** para qualquer evolucao futura de bridge/server
-
-Praticas obrigatorias:
-
-- usar bibliotecas oficiais ou primarias sempre que possivel
-- evitar reimplementar stack de hardware onde o BSP oficial resolve
-- preferir composicao e injecao de dependencia a singletons globais
-- validar no host antes do hardware quando possivel
-- manter backlog por fases com criterio claro de saida
-
-## 9. Estado real do projeto hoje
-
-Patrimonio tecnico consolidado:
-
-- **Fase 0 concluida**: hardware, BSP e gates de risco validados
-- **trilha H concluida**: consolidacao tecnica e documental pos-Fase 0
-
-Estado do `firmware/` ativo:
-
-- baseline novo com BSP, shell LVGL, `Boot`, `Setup`, `Home` e `Agenda`
-  portadas visualmente
-- `core/`, `models/` e `ui/` reerguidos
-- `ServiceManager` e um bootstrap service minimo ja estao religados ao runtime
-- reboot ainda sem reintroduzir todos os demais services, providers, cache,
-  onboarding funcional, observabilidade e release path no tree novo
-
-Conclusao correta:
-
-- a visao inicial do projeto segue valida
-- a fundacao de hardware esta provada
-- o firmware ativo esta em fase de reconstrucao funcional controlada
-
-## 10. O que o MVP precisa conter
-
-Para este projeto ser considerado MVP funcional no baseline novo, ele precisa
-entregar de ponta a ponta:
-
-- boot estavel
-- display e touch reais
-- onboarding funcional
-- Wi-Fi e NTP
-- clock coerente com RTC/NTP
-- Home com dados reais de clima, BTC e USD/BRL
-- cache local com stale explicito
-- tela de sistema/status
-- configuracoes basicas editaveis
-- observabilidade minima
-- resiliencia de request
-
-## 11. Roadmap de implementacao
-
-A ordem oficial das fases esta em [ROADMAP.md](D:\Projetos\NovaPanel\docs\ROADMAP.md).
-
-Resumo:
-
-```text
-1. preservar Fase 0/H como base do projeto
-2. consolidar documentacao canonica
-3. estabilizar o firmware novo
-4. religar conectividade, tempo e preferencias
-5. religar dados reais e cache
-6. religar telas centrais e operacao
-7. endurecer release
-8. expandir para v1.0, sensores, automacao e integracoes futuras
-```
-
-## 12. Fonte de verdade documental
-
-Documentos canonicos:
-
-- [README.md](D:\Projetos\NovaPanel\README.md)
-- [docs/README.md](D:\Projetos\NovaPanel\docs\README.md)
-- [docs/PLANEJAMENTO.md](D:\Projetos\NovaPanel\docs\PLANEJAMENTO.md)
-- [docs/ARCHITECTURE.md](D:\Projetos\NovaPanel\docs\ARCHITECTURE.md)
-- [docs/HARDWARE.md](D:\Projetos\NovaPanel\docs\HARDWARE.md)
-- [docs/ROADMAP.md](D:\Projetos\NovaPanel\docs\ROADMAP.md)
-- [docs/DECISIONS.md](D:\Projetos\NovaPanel\docs\DECISIONS.md)
-
-Backup dos documentos anteriores:
-
-- `docs/_backup/2026-06-26-pre-consolidation/`
+Não é um terminal de nuvem. Internet melhora o produto; nunca define a
+utilidade básica. Um `server/` opcional pode existir no futuro — o firmware
+jamais depende estruturalmente dele.
+
+## 2. Barra de qualidade "premium" (mensurável, não adjetivo)
+
+O v4 herda do v3 a lição de que "funciona" não é critério. O produto só é
+considerado premium quando TODAS as linhas abaixo têm evidência registrada:
+
+| Dimensão | Critério objetivo |
+|---|---|
+| Fluidez | Interação touch sem stutter perceptível; repintura de tela < 100 ms; zero glitch visual (flash branco/tearing) em operação normal com rede ativa |
+| Disponibilidade | Soak de 7 dias contínuos sem reboot não intencional, sem leak (watermark de heap estável) |
+| Degradação | Queda de Wi-Fi/API/cache exercitada em teste, com UI sempre operável e dado stale sinalizado |
+| Boot | < 10 s até tela útil; falha de periférico não gera boot loop cego (backoff + breadcrumb) |
+| Atualização | OTA A/B com rollback automático — obrigatório ANTES de qualquer unidade lacrada com Flash Encryption RELEASE |
+| Diagnóstico | Todo crash em campo produz coredump + reset reason recuperáveis |
+| Segurança | Secure Boot v2 + Flash Encryption + NVS Encryption validados em bancada, com procedimento escrito |
+
+## 3. Objetivos de engenharia
+
+- escalável em telas e domínios de dados sem colapsar a manutenção;
+- robusto contra falha de rede, reboot, dado parcial e payload hostil;
+- testável no host (lógica) e com fixtures (parsing) — não só na placa;
+- documentação confiável por construção (estado em um único arquivo);
+- respeito explícito ao orçamento físico da placa (`RESOURCE-BUDGET.md`).
+
+Princípios obrigatórios (contratos, detalhados no `ARCHITECTURE.md`):
+`offline-first` · `state-driven UI` · `ports and adapters de verdade`
+(interfaces implementadas, não prometidas) · `single source of truth`
+(StateStore) · `safe concurrency` (ownership declarado) · `graceful
+degradation` · `small recoverable steps`.
+
+## 4. Escopo funcional
+
+### 4.1 MVP (Fases 1–7 do ROADMAP)
+
+- Home adaptativa: hora/data, clima, BTC, USD/BRL, notificações;
+- onboarding Wi-Fi com wizard e reconfiguração posterior;
+- clima com previsão horária/diária (Open-Meteo), localização configurável;
+- mercado: BTC spot + OHLC/candles (CoinGecko), USD/BRL (AwesomeAPI);
+- cache local com stale explícito em todos os domínios;
+- settings: brilho, tema, formato de hora, volume, rede, sistema;
+- tela de sistema/diagnóstico (reset reason, reboots, heap, rede);
+- observabilidade de campo (coredump, contadores persistidos);
+- OTA A/B + release PROD seguro.
+
+### 4.2 Pós-MVP planejado (v1.0+)
+
+Modo noite, timer/Pomodoro, álbum/fotoframe, agenda funcional, perfis;
+depois: Sonoff LAN/Tasmota/ESPHome/MQTT, cenas, sensores locais, voz,
+NoiseBot, server opcional.
+
+### 4.3 Fora de escopo permanente (salvo ADR revogando)
+
+- Controle de TV Samsung (WoL, SmartThings, IR, tokens) — risco alto,
+  valor baixo (decisão herdada do v3);
+- mercado em tempo real via WebSocket no MVP (REST com intervalo é
+  suficiente e cabe no orçamento de rede);
+- dependência obrigatória de backend.
+
+### 4.4 Suposições de produto assumidas conscientemente
+
+- Produto pessoal, 1 unidade, 1 idioma (pt-BR), fuso brasileiro. Strings
+  centralizadas para permitir i18n futura barata, mas i18n NÃO é requisito
+  do MVP (ADR-0011 v4).
+- APIs gratuitas (CoinGecko free tier, Open-Meteo, AwesomeAPI) com rate
+  limits respeitados por política central.
+
+## 5. Hardware alvo
+
+Waveshare **ESP32-P4-WIFI6-Touch-LCD-7B**: P4 (dual-core RISC-V, PSRAM 32 MB,
+sem rádio) + C6 (Wi-Fi 6 via ESP-Hosted/SDIO), display 7" 1024×600 MIPI-DSI
+(EK79007), touch GT911, codec ES8311, RTC com bateria, SD. Fatos e gotchas:
+`HARDWARE.md`. Limites físicos e regras de alocação: `RESOURCE-BUDGET.md`
+— ambos herdam validação de bancada do baseline v3 (não refazer).
+
+## 6. Estratégia técnica base
+
+- Firmware ESP-IDF + LVGL, C++17, monorepo.
+- Arquitetura em camadas com fluxo único de dados
+  (`Provider → Service → StateStore → EventBus → UI`), UI por registro de
+  telas (`UI-PATTERN.md`), hardware atrás de `board/`.
+- Rede serializada (1 HTTPS por vez) coordenada por política central —
+  decisão validada em campo no v3 (ADR-0004 v4).
+- Persistência: NVS (config, versionada) + LittleFS (cache, atômico).
+- Testes: host-first para lógica; fixtures para parsing; placa para BSP;
+  soak para operação (`TESTING.md`).
+
+## 7. Riscos de produto aceitos e monitorados
+
+1. **Física da placa**: PSRAM/flash/DSI compartilham barramento — features de
+   mídia (álbum, áudio contínuo) podem custar mais do que o planejado. Toda
+   feature nova declara seu custo contra o `RESOURCE-BUDGET.md` antes de
+   entrar no roadmap.
+2. **APIs gratuitas** podem mudar contrato ou limitar — mitigado por
+   interface de provider + fixture + circuit breaker.
+3. **Bus factor 1** — mitigado por ADRs, STATUS único e proibição de
+   conhecimento apenas-em-comentário para invariantes de plataforma.

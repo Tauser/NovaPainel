@@ -1,5 +1,9 @@
 # NovaPainel - Protocolo
 
+> **[SUPERSEDED — baseline v4, 2026-07-02]** Contratos de protocolo estão
+> congelados junto com `shared/` (ADR-0003 v4) até existir o server (Fase 11).
+> Mantido como histórico.
+
 Os contratos trocados entre firmware e server (e o vocabulário de eventos
 internos) ficam em **`/shared`**, que é a fonte única de verdade:
 

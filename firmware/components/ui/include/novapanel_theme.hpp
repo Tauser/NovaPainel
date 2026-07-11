@@ -217,10 +217,10 @@ static inline lv_obj_t *np_toggle(lv_obj_t *parent, bool checked)
     lv_obj_set_style_border_color(sw, NP_C_BORDER,       LV_PART_MAIN);
     lv_obj_set_style_border_width(sw, 1,                 LV_PART_MAIN);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0x2C3820),
-                              (lv_style_selector_t)((uint32_t)LV_PART_INDICATOR | (uint32_t)LV_STATE_CHECKED));
+                              LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(sw, NP_C_TEXT_DIM,         LV_PART_KNOB);
     lv_obj_set_style_bg_color(sw, NP_C_ACCENT,
-                              (lv_style_selector_t)((uint32_t)LV_PART_KNOB | (uint32_t)LV_STATE_CHECKED));
+                              LV_PART_KNOB | LV_STATE_CHECKED);
     lv_obj_set_style_pad_all(sw, 2, LV_PART_KNOB);
     if (checked) lv_obj_add_state(sw, LV_STATE_CHECKED);
     return sw;

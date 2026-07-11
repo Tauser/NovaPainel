@@ -1,330 +1,216 @@
-# NovaPainel - Arquitetura
+# NovaPanel — Arquitetura (baseline v4)
 
-> Arquitetura alvo do produto e baseline de engenharia do firmware.
->
-> Este documento descreve o desenho que deve guiar o projeto, separando
-> claramente a arquitetura desejada do estado parcial do reboot atual.
+> Arquitetura ALVO do firmware. Este documento não descreve estado — ver
+> `STATUS.md`. Incorpora as lições do baseline v3 (o que funcionou entra como
+> contrato; o que falhou entra como proibição). Decisões: `DECISIONS.md`.
 
 ## 1. Objetivos de arquitetura
 
-A arquitetura do NovaPainel existe para sustentar:
-
-- offline-first real
-- baixo acoplamento entre UI, dominio, hardware e rede
-- crescimento por modulos
-- debug e operacao de campo viaveis
-- manutencao simples para um firmware de vida longa
+- offline-first real;
+- baixo acoplamento entre UI, domínio, hardware e rede — **verificável pela
+  topologia de dependências (CMake REQUIRES), não por disciplina**;
+- crescimento por módulos e por registro (telas, providers, domínios);
+- concorrência com propriedade declarada, não por convenção;
+- respeito estrutural ao orçamento físico da placa (`RESOURCE-BUDGET.md`);
+- debug, teste e operação de campo viáveis.
 
 ## 2. Contexto do sistema
 
 ```text
-Usuario
-  ->
-NovaPainel Firmware (principal)
-  -> display/touch/hardware local
-  -> NVS + cache local
-  -> APIs externas opcionais
-  -> server opcional futuro
+Usuário ─ touch/display ─┐
+APIs externas (opcionais)─┤→ NovaPanel Firmware → NVS + cache local
+server/ (opcional futuro)─┘        (P4 + C6)      coredump + partições OTA
 ```
 
-Regras de contexto:
+Regras de contexto: o firmware continua útil sem server e sem internet;
+qualquer integração futura preserva esse contrato.
 
-- o firmware continua util sem `server/`
-- internet melhora o produto, mas nao define a utilidade basica
-- qualquer integracao futura deve preservar esse contrato
-
-## 3. Fluxo principal de dados
+## 3. Fluxo principal de dados (sem exceções)
 
 ```text
-Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task -> UI
+Provider → Service → StateStore → EventBus → UiDispatcher → lvgl_task → UI
+   ↑                                                            │
+   └────────── RequestOrchestrator ← NetworkWorker ←────────────┘
+                (política)            (execução)      intenção da UI volta por
+                                                      ActionQueue → Service/Store
 ```
 
-Sem excecoes:
+- `Provider` fala com API/filesystem/hardware especializado e traduz payload
+  externo em modelo interno. Não conhece UI nem StateStore.
+- `Service` aplica regra de negócio, decide persistência/cache e escreve no
+  `StateStore`. Não toca LVGL.
+- `StateStore` é o estado canônico; toda mutação passa por ele.
+- `EventBus` propaga sinalização (tipo + int32); dados grandes viajam pelo
+  StateStore, nunca pelo evento.
+- `UiDispatcher` enfileira e coalesce eventos relevantes para a UI — é o
+  ÚNICO dono de coalescing (proibido re-coalescer em main/; lição v3).
+- Só a `lvgl_task` toca objetos LVGL.
 
-- `Provider` fala com API, filesystem ou hardware especializado
-- `Service` aplica regras de negocio
-- `StateStore` guarda o estado canonico
-- `EventBus` propaga mudancas
-- `UiDispatcher` traduz eventos relevantes para a UI
-- apenas a `lvgl_task` do BSP toca objetos LVGL
-
-## 4. Camadas do firmware
+## 4. Camadas e componentes
 
 ```text
-main/
-  wiring do runtime e loop principal
-
+main/            wiring puro: monta o grafo, registra telas/fetchers, loop.
+                 PROIBIDO: driver, lógica de domínio, política de repintura.
 components/
-  core/
-  models/
-  board/
-  providers/
-  services/
-  ui/
-  utils/
+  core/          EventBus, StateStore, UiDispatcher, RequestOrchestrator,
+                 ServiceManager, ActionQueue
+  models/        AppState e structs puros (sem IO) — host-checkáveis
+  board/         IBoard + WaveshareBoard + MockBoard (HAL real, ver §5)
+  providers/     interfaces (IMarketProvider, IWeatherProvider, IForexProvider)
+                 + adaptadores concretos (CoinGecko, OpenMeteo, AwesomeAPI)
+  services/      Clock, Setup, System, Notification, Market, Forex, Weather,
+                 NetworkWorker, Audio
+  cache/         CacheStore (LittleFS, blobs versionados, escrita atômica)
+  ui/            shell + registro de telas (ScreenSpec) + view-models
+                 (padrão obrigatório: UI-PATTERN.md)
+  utils/         Result<T>/Status, http_client, helpers puros
 ```
 
-### 4.1 `core/`
-
-Responsabilidades:
-
-- `EventBus`
-- `StateStore`
-- `UiDispatcher`
-- `RequestOrchestrator`
-- `ServiceManager`
-
-Regras:
-
-- nao conhece detalhes concretos de API externa
-- nao conhece widgets LVGL
-- deve continuar host-checkavel sempre que possivel
-
-### 4.2 `models/`
-
-Responsabilidades:
-
-- structs e enums do estado global
-- contratos simples de dados
-- nada de IO, rede ou acoplamento com ESP-IDF quando evitavel
-
-### 4.3 `board/`
-
-Responsabilidades:
-
-- encapsular hardware e primitives de lock da UI
-- abstrair BSP e dependencias fisicas
-- permitir portar o firmware sem contaminar o resto do sistema
-
-### 4.4 `providers/`
-
-Responsabilidades:
-
-- adaptadores de APIs ou fontes externas
-- traducao de payload externo para modelos internos
-
-Regras:
-
-- provider nao conhece UI
-- provider nao escreve no `StateStore`
-- provider retorna dado/status; service decide o que fazer
-
-### 4.5 `services/`
-
-Responsabilidades:
-
-- orquestrar dominios como clock, setup, clima, mercado, sistema e notificacoes
-- decidir quando pedir dados
-- atualizar o `StateStore`
-
-Regras:
-
-- service nao toca widget LVGL
-- service nao chama provider fora do `RequestOrchestrator`
-- service pode depender de interfaces, nunca de adaptadores concretos por acoplamento forte
-
-### 4.6 `ui/`
-
-Responsabilidades:
-
-- shell visual
-- telas
-- componentes de apresentacao
-
-Regras:
-
-- UI le estado
-- UI publica intencao
-- UI nao persiste diretamente
-- UI nao chama Wi-Fi, HTTP, filesystem ou NVS
-
-## 5. Modelo de runtime
-
-### 5.1 Loop principal
-
-O `main/` deve:
-
-- inicializar hardware baseline
-- montar dependencias do app
-- iniciar services
-- alimentar `tick()` dos services
-- drenar eventos de UI sob o lock apropriado
-
-### 5.2 Concorrencia
-
-Regras obrigatorias:
-
-- `EventBus` pode ser sincrono para eventos internos leves
-- render nunca pode bloquear por causa de service lento
-- qualquer acesso a LVGL fora da task do BSP exige lock
-- operacoes longas devem ser deferidas para fora do callback de toque/UI
-
-### 5.3 Responsabilidade de tempo
-
-- `ClockService` e o dono do estado de relogio
-- `SetupService` e o dono do onboarding e conectividade
-- `SystemService` e o dono do diagnostico operacional
-- `MarketService` e `WeatherService` sao donos dos dominios de dados reais
-
-## 6. Estado e contratos
-
-`AppState` e a fonte unica de verdade do firmware.
-
-Categorias de estado:
-
-- navegacao e tela atual
-- clock
-- mercado
-- clima
-- sistema
-- preferencias do usuario
-- onboarding e conectividade
-
-Regras:
-
-- atualizacoes devem ser pequenas, previsiveis e observaveis
-- dados stale precisam ser representados no modelo
-- `source`, `valid`, `last_update_ms` e flags equivalentes devem existir onde
-  a UX precise distinguir dado real, cache ou mock
-
-## 7. Persistencia
-
-### 7.1 NVS
-
-Uso:
-
-- Wi-Fi
-- preferencias do usuario
-- flags operacionais pequenas
-- diagnostico simples persistido
-
-Regras:
-
-- versionar schema
-- prever migracao
-- nunca logar segredos
-
-### 7.2 Cache local
-
-Uso:
-
-- clima
-- mercado
-- outros dados de leitura com fallback offline
-
-Regras:
-
-- `LittleFS`
-- escrita atomica
-- auto-recuperacao de dados temporarios/corrompidos
-- incompatibilidade de schema nao pode brickar o boot
-
-## 8. Requests e resiliencia
-
-`RequestOrchestrator` e a porta unica de saida.
-
-Ele deve centralizar:
-
-- enable/disable por dominio
-- prioridade
-- intervalo minimo
-- rate limit
-- circuit breaker
-- backoff exponencial com jitter
-
-Contrato de UX:
-
-- se a rede falhar, a UI continua operavel
-- se a API falhar, o app mostra cache/stale
-- se nao houver dado algum, o app comunica isso de forma clara
-
-## 9. UI e design system
-
-### 9.1 Fonte visual
-
-O export em `docs/design/lvgl_export_reference/` continua sendo a referencia
-visual para o firmware.
-
-### 9.2 Organizacao visual
-
-O shell atual do reboot estabelece:
-
-- rail lateral
-- topbar
-- area de conteudo
-- dots de navegacao
-- telas independentes por `ScreenId`
-
-### 9.3 Regras de implementacao
-
-- tela nova deve nascer a partir do export visual
-- placeholder e aceitavel somente quando documentado no roadmap
-- tela nao sai do placeholder sem estado e navegacao coerentes
-
-## 10. Operacao e release
-
-A arquitetura precisa suportar:
-
-- reset reason
-- reboot count
-- logs uteis de campo
-- coredump e triagem
-- release com rollback consciente
-- diferenca clara entre DEV e PROD
-
-Isso deve permanecer em documentos dedicados:
-
-- `SECURITY-OPERATIONS.md`
-- `FIELD-OPERATIONS.md`
-- `RELEASE-ROLLBACK.md`
-- `SOAK-VALIDATION.md`
-
-## 11. Testabilidade
-
-Piramide recomendada:
-
-- testes host/unit para `core/`, `models/` e logica pura
-- validacao de build IDF para integracao de firmware
-- validacao em hardware para board/BSP/rede/touch/display
-- soak e operacao para cenarios de campo
-
-Regras:
-
-- preferir logica desacoplada de ESP-IDF
-- contratos devem ser testaveis sem hardware sempre que possivel
-- comportamento de degradacao deve ser testado explicitamente
-
-## 12. Extensibilidade futura
-
-A arquitetura precisa comportar sem ruptura:
-
-- sensores locais
-- automacao residencial
-- album/fotoframe
-- player/feedback sonoro
-- voz
-- NoiseBot
-- server opcional
-
-Regra:
-
-- extensao nova entra por modulo, nao por gambiarras cruzando camadas
-
-## 13. Estado atual do reboot
-
-O `firmware/` novo hoje implementa parcialmente esta arquitetura:
-
-- `core/`, `models/` e `ui/` estao reerguidos
-- `ServiceManager`, `BootstrapService`, `SetupService`, `SystemService` e `ClockService`
-  ja voltaram ao runtime
-- shell visual novo esta funcional
-- `Boot`, `Setup`, `Home` e `Agenda` ja foram portadas visualmente
-- varias telas seguem placeholder
-- `board/`, `providers/`, `services/` e `cache/` ainda precisam voltar como
-  implementacao funcional do tree ativo
-
-Leitura correta:
-
-- a arquitetura alvo nao mudou
-- o estado implementado ainda e parcial
-- a evolucao deve religar modulos sem quebrar os limites definidos aqui
+Regras de dependência (impostas via CMake `REQUIRES` e revisadas em review):
+
+- `ui/` → só `models`, `lvgl`, `core` (dispatcher/action). Nunca services,
+  providers, board, rede ou filesystem.
+- `services/` → core, models, cache, interfaces de provider e de board.
+  Nunca adaptador concreto de provider (injeção no main).
+- `providers/` → models, utils. Nunca core, ui, board.
+- `board/` → BSP/drivers. Nunca core, services, ui.
+- `main/` → tudo, mas só para construir e conectar.
+
+## 5. `board/` — HAL obrigatória (correção estrutural do v3)
+
+O v3 abandonou a HAL e o BSP vazou para o main (incl. ~300 linhas de driver
+de áudio). No v4, `IBoard` é pequena e real:
+
+```cpp
+class IBoard {
+ public:
+  virtual bool init_display() = 0;          // falha NÃO aborta: ver §9 boot
+  virtual bool lock_ui(uint32_t timeout_ms) = 0;   // lock da lvgl_task
+  virtual void unlock_ui() = 0;
+  virtual bool lock_shared_i2c(uint32_t timeout_ms) = 0;  // ver nota abaixo
+  virtual void unlock_shared_i2c() = 0;
+  virtual void set_brightness(int pct) = 0;
+  virtual IAudio* audio() = 0;              // nullptr se indisponível
+  // ...
+};
+```
+
+**Nota crítica (invariante físico herdado do v3):** nesta placa, GT911
+(touch) e ES8311 (codec) compartilham o barramento I2C, e o polling de touch
+roda dentro do display lock. `lock_shared_i2c()` PODE ser implementado sobre
+o display lock — mas o resto do sistema só conhece o nome semântico. O
+invariante vive em UM lugar (WaveshareBoard), não em comentários espalhados.
+
+`MockBoard` permite host-check e testes de service/UI-logic sem hardware.
+Áudio é um módulo (`services/audio` sobre `IAudio`), nunca código inline.
+
+## 6. Modelo de concorrência (propriedade declarada)
+
+Tasks do sistema e o que cada uma possui:
+
+| Task | Dono de | Pode |
+|---|---|---|
+| `lvgl_task` (BSP) | objetos LVGL, render, touch | ler snapshots do StateStore |
+| `main_loop` (app_main, tick 200 ms) | ActionQueue drain, ServiceManager.tick, UiDispatcher.process_pending, escrita nas telas (sob lock_ui) | mutar StateStore |
+| `net_worker` | execução HTTP (1 por vez), refresh de services de dados | mutar StateStore (thread-safe) |
+| ISR/driver callbacks (Wi-Fi etc.) | nada | só setar `std::atomic` drenado no tick |
+
+Regras obrigatórias:
+
+1. Todo campo de classe acessado por mais de uma dessas tasks é `std::atomic`,
+   protegido por mutex, ou trafega pela ActionQueue. **O header declara o dono
+   de cada campo compartilhado.** Comentário "seguro chamar de qualquer task"
+   sem mecanismo é proibido (bug real do v3 em `request_ohlc_period`).
+2. EventBus é síncrono: handler roda na task do publicador. Handler de
+   subscriber NÃO pode tocar LVGL nem bloquear; se precisar, posta na
+   ActionQueue ou no UiDispatcher.
+3. ActionQueue: profundidade dimensionada (≥16), **overflow loga e conta em
+   métrica** — nunca drop silencioso (bug real do v3, fila de 4 com drop mudo).
+4. Render nunca bloqueia por service lento; operação longa nunca roda em
+   callback de toque.
+5. Prioridades de task documentadas aqui quando fixadas (net_worker < lvgl).
+
+## 7. Estado e contratos
+
+`AppState` é a fonte única de verdade. Categorias: navegação, clock, mercado,
+forex, clima, sistema, notificações, preferências, onboarding.
+
+- Todo domínio de dados carrega `valid`, `stale`, `source`
+  (`Live|Cache|Mock`) e `last_update_ms` — a UX distingue dado real, cache e
+  ausência.
+- Snapshot é cópia; dados grandes (OHLC, futura agenda/fotos) ficam FORA do
+  snapshot, com acessor dedicado (padrão validado no v3).
+- Leituras frequentes usam acessores granulares (`clock()`, `weather()`), não
+  o snapshot inteiro.
+- Payload trocado com partes externas: atualizar `shared/schemas/` + exemplo
+  + struct em `models/` juntos (enquanto `shared/` estiver congelado, não
+  criar contrato novo).
+
+## 8. Requests e resiliência
+
+`RequestOrchestrator` (política) + `NetworkWorker` (execução) — separação
+validada em campo no v3 (ADR-0004 v4):
+
+- por domínio: enable, prioridade, intervalo mínimo, rate limit, circuit
+  breaker (Closed→Open→HalfOpen) com backoff exponencial + jitter;
+- execução serializada: **1 HTTPS por vez em todo o firmware**, gap entre
+  buscas, escalonamento natural no boot;
+- corpo HTTP em SRAM interna com cap (ver RESOURCE-BUDGET); truncamento é
+  FALHA do request (conta no breaker), não warning silencioso;
+- contrato de UX: rede caiu → UI operável; API caiu → cache/stale; sem dado
+  algum → comunicação clara.
+
+## 9. Boot, recovery e operação contínua
+
+- Ordem: NVS → board.init_display → shell UI mínima → rede → services →
+  dados de cache → dados live.
+- **Falha de display não chama `abort()`** (bug v3): retry com backoff; após
+  N falhas, reboot com breadcrumb persistido em NVS e contador que degrada a
+  cadência (evita boot loop quente).
+- Reset reason + reboot count entram no estado na inicialização.
+- Watermarks de heap (interno e PSRAM) amostrados periodicamente pelo
+  SystemService; cruzou limiar → evento `ResourceWarning` (que TEM handler:
+  log + métrica persistida + modo focado desligado).
+- Coredump para partição flash habilitado inclusive em PROD
+  (política: OPERATIONS.md).
+
+## 10. Persistência
+
+- **NVS**: Wi-Fi, preferências, flags operacionais, breadcrumbs. Schema
+  versionado com migração; versão futura desconhecida → ignora persistido,
+  nunca bricka. Escrita deduplicada (não regravar valor idêntico — erase de
+  flash causa glitch no DSI, ver RESOURCE-BUDGET).
+- **LittleFS (cache)**: blobs binários com header magic/versão/tamanho,
+  escrita tmp+rename atômica, mismatch → descarte silencioso. Persistência
+  throttlada (dados de UI ficam no StateStore; flash só a cada intervalo
+  longo).
+
+## 11. UI
+
+Regida por `UI-PATTERN.md` (documento-dono). Resumo dos contratos:
+
+- Tela = `ScreenSpec` registrado: `{id, build(parent, vm), update(vm),
+  invalidation_mask}` — o shell itera o registro; **main/ não conhece telas**.
+- Invalidação por máscara de eventos declarada pela tela, não por flags no
+  main (bug estrutural v3).
+- View-model por tela: a tela recebe struct de apresentação pronta (strings
+  formatadas, cores decididas), não o AppState cru.
+- Strings de produto centralizadas (`ui/strings_ptbr.hpp`) — i18n futura
+  barata sem requisito de i18n agora.
+- Proibido `static std::function` global (boot freeze v3); handles LVGL como
+  estáticos triviais ou membros de contexto da tela.
+- Repintura alvo < 100 ms por tela; atualização granular por widget quando o
+  custo justificar (medir antes de otimizar).
+
+## 12. Testabilidade
+
+Pirâmide (detalhes em `TESTING.md`): host/unit para core+models+lógica de
+service (via MockBoard/providers fake) → fixtures de payload para parsing de
+provider → build IDF → validação em placa → soak. Comportamento de degradação
+tem teste explícito. `host_check.sh` é portátil (bash puro, roda em CI Linux).
+
+## 13. Extensibilidade
+
+Sensores, automação, álbum, voz, server: entram por módulo novo (provider +
+service + tela registrada), declarando custo contra o RESOURCE-BUDGET antes
+de entrar no roadmap. Extensão que exige furar camada → ADR primeiro.

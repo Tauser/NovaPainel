@@ -1,143 +1,103 @@
-# CLAUDE.md - NovaPainel
+# CLAUDE.md — NovaPanel (baseline v4)
 
-Guia para o Claude Code (e humanos) trabalhando neste repositório. Este arquivo
-cobre **como** trabalhar no código.
+Guia para agentes e humanos trabalhando neste repositório. Este arquivo cobre
+**como** trabalhar; ele NUNCA afirma o estado do projeto.
 
-**Ponto de entrada obrigatório para agentes:** leia `AGENTS.md` (skill routing)
-e `skills/novapanel-firmware-workflow/SKILL.md` (workflow padrão e docs a ler)
-antes de qualquer mudança. Para **escopo, requisitos e decisões**, a fonte de
-verdade é `docs/` — leia `docs/PLANEJAMENTO.md` (base v3), `docs/ARCHITECTURE.md`,
-`docs/ROADMAP.md` e `docs/DECISIONS.md` (ADRs) antes de mudanças relevantes.
-Consulte `docs/HARDWARE.md` sempre que hardware, BSP, display, Wi-Fi ou ESP-Hosted
-estiverem envolvidos.
+## Regra zero — onde está a verdade
+
+- **Estado atual**: somente em `docs/STATUS.md`. Este arquivo, os ADRs e o
+  roadmap nunca dizem "está pronto/em produção" — consulte o STATUS.
+- **Escopo e produto**: `docs/PLANEJAMENTO.md`
+- **Arquitetura alvo**: `docs/ARCHITECTURE.md` + `docs/UI-PATTERN.md`
+- **Decisões**: `docs/DECISIONS.md` (ADRs) — mudou o desenho? registre ADR.
+- **Limites físicos da placa**: `docs/RESOURCE-BUDGET.md` (contrato, não dica)
+- **Fases e critérios de saída**: `docs/ROADMAP.md`
+- **Testes/CI**: `docs/TESTING.md` · **Operação/release**: `docs/OPERATIONS.md`
+
+Ponto de entrada obrigatório para agentes: `AGENTS.md`.
 
 ## O que é o projeto
 
-Smart display **local / offline-first** em **ESP32-P4** (ESP-IDF + C++),
-organizado como monorepo. O firmware é o núcleo; o server é opcional/futuro.
+Smart display **local / offline-first** em **ESP32-P4 + ESP32-C6**
+(Waveshare ESP32-P4-WIFI6-Touch-LCD-7B, 7" 1024×600 MIPI-DSI), firmware
+**ESP-IDF + LVGL em C++17**, monorepo:
 
 ```text
-firmware/  núcleo do produto (ESP-IDF/C++)
-server/    opcional, futuro - o firmware NUNCA depende dele (ADR-0002)
-shared/    contratos firmware<->server (JSON Schemas + protocolo)
-docs/      documentação canônica (v3) + ADRs
-tools/     scripts (ex.: tools/scripts/host_check.sh)
+firmware/            núcleo do produto (criado na Fase 1 do baseline v4)
+reference/           código v3 e legados — SOMENTE leitura para port seletivo
+shared/              contratos firmware<->server (congelado até existir server)
+docs/                documentação canônica v4
+tools/               scripts (host_check portátil, CI)
+skills/              workflows versionados para agentes
 ```
 
-Estado atual: **Fase 11 concluída** — MVP completo em produção.
-`WaveshareBoard` real (display LVGL + touch + SD + ESP-Hosted/C6), Wi-Fi, NTP,
-`CoinGeckoProvider` + `OpenMeteoProvider` + `ForexProvider` (APIs reais),
-`CacheStore` (LittleFS), `SystemService`/`SystemScreen`, circuit breaker no
-`RequestOrchestrator`, build PROD seguro (`sdkconfig.prod`), buffer de display
-em PSRAM, `NotificationService` com fila prioritária. Próximas fases: v1.0
-(modo noite, álbum, timer, perfis — Fase 12+).
-
-## Regras de arquitetura (não-negociáveis)
+## Regras de arquitetura (não-negociáveis — detalhes no ARCHITECTURE.md)
 
 ```text
-1. A UI não faz request direto. Services não tocam a UI.
-2. Tudo passa por StateStore (estado) e EventBus (eventos).
-3. Só a futura lvgl_task pode tocar objetos LVGL. Eventos de UI passam pelo
-   UiDispatcher (ADR-0007).
-4. Todo request externo passa pelo RequestOrchestrator (intervalo, prioridade,
-   rate limit) - ADR-0004.
-5. Hardware atrás de board/ (IBoard). APIs externas atrás de providers/.
-6. Dados críticos funcionam offline (cache). Erros são tratados, não ignorados.
+1. UI não faz request, não persiste, não toca hardware. UI lê estado e
+   publica intenção.
+2. Toda mutação de estado passa pelo StateStore; eventos pelo EventBus.
+3. Só a lvgl_task toca objetos LVGL; acesso externo exige lock via board/.
+4. Todo request externo passa pelo RequestOrchestrator e é executado pelo
+   NetworkWorker (1 HTTPS por vez).
+5. Hardware SÓ atrás de board/ (IBoard). APIs externas SÓ atrás de
+   interfaces de provider. main/ é wiring — sem lógica, sem driver.
+6. Telas entram pelo registro de ScreenSpec (docs/UI-PATTERN.md) — nunca
+   por flags ou if/else no main.
+7. Cada campo tocado por mais de uma task tem dono declarado ou é atômico
+   (modelo de threads no ARCHITECTURE.md §Concorrência). "Parece seguro"
+   não é análise.
+8. Alocação segue o RESOURCE-BUDGET.md (o que vive em SRAM interna, o que
+   vive em PSRAM, o que não pode coincidir com escrita de flash).
+9. Dados críticos funcionam offline (cache com stale explícito). Erros
+   viram degradação clara, nunca travamento.
 ```
-
-Fluxo de dados: `Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task -> UI`.
-
-## Layout do firmware
-
-```text
-firmware/components/
-├─ core/       EventBus, StateStore, Service/ServiceManager,
-│              RequestOrchestrator (circuit breaker, ADR-0012/0029),
-│              UiDispatcher
-├─ models/     AppState e structs (somente dados, sem lógica/IO -> testável no host)
-├─ board/      IBoard + MockBoard (HAL) + WaveshareBoard (real, Fase 3)
-├─ providers/  IMarketProvider + MockMarketProvider + CoinGeckoProvider
-│              + OpenMeteoProvider + ForexProvider
-├─ services/   ClockService (híbrido RTC↔NTP), MarketService, WeatherService,
-│              ForexService, NotificationService (fila prioritária, cap-32),
-│              SetupService (NVS + Wi-Fi + NTP), SystemService (reset reason)
-├─ cache/      CacheStore (LittleFS, escrita atômica, ADR-0027)
-├─ ui/         BootScreen, WizardScreen, HomeScreen, MainShell,
-│              SystemScreen — todos LVGL real
-└─ utils/      Result<T> / Status (erros sem exceções)
-```
-
-Cada componente é um componente ESP-IDF com `CMakeLists.txt` usando
-`idf_component_register(SRCS ... INCLUDE_DIRS "include" REQUIRES ...)`.
 
 ## Convenções de código
 
-- C++17, estilo simples e compatível com ESP-IDF. Sem overengineering.
-- Namespace `nova` em todo o firmware.
-- Headers em `include/`, fontes em `src/`. Um par .hpp/.cpp por unidade.
-- Nomes: tipos `PascalCase`, métodos/variáveis `snake_case`, membros com sufixo
-  `_` (ex.: `state_`). Logs com um `kTag` por arquivo via `ESP_LOGx`.
-- Erros: retornar `Result<T>` / `Status` (utils/result.hpp). Evitar exceções.
-- Sem `new`/`delete` cru quando der: objetos vivem no `app_main` (stack/estáticos)
-  e são passados por referência.
-- Comentários explicam o **porquê** e marcam o que é mock/futuro.
+- C++17, estilo ESP-IDF, sem overengineering. Namespace `nova`.
+- Headers em `include/`, fontes em `src/`, um par .hpp/.cpp por unidade.
+- Tipos `PascalCase`, métodos/variáveis `snake_case`, membros `sufixo_`.
+- Erros por `Result<T>`/`Status` (`utils/`); sem exceções.
+- Objetos de longa vida no `app_main` (stack/estático), passados por
+  referência; sem `new`/`delete` cru.
+- PROIBIDO `static std::function` global (estouro de `__cxa_atexit` já
+  causou boot freeze no v3). Callbacks globais: ponteiro de função + contexto,
+  ou estáticos locais de tipos triviais.
+- Comentários explicam o porquê, com números quando houver medição.
+- Logs: um `kTag` por arquivo via `ESP_LOGx`; nunca logar segredo.
 
 ## Build e validação
-
-ESP-IDF (alvo real):
 
 ```bash
 cd firmware
 idf.py set-target esp32p4
-idf.py build
+idf.py build                     # DEV
 idf.py -p <porta> flash monitor
+bash tools/scripts/host_check.sh          # sempre após mudar core/models/
+bash tools/scripts/host_check.sh --tests  # roda testes nativos
 ```
 
-> A placa usa ESP32-P4 **sem Wi-Fi nativo**; rede depende do ESP32-C6 via
-> ESP-Hosted/SDIO — validado na placa física (Gates 1-15 PASS, Fase 0).
-> Build PROD: `idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build`
-> (Secure Boot v2 + Flash Encryption + NVS Encryption — ver `sdkconfig.prod` e ADR-0030).
+- host_check é portátil (bash puro); se falhar só no seu ambiente, o bug é
+  do script — corrija o script, não pule a validação.
+- Build PROD: ver `docs/OPERATIONS.md` (nunca aplicar Flash Encryption
+  RELEASE fora do procedimento documentado — é irreversível).
 
-Sem ESP-IDF instalado, valide a lógica C++ no host (compila os componentes com
-`g++` contra shims de esp_log/esp_timer/freertos):
+## Definition of Done (qualquer mudança)
 
-```bash
-bash tools/scripts/host_check.sh
-```
+1. Compila no alvo (`idf.py build`) e no host (`host_check.sh`).
+2. Testes nativos passam; mudança em provider exige fixture de payload.
+3. Nenhuma regra de arquitetura furada sem ADR novo.
+4. `docs/STATUS.md` atualizado se o estado do projeto mudou.
+5. Nada de `build/`, `node_modules/`, temporários ou segredos no commit.
 
-Use o host_check após qualquer mudança em `core/`, `models/`, `services/`,
-`providers/` ou `utils/`.
+## Fora de escopo (não implementar sem ADR)
 
-## Como adicionar coisas (atalhos)
-
-Skills de projeto ficam em `skills/` (fonte versionada, veja `AGENTS.md` para
-o mapeamento completo tarefa→skill). As mais usadas:
-
-- `novapanel-add-service`  — novo Service (header+src+CMake+wiring no app_main)
-- `novapanel-add-provider` — novo provider atrás de uma interface
-- `novapanel-add-state-model` — novo estado/modelo em `models/`
-- `novapanel-new-adr`      — registrar uma ADR em docs/DECISIONS.md
-- `novapanel-host-check`   — rodar a validação host-compile
-
-Ao adicionar um componente novo, lembre de: criar `include/` + `src/`, atualizar
-o `CMakeLists.txt` do componente (e o `REQUIRES`), e registrar/instanciar no
-`firmware/main/app_main.cpp`.
-
-## Fora de escopo (não implementar)
-
-TV Samsung (removido - ADR-0005). Sonoff/automação física, sensores, voz, câmera,
-NoiseBot são **roadmap futuro** (ver docs/ROADMAP.md), não MVP. Mercado em tempo
-real via WebSocket é futuro; no MVP é CoinGecko REST 60s / 6 req-min (ADR-0006).
-
-## Contratos
-
-Ao mudar um payload trocado entre partes, atualize `shared/schemas/*.schema.json`
-e o exemplo em `shared/examples/`, e mantenha alinhado com os structs em
-`firmware/components/models/`.
+Server obrigatório, TV Samsung, voz, câmera, WebSocket de mercado em tempo
+real. Automação/sensores são fases futuras do ROADMAP, não MVP.
 
 ## Git
 
-A pasta de trabalho pode estar em um mount com problemas de coerência para git;
-se `git` se comportar de forma estranha aqui, rode os comandos git na máquina
-local. Não commitar `firmware/build/`, `sdkconfig`, `__pycache__/` (ver
-`.gitignore`).
+Working tree pode estar em mount com coerência ruim para git; se `git` se
+comportar estranho, rode os comandos na máquina local. Não commitar
+`firmware/build/`, `sdkconfig` gerado, `node_modules/`, `__pycache__/`.

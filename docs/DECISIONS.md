@@ -1,885 +1,156 @@
-# NovaPainel - Decisões de Arquitetura (ADRs)
-
-Formato curto. Cada ADR registra uma decisão e o motivo.
-
-## ADR-0001 - Monorepo
-**Decisão:** usar monorepo com `firmware/`, `server/`, `shared/`, `docs/` e
-`tools/`.
-**Motivo:** permitir evolução futura com servidor opcional sem reorganizar o
-projeto, mantendo contratos compartilhados em `shared/`.
-
-## ADR-0002 - Offline-first
-**Decisão:** o firmware deve funcionar sem server.
-**Motivo:** o painel precisa continuar útil mesmo sem internet ou serviço
-externo. O server é opcional e futuro.
-
-## ADR-0003 - Hardware Abstraction
-**Decisão:** usar uma camada `board/` (HAL, `IBoard`) e abstrações de hardware.
-**Motivo:** permitir trocar Waveshare/Elecrow/Makerfabs - ou usar `MockBoard` -
-sem reescrever o core.
-
-## ADR-0004 - RequestOrchestrator desde o início
-**Decisão:** controlar requests por tela, prioridade, frequência e custo, com um
-orquestrador central pelo qual todos os serviços passam.
-**Motivo:** evitar consumo excessivo de CPU, rede, memória e cotas de API.
-
-## ADR-0005 - Device Control Deferred
-**Decisão:** controle de TV Samsung sai do projeto; Sonoff e automação física
-ficam para roadmap futuro.
-**Motivo:** reduzir risco técnico do MVP.
-
-## ADR-0006 - Market Data Strategy
-**Decisão:** usar CoinGecko REST no MVP, com intervalo de 60s e budget de até 6
-chamadas/min, cache obrigatório e busca em lote. WebSocket de exchange fica para
-o futuro.
-**Motivo:** já funciona bem em projeto existente do usuário e atende ao MVP sem
-estourar rate limit. (Operacional: registrar a Demo key gratuita do CoinGecko.)
-
-## ADR-0007 - UI Marshaling via UiDispatcher
-**Decisão:** toda atualização de UI passa pelo `UiDispatcher` e é executada na
-`lvgl_task`. Nenhuma outra task toca objetos LVGL.
-**Motivo:** LVGL não é thread-safe; acesso de múltiplas tasks causa travamentos.
-
-## ADR-0008 - Secrets Storage
-**Decisão:** NVS normal em desenvolvimento; avaliar NVS encryption / Flash
-encryption (e Secure Boot) para release.
-**Motivo:** proteger Wi-Fi, API keys e tokens em produto real.
-
-## ADR-0009 - RTC / Offline Clock
-**Decisão:** a promessa de relógio offline depende da validação de RTC/bateria na
-Fase 0. Sem RTC, após reboot sem internet o horário é exibido como não
-sincronizado até o NTP.
-**Motivo:** não prometer uma garantia que o hardware pode não oferecer.
-
-## ADR-0010 - ESP32-C6 Firmware / Update Strategy
-**Decisão:** validar o firmware do ESP32-C6 (ESP-Hosted) e o link SDIO na Fase 0,
-antes de qualquer feature pesada; definir a partição e o processo de atualização
-do C6.
-**Motivo:** a conectividade do P4 depende inteiramente do C6.
-
-## ADR-0011 - Segurança projetada desde o layout (estende ADR-0008)
-**Decisão:** o layout de partição (`firmware/partitions.csv`) deve ser definido já
-assumindo **Flash Encryption + Secure Boot v2 (com anti-rollback)** e **NVS
-Encryption nativa do ESP-IDF**, mesmo que o build de desenvolvimento mantenha
-essas proteções desativadas. Em produção, segredos (Wi-Fi, API keys, tokens) ficam
-em NVS cifrada; builds PROD habilitam Secure Boot v2 e Flash Encryption. Não
-implementar criptografia própria (ex.: AES-GCM manual) para segredos — usar os
-mecanismos da plataforma. Proteção de segredo em logs/coredump é disciplina
-separada: nunca logar segredo e cifrar/desabilitar coredump em PROD.
-**Motivo:** habilitar Flash Encryption e Secure Boot depois muda o layout de
-partição e a gestão de chaves (eFuses são mão única), forçando retrabalho. Cripto
-própria é mais arriscada e redundante frente à NVS Encryption nativa. Cifrar NVS
-não impede vazamento por log — são problemas distintos. Gatilho de reavaliação do
-modelo de ameaça: quando entrar automação/controle físico (a superfície deixa de
-ser somente leitura).
-
-## ADR-0012 - Resiliência de rede: circuit breaker e backpressure no Orchestrator
-**Decisão:** o `RequestOrchestrator` (ADR-0004) ganha, por domínio, um **circuit
-breaker** (closed/open/half-open) com **backoff exponencial + jitter** e
-**backpressure** (profundidade de fila limitada, política drop-oldest). Retry é
-**finito** (nunca infinito); ao abrir o circuito, o domínio degrada para cache e
-tenta reconectar em segundo plano sem bloquear a UI.
-**Motivo:** um provider lento ou fora do ar não pode derrubar o sistema nem
-estourar CPU/cota. Mantém o offline-first concreto (ADR-0002): dado stale exibido
-em vez de travar. Implementado dentro do orquestrador que já é a porta única de
-saída, sem nova camada.
-
-## ADR-0013 - Modelo de tasks e fila assíncrona para a UI
-**Decisão:** o caminho de atualização de UI (`EventBus` → `UiDispatcher` →
-`lvgl_task`) usa **fila FreeRTOS assíncrona com coalescing**, drenada apenas pela
-`lvgl_task`. Um service lento nunca bloqueia o render. Eventos internos
-service→service simples podem permanecer síncronos; a regra inviolável é "render
-nunca bloqueado por service". Pinagem de cores explícita no P4 dual-core
-(`lvgl_task` em um core; rede/serviços no outro), com stack size e watchdog por
-task documentados. Não se promete "zero malloc": framebuffers e buffers grandes
-conhecidos são pré-alocados no boot em PSRAM via `heap_caps_malloc(MALLOC_CAP_SPIRAM)`
-e o LVGL recebe um pool fixo; dirty rectangles usam a API **nativa** do LVGL.
-**Motivo:** LVGL não é thread-safe (ADR-0007) e EventBus síncrono na task do
-publisher convida priority inversion e travamento da UI. Pré-alocar buffers
-grandes evita fragmentação sob carga contínua, mas o LVGL faz malloc interno —
-"zero malloc" seria irreal. Reusar o dirty-tracking nativo evita reinventar e
-mantém o código testável.
-
-## ADR-0014 - Observabilidade de campo (coredump + diagnóstico)
-**Decisão:** reservar **partição de coredump** e persistir crash dumps; a tela de
-sistema/status expõe motivo do último reset, contador de reboots e idade do último
-dado por domínio (stale indicator). Builds PROD reduzem logs a warnings críticos
-acionáveis; debug verboso fica fora de PROD.
-**Motivo:** sem crash dump persistido e contexto de reset, depurar uma falha na
-casa do usuário é às cegas. Indicar dado stale é parte do contrato de UX degradada
-do offline-first, não enfeite.
-
-## ADR-0015 - Integridade do cache offline e filesystem
-**Decisão:** o cache local usa **LittleFS** (wear leveling), com **escrita atômica**
-(grava em temporário e renomeia) e **versionamento de schema** do cache e da NVS,
-com migração no boot. Não usar SPIFFS para dados que precisam sobreviver a queda de
-energia.
-**Motivo:** o offline-first depende do cache sobreviver a corte de energia e a
-upgrades de firmware. SPIFFS não tem wear leveling robusto; sem escrita atômica e
-versionamento, um OTA que muda um struct corrompe dado antigo e pode brickar a
-configuração.
-
-## ADR-0016 - WaveshareBoard real (Fase 3) e semântica de network_ready
-**Decisão:** `firmware/components/board/` ganha `WaveshareBoard : IBoard`,
-implementação real usando o BSP oficial `waveshare/esp32_p4_wifi6_touch_lcd_7b`
-(EK79007 + GT911, validados em Fase 0). Fica no mesmo componente que
-`MockBoard` (mesmo padrão de `providers/`), mas o header
-(`waveshare_board.hpp`) não inclui nenhum header real de ESP-IDF/BSP — só a
-implementação (`.cpp`) faz isso. Isso mantém `app_main.cpp` host-checkável
-mesmo usando o board real; `tools/scripts/host_check.sh` pula explicitamente
-`waveshare_board.cpp` (hardware-only, sem shim).
-`BoardStatus::network_ready` significa **link ESP-Hosted/SDIO com o C6 ativo**,
-não associação Wi-Fi a um AP real. `WaveshareBoard::bring_up()` chama
-`esp_wifi_init/set_mode/start()` (que já sobe o transporte SDIO, confirmado em
-Fase 0 Gate 9) mas nunca define SSID/senha nem chama `esp_wifi_connect()`.
-**Motivo:** conectar a uma rede real com credenciais é decisão de serviço
-(Fase 5, `MarketService`/Wi-Fi), não de bring-up de hardware. Separar os dois
-mantém a Fase 3 escopada (board real != rede real) e evita acoplar o `IBoard`
-a configuração de usuário. A separação header/implementação evita que todo
-código real de hardware acabe "contaminando" `app_main.cpp` e quebrando o
-host check, que é o jeito rápido do time validar lógica de wiring sem
-ESP-IDF instalado.
-
-## ADR-0017 - Tela de boot e wizard de onboarding inicial
-**Decisão:**
-- **Boot/splash:** não precisa de decisão nova. `AppState::current_screen` já
-  nasce em `ScreenId::Boot` (era só não-renderizado até agora). Na Fase 4,
-  basta adicionar um screen builder para `Boot` igual ao de `Home` - nenhuma
-  mudança estrutural.
-- **Wizard de onboarding inicial (multi-step):** roda no primeiro boot (sem
-  config salva) e cobre, no mínimo, os passos hoje conhecidos -
-  **nome de exibição** ("como quer ser chamado"), **provisionamento de
-  Wi-Fi**, **fuso horário**, **formato de hora** (12h/24h) e **tema**
-  (claro/escuro/automático) - extensível a mais passos depois sem mudar a
-  regra abaixo.
-  - A tela **nunca** persiste nem chama hardware/rede direto, em nenhum
-    passo. Fluxo obrigatório: tela publica uma intenção no `EventBus` (ex.:
-    `EventType::OnboardingStepSubmitted` ou eventos dedicados por passo,
-    como `WifiCredentialsSubmitted`/`DisplayNameSubmitted`/
-    `PreferencesSubmitted`) → um `SetupService` (novo) é o único a
-    persistir em NVS e, no passo de Wi-Fi, chamar
-    `esp_wifi_set_config`/`esp_wifi_connect` → o resultado
-    (sucesso/falha/IP, preferências salvas) volta via `StateStore` e a tela
-    só lê, nunca bloqueia esperando resposta.
-  - Passos não-Wi-Fi (nome, fuso, formato de hora, tema, e quaisquer outros
-    que entrarem depois) são só leitura/escrita de NVS via `SetupService` -
-    mais simples que o passo de Wi-Fi, mas seguem a mesma regra de UI sem
-    request direto (ADR arquitetural já vigente: UI não faz request direto,
-    só `StateStore`/`EventBus`). Modelo de dados (ex.: um `UserPreferences`
-    em `models/`, com `display_name`, `timezone`, `time_format_24h`,
-    `theme`) é detalhe de implementação da Fase 4/5, não desta ADR -
-    `ClockService` passa a ler fuso/formato dali em vez de hardcoded.
-  - O mesmo `SetupService` (ou os mesmos eventos) deve ser reusável pela
-    futura tela de Configurações (`screen_config.c` na referência de
-    design), não só pelo wizard de primeiro boot - editar Wi-Fi ou nome
-    depois não é um fluxo separado.
-- **Armazenamento:** NVS, conforme ADR-0011 (sem cripto própria; builds PROD
-  habilitam NVS Encryption nativa; dev pode deixar desativado). Vale tanto
-  para a credencial de Wi-Fi quanto para o nome de exibição e qualquer outro
-  dado de preferência que o wizard vier a coletar.
-**Motivo:** o wizard é o primeiro lugar do produto onde a UI teria um motivo
-"razoável" de persistir ou chamar rede direto - é o fluxo nativo de
-qualquer onboarding. Decidir a regra agora, antes da Fase 4/5 implementar
-qualquer passo, evita que a exceção pareça aceitável e vire precedente para
-outras telas (a própria tela de Configurações, mais adiante) furarem a
-regra de UI sem request. Tratar como "wizard multi-step" desde já (em vez
-de só "tela de Wi-Fi") evita reabrir esta decisão a cada novo passo
-adicionado. A tela de Boot não tinha esse risco - só ficou registrada aqui
-pra fechar a dúvida junto.
-
-## ADR-0018 - LVGL real via bsp_display_start() e IBoard::lock()/unlock()
-**Decisão:** `WaveshareBoard` usa `bsp_display_start()` (a função tudo-em-um
-do BSP oficial) em vez de `bsp_display_new()`/`bsp_touch_new()` separados
-(usados no harness da Fase 0). `bsp_display_start()` já inicializa o LVGL,
-registra o touch GT911 como input device automaticamente e sobe a própria
-task de LVGL do BSP - o firmware não precisa de uma `lvgl_task` própria.
-Como LVGL não é thread-safe, qualquer código fora dessa task que toque
-`lv_obj_*` precisa do mutex do BSP (`bsp_display_lock`/`unlock`).
-`IBoard` ganhou `lock(uint32_t timeout_ms)`/`unlock()` (primitivos, sem tipo
-do LVGL/BSP no header) para expor esse mutex sem vazar dependência real -
-`MockBoard` implementa como no-op, `WaveshareBoard` chama o BSP.
-`app_main.cpp` envolve a chamada de `ui_dispatcher.process_pending()`
-(que aciona `HomeScreen::render`) com `board.lock()`/`unlock()`.
-`HomeScreen` ficou escopada ao que `AppState` tem hoje (relógio + mercado +
-status) - sem clima/agenda/player/cenas do protótipo de referência, que
-dependem de providers/services que ainda não existem.
-
-**Achado real (causa raiz de um boot-loop):** ao linkar o BSP gráfico
-completo (LVGL + `esp_lvgl_port` + `esp_lcd_ek79007` + `esp_lcd_touch_gt911`
-+ `esp_codec_dev`), o `.bss` do firmware cresceu ~123KB sobre o harness da
-Fase 0. O maior contribuinte (64KB) é o alocador padrão do LVGL
-(`LV_USE_BUILTIN_MALLOC`), que reserva um array estático (`work_mem_int`,
-`lv_mem_core_builtin.c`) em RAM interna **desde o boot**, independente de
-LVGL estar em uso. Isso reduziu a região de RAM interna/DMA disponível bem
-no início do boot, exatamente quando o construtor do ESP-Hosted
-(`__attribute__((constructor))`, roda **antes do `app_main`**, antes até da
-criação da própria main task) tenta alocar seu mempool SDIO + 4 threads -
-causando primeiro `assert failed: sdio_mempool_create` e, mesmo reduzindo as
-filas do SDIO (`CONFIG_ESP_HOSTED_SDIO_TX/RX_Q_SIZE=10`, mitigação
-documentada no próprio `esp_hosted`), ainda sobrava pouca margem e a criação
-da main task em si falhava (`esp_startup_start_app` assert). Trocar para
-`CONFIG_LV_USE_CLIB_MALLOC=y` (LVGL usa malloc/free padrão, alocação
-dinâmica sob demanda, não uma reserva fixa de 64KB) resolveu - confirmado
-via `riscv32-esp-elf-size` (`.bss` caiu exatamente ~64KB) e validado na
-placa física sem reset.
-**Motivo:** o tamanho do buffer de display (full-frame/double-buffer em
-PSRAM, tentado primeiro) e a ordem de bring-up (display vs. rede) foram
-descartados como causa - ambos teoricamente plausíveis, ambos testados e
-sem efeito, porque o problema real acontecia **antes** de qualquer código
-do app rodar. Medir `.bss` direto (`riscv32-esp-elf-size` + `nm
---size-sort`) achou a causa real em minutos onde reordenar código não
-ajudava; documentar isso evita repetir a mesma investigação se outro
-componente futuro reintroduzir uma reserva estática grande.
-
-## ADR-0019 - Implementação do wizard de onboarding (payload rico sobre EventBus int32)
-**Decisão:** `EventBus::Event` só carrega um `int32_t` de payload (decisão
-original, ADR implícita nos primeiros componentes) - insuficiente para a
-"intenção" do wizard (ADR-0017), que precisa transportar nome, SSID, senha,
-timezone etc. Em vez de estender `Event` com um payload genérico/variant,
-a UI escreve a submissão no próprio `StateStore`:
-`StateStore::submit_onboarding(const OnboardingSubmission&)` grava o struct
-em `AppState::onboarding.pending_submission` e publica
-`EventType::OnboardingStepSubmitted` (i32 = step) - só `SetupService`
-assina esse evento e lê o `pending_submission`. O caminho de volta usa o
-mesmo padrão dos outros services: `set_onboarding_step`/`set_wifi_status`/
-`set_preferences`/`set_onboarding_needed`, cada um publicando
-`EventType::OnboardingStateChanged` para a UI re-renderizar - simetria com
-`set_clock`/`set_market`/`ClockUpdated`/`MarketUpdated` já existentes.
-`SetupService` é o único a abrir NVS e chamar
-`esp_wifi_set_config`/`esp_wifi_connect`; os handlers de `WIFI_EVENT`/
-`IP_EVENT` são funções livres (não métodos estáticos) no `.cpp`, para que
-`setup_service.hpp` continue sem tipos do ESP-IDF (mesmo padrão de
-`waveshare_board.hpp`/ADR-0018). O passo `Wifi` só avança para `Timezone`
-quando `IP_EVENT_STA_GOT_IP` chega de fato - diferente dos outros passos
-(nome, timezone, formato de hora, tema), que avançam otimisticamente ao
-serem persistidos, porque só o Wi-Fi depende de um resultado de rede real.
-`WizardScreen` recebe a função de submissão por injeção no construtor
-(`SubmitFn`, mesmo padrão de `UiDispatcher::RenderFn`) em vez de depender de
-`StateStore` diretamente - mantém a tela só lendo `AppState` no `render()`.
-**Motivo:** ADR-0017 fixou a regra (UI nunca persiste/chama hardware) mas
-deixou o "modelo de dados" como detalhe de implementação da Fase 4/5.
-Reaproveitar `StateStore` em vez de estender `Event` evita um tipo de
-payload genérico (`std::any`/union) cedo demais - todo outro fluxo de dados
-do app já passa por `StateStore`, então a UI "publicar a intenção" como uma
-escrita no `StateStore` (que por sua vez publica o evento) é consistente
-com o resto da arquitetura, não uma exceção. O avanço assíncrono do passo de
-Wi-Fi (vs. otimista nos demais) evita que o wizard avance para Timezone
-achando que conectou quando na verdade falhou.
-
-## ADR-0020 - Wizard: lista de redes escaneadas (Wi-Fi) e timezone por dropdown
-**Decisão:** o passo de Wi-Fi do wizard deixa de pedir SSID digitado: ao
-entrar no passo, a `WizardScreen` dispara automaticamente um pedido de scan
-(`StateStore::request_wifi_scan()`, mesmo padrão de "intenção" de
-`submit_onboarding` - UI nunca chama `esp_wifi_*` direto) e mostra a lista
-de redes encontradas (`lv_list`, de-duplicadas por SSID com o RSSI mais
-forte, ordenadas por sinal, em `SetupService::handle_wifi_scan_request()`).
-Tocar numa rede mostra só o campo de senha (SSID já preenchido) - sem
-digitar o nome da rede. Há "Atualizar lista" (rescan manual) e "Voltar à
-lista" (troca de rede sem reescanear, usa um cache local na
-`WizardScreen`). O passo de Timezone troca o texto livre por um `lv_dropdown`
-com uma lista curada (`America/Sao_Paulo`, `America/Manaus`,
-`America/Rio_Branco`, `America/Noronha`, `UTC`) pré-selecionando o que já
-estiver salvo em `UserPreferences::timezone`, se bater com a lista.
-O `esp_wifi_scan_start(..., block=true)` e o `esp_wifi_connect()` continuam
-bloqueantes (chamados de `SetupService`) - por isso a "intenção" da UI
-(scan ou submit) é sempre desviada pela `action_queue` genérica de
-`app_main.cpp` (fila de `std::function<void()>*`, generalizada do
-`onboarding_queue` específico da ADR anterior) antes de chegar em
-`StateStore`, nunca chamada direto do callback de toque do LVGL.
-**Motivo:** digitar SSID/senha à mão na placa é o ponto de maior atrito e
-erro do onboarding (typo no SSID trava o wizard sem dar pista do motivo) -
-escanear e listar elimina essa classe de erro. Timezone livre tem o mesmo
-problema (erro de digitação produz uma string que `ClockService` não
-reconhece silenciosamente); uma lista curada fixa isso sem precisar de uma
-base de dados de timezones completa (fora de escopo do MVP, já registrado
-em `app_state.hpp`). Generalizar a fila de ação (em vez de manter duas
-filas, uma por tipo de intenção) evita duplicar o mecanismo de defer-off-
-da-lvgl_task para cada nova ação que `SetupService` passe a precisar.
-
-## ADR-0021 - NTP real (pré-requisito de HTTPS) e CoinGeckoProvider
-**Decisão:** `CoinGeckoProvider` (novo, `providers/coingecko_provider.cpp`)
-substitui o `MockMarketProvider` em `app_main.cpp`: uma chamada HTTPS em
-lote a `GET /api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl&
-include_24hr_change=true` (ADR-0006 - 60s/6 req-min já impostos pelo
-`RequestOrchestrator`, inalterado), via `esp_http_client` +
-`esp_crt_bundle_attach` (bundle de CAs já habilitado no sdkconfig) + cJSON.
-`usd_brl` é triangulado (`brl/usd` da mesma resposta), não uma fonte de
-forex dedicada ainda - ver nota de escopo abaixo.
-Validação de certificado TLS depende do relógio do sistema estar correto, e
-não há RTC com bateria nesta placa (Fase 0) - sem isso o relógio fica perto
-da época Unix e a validação do certificado falharia. Por isso, junto com o
-provider: `SetupService::init()` chama `esp_netif_sntp_init()` (config com
-`start=false`, `pool.ntp.org`) e `on_wifi_connected()` chama
-`esp_netif_sntp_start()` (fire-and-forget, não bloqueia). `ClockService`
-deixa de ser um contador mock isolado: em cada tick lê `time(nullptr)` -
-se o epoch ainda estiver perto de 1970 (< 2023-11-14, escolhido só como
-"claramente antes de qualquer deploy real"), mantém o avanço do relógio
-mock seedado (`ADR-0009`); uma vez sincronizado, usa `localtime_r` direto
-(`clock.synced=true`). O fuso aplicado vem de `UserPreferences::timezone`
-via `setenv("TZ", ...)` + `tzset()`, mapeando as 5 strings curadas do
-dropdown (ADR-0020) para regras POSIX TZ (`BRT3`, `AMT4`, `ACT5`, `FNT2`,
-`UTC0`) - não há tzdata IANA embarcada, esse mapeamento manual é todo o
-"banco de fusos" do MVP.
-**Motivo:** HTTPS sem hora certa falha silenciosamente ou de forma confusa
-(erro de certificado sem relação aparente com o relógio) - resolver isso
-antes do `CoinGeckoProvider` evita depurar um "bug de rede" que na
-verdade é falta de NTP. Triangular `usd_brl` em vez de mockar foi escolhido
-porque o dado vem de brinde na mesma resposta (nenhum custo extra de
-request) e é estritamente melhor que um valor fixo, mesmo sendo uma
-aproximação - a fonte de forex dedicada (ROADMAP Fase 5) substitui isso
-depois sem mudar a interface `IMarketProvider`. `clock_service.cpp` e
-`coingecko_provider.cpp` entraram no `SKIP_FILES` do `host_check.sh`:
-o primeiro por `setenv`/`localtime_r` (POSIX, presentes no newlib do
-ESP-IDF mas ausentes na libc do MinGW/MSYS2 usada no host), o segundo por
-depender de `esp_http_client`/mbedtls/cJSON reais.
-
-## ADR-0022 - Reconexão automática de Wi-Fi com retry limitado a cada boot
-**Decisão:** `SetupService::init()` agora lê `wifi_ssid`/`wifi_password` da
-NVS e chama `esp_wifi_set_config`/`esp_wifi_connect` automaticamente em
-**todo boot** quando `onboarding_done=1` - antes, esse par só era chamado
-uma vez, durante o passo Wi-Fi do wizard, então qualquer boot depois do
-onboarding ficava com o transporte ESP-Hosted/SDIO de pé mas sem associar a
-nenhum AP. Além disso, `on_wifi_disconnected()` ganhou um retry limitado
-(até 5 tentativas, `wifi_retry_count_`, resetado em `on_wifi_connected()`):
-testado na placa física, a primeira tentativa de `esp_wifi_connect()` logo
-após o boot falhou e desconectou (~1.4s depois) mesmo com credenciais
-corretas - a 3ª tentativa (2º retry) conectou e obteve IP normalmente.
-**Motivo:** sem o auto-reconnect, `CoinGeckoProvider`/`OpenMeteoProvider`
-(ADR-0021/0022) nunca teriam rede real em boots subsequentes ao onboarding -
-só funcionariam durante a janela do wizard, o que não é o comportamento
-esperado de um produto. O retry foi necessário porque, na prática, a
-primeira tentativa de associação logo após `WaveshareBoard::bring_up()`
-nem sempre é bem-sucedida mesmo com credenciais válidas (motivo exato não
-isolado - possivelmente o link ESP-Hosted/SDIO ainda estabilizando) -
-retries indefinidos seriam arriscados se a credencial estiver mesmo errada
-(loop de log/rádio sem fim), por isso o limite de 5 antes de marcar
-`WifiConnectStatus::Failed` definitivamente.
-
-## ADR-0023 - OpenMeteoProvider (clima real, Brasília fixo)
-**Decisão:** `OpenMeteoProvider` (novo, `providers/open_meteo_provider.cpp`)
-implementa `IWeatherProvider` (nova interface, espelha `IMarketProvider`):
-uma chamada HTTPS a `GET /v1/forecast` da Open-Meteo (sem API key, ao
-contrário do CoinGecko) pedindo `temperature_2m`, `relative_humidity_2m`,
-`weather_code` e `wind_speed_10m` atuais. Localização fixa em Brasília, DF
-(`-15.78, -47.93`) - ainda não há passo de localização no wizard.
-`WeatherService` (novo, espelha `MarketService`) usa
-`DataDomain::Weather` do `RequestOrchestrator`, já configurado desde a
-Fase 2 (10min de intervalo, 6 req-min) - a política não mudou, mas
-`RequestOrchestrator::note_request()` ganhou um parâmetro `success` (default
-`true`): antes, mesmo uma busca que falhasse (ex.: sem rede ainda no boot)
-"gastava" o intervalo completo (60s no mercado, **10min no clima**) antes da
-próxima tentativa - com clima isso significava esperar 10 minutos pelo
-primeiro dado real se a primeira tentativa coincidisse com a janela sem
-Wi-Fi associado ainda. Agora `last_request_ms` só avança em sucesso;
-`calls_in_window` continua contando em qualquer tentativa, então o budget de
-6 req-min (ADR-0006) ainda limita retries rápidos em caso de falha
-persistente. O código WMO de clima (`weather_code`) é reduzido a um
-`WeatherCondition` (Clear/Cloudy/Fog/Drizzle/Rain/Snow/Thunderstorm/Unknown)
-em `OpenMeteoProvider`, guardado em `WeatherSummary` - ainda sem tela
-dedicada (`screen_clima.c` é trabalho futuro, `docs/design/README.md`).
-**Motivo:** mesma lógica do CoinGecko (ADR-0006/0021) - Open-Meteo é
-gratuito, sem chave, e já reusa o NTP/TLS resolvidos para o provider de
-mercado. Fixar a localização em vez de esperar uma feature de geolocalização
-no wizard mantém o escopo pequeno (decisão registrada com o usuário:
-Brasília, DF) - trocar para uma localização configurável é um passo de
-wizard futuro, não uma mudança de arquitetura (a interface
-`IWeatherProvider` não precisa mudar).
-
-## ADR-0024 - Redesign v2 (Boot/Wizard/Home) fiel ao design + MainShell
-**Decisão:** o material de design em `docs/design/lvgl_export_reference` foi
-atualizado pelo usuário (v2: `screen_boot.c`, `screen_setup.c` novos;
-`novapanel_theme.h` com fontes maiores para 7"; `novapanel.c` com rail+topbar
-icon-only). O firmware foi reportado por inteiro:
-- **OnboardingStep** passa de 5 para 4 passos -
-  `DisplayName -> Wifi -> TimezoneAndFormat -> Confirmation -> Done` - sem
-  passo de Tema (`ThemeMode` continua existindo em `UserPreferences`, só não
-  é mais setado pelo wizard; fica para uma futura tela de Configurações).
-  `TimezoneAndFormat` funde os dois em uma submissão só.
-- **`WizardScreen`** vira chrome fixo (progress bar + header + footer
-  Voltar/Continuar) com os 4 painéis construídos uma vez e
-  mostrados/escondidos (não mais destruídos/reconstruídos por passo). O
-  passo de Wi-Fi mostra lista + painel de senha **lado a lado**
-  (decisão do usuário), não mais sequencial.
-- **`BootScreen`** ganha badge "NP", barra de progresso real (baseada em
-  `lv_tick_elaps()` contra `duration_ms`, não no fake random da referência -
-  o bring-up de hardware já terminou de verdade antes da splash aparecer,
-  então não há progresso real "por etapa" pra mostrar) e botão "Pular"
-  funcional (`BootScreen::SkipFn`, mesmo padrão de injeção do
-  `WizardScreen::SubmitFn`).
-- **`MainShell`** (novo) porta `novapanel.c`'s rail+topbar+dots - chrome
-  persistente que `HomeScreen` (e futuras telas) montam dentro de
-  `MainShell::content()` em vez de cada tela ser sua própria
-  `lv_screen_load()`. Decisão do usuário: a trilha (7 ícones) e os botões
-  da topbar ficam visualmente completos, mas só "Início" é navegável - os
-  outros são inertes até a tela correspondente existir (Agenda, Mercado
-  dedicado, Casa, Alarmes, Clima dedicado, Timer, Notificações,
-  Configurações). Desvio da referência: a trilha começa **fechada** e
-  funciona como *drawer* (abre tocando o ícone ☰ na topbar ou arrastando da
-  esquerda pra direita; fecha tocando de novo ou arrastando pra esquerda,
-  via `LV_EVENT_GESTURE`/`lv_indev_get_gesture_dir()`) em vez de
-  permanentemente visível empurrando o conteúdo.
-- Fontes `NP_F_XS`/`NP_F_SM` da referência subiram (10→12, 12→14) - todo
-  `home_screen.cpp` já portado foi reajustado pra bater.
-**Motivo:** o usuário pediu fidelidade literal ao material de design, não
-uma aproximação - duas rodadas de correção (Home com card de clima solto em
-vez de aninhado no card do relógio; depois Boot/Setup totalmente
-diferentes da nova v2) confirmaram que "parece com o design" não é
-suficiente quando o design em si é a fonte de verdade. A trilha
-fechada-por-padrão foi pedido explícito do usuário (a versão sempre-visível
-do design ocupa espaço de tela permanentemente sem nenhuma tela real atrás
-da maioria dos ícones ainda).
-
-## ADR-0025 - Wi-Fi list sem rebuild no toque (stack overflow) + busca manual
-**Decisão:** duas correções relacionadas, achadas testando o wizard na
-placa física:
-1. `***ERROR*** A stack overflow in task taskLVGL has been detected` - o
-   toque numa rede da lista chamava `refresh_wifi_network_list()`, que
-   fazia `lv_obj_clean()` + recriava todas as linhas (até 24 redes × ~5
-   widgets) **dentro do próprio callback de toque**, rodando na task
-   `taskLVGL` (a task do BSP que processa toque + despacha eventos). Agora
-   `WizardScreen` pré-constrói até `kMaxWifiRows` (24) linhas **uma vez**
-   (`build_wifi_panel()`); `refresh_wifi_network_list()` (chamada só de
-   `render()`, fora do toque, quando o resultado do scan muda) atualiza
-   texto/visibilidade dessas linhas já existentes; tocar numa rede só roda
-   `update_wifi_selection_ui()` (recolorir + mostrar/escurecer checkmark
-   nas linhas já existentes, sem criar nada). Defesa adicional:
-   `WaveshareBoard::bring_up_display_and_touch()` passou a usar
-   `bsp_display_start_with_config()` (em vez de `bsp_display_start()`) só
-   pra subir `lvgl_port_cfg.task_stack` de 7168 (default do BSP) para
-   16384 bytes - mantendo buffer/double_buffer/flags idênticos ao default
-   (não reabre a investigação de PSRAM da ADR-0018).
-2. O scan de Wi-Fi deixou de disparar automaticamente ao entrar no passo -
-   só roda quando o usuário toca em "Atualizar lista"
-   (`on_wifi_rescan`/`StateStore::request_wifi_scan()`); o resultado fica em
-   cache (`wifi_networks_cache_`) pelo resto da sessão do wizard, mesmo
-   navegando pra frente/trás entre passos - mesma política deve valer
-   depois pra uma tela de Configurações que edite Wi-Fi.
-**Motivo:** (1) é a causa raiz real do "tela azul e reinicia sozinho às
-vezes quando toca na tela" reportado pelo usuário - confirmado pelo
-backtrace de pânico capturado via serial, não um chute. Pré-construir as
-linhas é estritamente melhor que só aumentar a stack (que sozinha mascararia
-o desperdício sem resolver a causa); a stack maior fica como margem de
-segurança pra qualquer tela futura igualmente pesada, já que o default de
-7KB do BSP nunca foi validado contra uma árvore de UI deste tamanho.
-(2) foi pedido explícito do usuário ("isso só precisa acontecer uma vez...
-e somente se a pessoa solicitar") - evita também gastar o budget de
-sensoriamento de rede sem necessidade.
-
-## ADR-0026 - ForexProvider dedicado (AwesomeAPI) para USD/BRL
-
-**Decisão:** nova interface `IForexProvider` (espelha `IMarketProvider`/
-`IWeatherProvider`) + `ForexProvider` (`providers/forex_provider.cpp`): uma
-chamada HTTPS a `GET /json/last/USD-BRL` da AwesomeAPI
-(`economia.awesomeapi.com.br`, sem API key, mesma convenção do CoinGecko/
-Open-Meteo), parseando o campo `bid` (vem como string JSON, não número).
-`ForexService` (novo, espelha `MarketService`/`WeatherService`) usa
-`DataDomain::Forex` do `RequestOrchestrator` - já existia uma policy pronta e
-sem uso (120s, 6 req-min) desde a Fase 2, só ativada agora. Isso substitui a
-triangulação anterior (`usd_brl = brl/btc_usd` a partir do mesmo snapshot do
-CoinGecko, ver ADR-0006), que era um placeholder explícito no código
-aguardando essa fonte dedicada. `CoinGeckoProvider` voltou a pedir só
-`vs_currencies=usd` (não busca mais `brl`).
-
-Como agora duas fontes independentes escrevem no mesmo `MarketSummary`,
-`usd_brl`/`usd_brl_valid`/`usd_brl_stale`/`usd_brl_source`/
-`usd_brl_last_update_ms` ficaram separados de `btc_usd`/`btc_change_24h`/
-`valid`/`stale`/`source`/`last_update_ms`, e `StateStore::set_market()`
-passou de um replace completo do struct para um merge parcial (preserva os
-campos `usd_brl_*` ao atualizar os campos `btc_*`, e vice-versa via
-`set_usd_brl_rate()`) - um fetch não pode apagar o resultado do outro.
-`HomeScreen` mostra "Dólar" condicionado a `usd_brl_valid` e "Bitcoin"
-condicionado a `valid`, independentemente.
-
-**Motivo:** item já registrado como pendência no ROADMAP (Fase 5: "fonte
-USD/BRL dedicada") - a triangulação via CoinGecko funcionava mas acoplava a
-cotação do Dólar à disponibilidade/rate-limit do provider de Bitcoin sem
-necessidade. AwesomeAPI é brasileira, gratuita, sem chave e item dedicado
-(consistente com a escolha do Open-Meteo para clima, ADR-0023). O merge
-parcial no `StateStore` é a correção mínima necessária para dois services
-independentes coexistirem no mesmo struct sem se sobrescreverem - dividir
-`MarketSummary` em dois structs separados (mercado vs. câmbio) resolveria o
-mesmo problema com mais clareza, mas foi descartado por ora para não
-propagar a mudança em todos os pontos que já leem `state.market` (escopo
-mínimo, ver `home_screen.cpp`/`market_service.cpp`).
-
-## ADR-0027 - Cache local em LittleFS (Fase 6)
-
-**Decisão:** novo componente `firmware/components/cache/` com `CacheStore`
-(`mount()`/`write()`/`read()` genéricos, sem dependência de `models/` - não
-conhece `WeatherSummary`/`MarketSummary`). Monta LittleFS (dependência
-gerenciada `joltwallet/littlefs`) na partição `storage` já existente. Na
-primeira implementação o mount funcionava pelo *label* mesmo com o subtype
-`spiffs`; na versão atual o `storage` foi explicitamente tipado como
-`littlefs` em `partitions.csv` para alinhar o layout com a intenção da fase e
-evitar ambiguidade futura com SPIFFS.
-Escrita atômica via `<key>.tmp` + `rename()` (ADR-0015); cada blob tem um
-header (`magic` + `schema_version` + `payload_size`) - leitura que não bate
-qualquer um dos três é tratada como "sem cache" (sem distinguir corrupção
-de versão diferente, sem migração - ver nota de escopo). `write()`/`read()`
-retornam `bool` em vez de `Result<T>`/`Status` (convenção do projeto): a
-API é deliberadamente genérica (`void*`+`size_t`), `Result<T>` não encaixa
-bem nesse formato, e `false` em `read()` é o caminho normal (cache vazio na
-primeira vez), não uma condição excepcional.
-
-Cache dividido por domínio (`weather`, `market_btc`, `market_forex`) em vez
-de um blob único, porque `MarketService` e `ForexService` já escrevem
-campos independentes do mesmo `MarketSummary` em memória (ADR-0026) - um
-arquivo compartilhado reproduziria em disco o mesmo bug de sobrescrita que
-foi corrigido no `StateStore::set_market()`. `WeatherService`/
-`MarketService`/`ForexService` ganharam uma referência a `CacheStore`: no
-`init()` tentam ler do cache e, se existir, semeiam o `StateStore` com
-`valid=true, stale=true, source=DataSource::Cache` (a Home mostra o último
-dado bom em vez de "--"/"sem dados ainda" antes mesmo do Wi-Fi conectar);
-depois de cada fetch real bem-sucedido, gravam no cache. `app_main.cpp`
-monta o `CacheStore` logo após `board.bring_up()` e usa o resultado pra
-preencher `SystemStatus.cache_ready` (antes hardcoded `false`).
-`home_screen.cpp` passou a mostrar o sufixo `" (cache)"`/`" (mock)"` pro
-Bitcoin e pro clima, mesmo padrão que já existia pro Dólar.
-
-**Nota de escopo:** ADR-0015 menciona "migração no boot", mas esta é a
-primeira versão de schema - não há nada anterior pra migrar de. Por ora,
-incompatibilidade de schema é só descartada (trata como cache ausente);
-lógica de migração real fica para quando houver de fato uma v2 de algum
-schema.
-
-**Motivo:** item já registrado como pendência no ROADMAP (Fase 6) e
-decidido na ADR-0015 (LittleFS, não SPIFFS, por wear leveling + escrita
-atômica). Reusar a partição `storage` existente evita reparticionar a
-flash; dividir por domínio é a mesma lição já aprendida e documentada na
-ADR-0026, aplicada também à persistência em disco.
-
-## ADR-0028 - Observabilidade (coredump, reset reason, reboots) - Fase 7
-
-**Decisão:** nova partição `coredump` (256KB, `partitions.csv`) +
-`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y` (`sdkconfig.defaults`) - persiste
-crash dumps em flash, recuperáveis via `idf.py coredump-info`. Sem
-parsing/exibição do conteúdo on-device (ADR-0014 pede "persistir", não
-"exibir" - decodificar endereços/símbolos numa tela embarcada está fora de
-escopo).
-
-Novo `SystemService` (`components/services/`) reaproveita literalmente o
-padrão já validado na placa física pelo harness do Gate 15
-(`firmware/experiments/gate15_coexistence/main/gate15_main.c`):
-`esp_reset_reason()` + a mesma tabela de strings
-(POWERON/SW/PANIC/INT_WDT/TASK_WDT/OTHER_WDT/BROWNOUT/DEEPSLEEP/EXT/
-UNKNOWN) e contador de reboots em NVS - namespace dedicado `"sysdiag"`,
-separado do `"novapanel"` do `SetupService` (concern não relacionado).
-Publica via novo `StateStore::set_boot_diagnostics()` - merge parcial em
-`SystemStatus` (mesmo padrão de `set_usd_brl_rate`/ADR-0026), porque
-`SystemService::init()` roda depois de `app_main.cpp` já ter publicado as
-flags de hardware (`board_ready`/`display_ready`/etc.) - não pode
-sobrescrevê-las.
-
-Nova `SystemScreen` (`components/ui/`) é uma tela própria
-(`lv_screen_load()` dela mesma, como `BootScreen`/`WizardScreen`) - **não**
-usa `MainShell::content()`. Conteúdo simples, só texto (decisão do
-usuário, sem refinamento visual ainda): motivo do reset, contador de
-reboots, flags de hardware, idade do dado de clima/Bitcoin/Dólar
-(`now_ms - last_update_ms`, sem novo campo persistido - já existe em
-`WeatherSummary`/`MarketSummary`). Navegação: `MainShell` ganhou um 8º
-ícone no rail (`LV_SYMBOL_WARNING`, o único navegável além de "Início") e
-uma `NavigateFn` injetada no construtor (mesmo padrão de
-`WizardScreen::SubmitFn`); botão "Voltar" na `SystemScreen` chama
-`StateStore::set_screen(ScreenId::Home)`.
-
-**Motivo:** `MainShell::content()` hoje assume um único screen "MAIN
-phase" (Home) montado uma vez e nunca desmontado - dar à tela de Sistema o
-mesmo tratamento exigiria ensinar `HomeScreen`/`MainShell` a desmontar/
-remontar ao trocar de tela, infraestrutura que a ADR-0024 não previu e que
-este MVP não precisa; tratá-la como tela própria (igual Boot/Wizard, pelo
-mesmo motivo histórico) é a correção mínima. Reusar o padrão já validado
-do Gate 15 em vez de reinventar `esp_reset_reason()`/contador de reboots
-evita repetir uma investigação já feita na placa física.
-
-## ADR-0029 - Fase 8: circuit breaker + backoff + backpressure no RequestOrchestrator
-
-**Decisão:** o `RequestOrchestrator` (ADR-0004/0012) ganha, por domínio, um
-circuit breaker com três estados (`CircuitState`: `Closed`/`Open`/`HalfOpen`)
-e backoff exponencial + jitter implementados diretamente na classe, sem nova
-camada:
-
-- **Threshold:** 3 falhas consecutivas abrem o circuito (sem janela de tempo -
-  só falhas consecutivas, pois cada domínio já é isolado pelos intervalos da
-  policy).
-- **Backoff:** começa em 10s, dobra a cada abertura, teto de 5min; ±20% de
-  jitter via XOR-shift PRNG (nenhuma dep externa - funciona no host e no
-  firmware sem `esp_random()`).
-- **Open → HalfOpen:** `update_clock()` (chamada a cada tick do loop principal)
-  verifica se `now_ms >= open_until_ms`; quando sim, transiciona para
-  `HalfOpen`. Uma única probe é permitida (`can_request()` libera, sem checar
-  o intervalo normal); sucesso fecha o circuito, falha reabre com backoff
-  dobrado.
-- **Backpressure / drop-oldest:** no modelo polling atual, `can_request()`
-  retornando `false` quando o circuito está `Open` é o drop de cada tentativa
-  pendente - sem fila FIFO explícita; o efeito é idêntico a "drop-oldest".
-- **Retry finito:** ao contrário de um retry imediato infinito, cada sonda é
-  separada por pelo menos o backoff corrente (capped a 5min), limitando o
-  impacto em servidores fora do ar.
-- **API pública nova:** `circuit_state(domain)` e `is_degraded(domain)` -
-  serviços e UI podem checar para exibir dado stale ou avisos sem quebrar o
-  encapsulamento.
-
-Nenhuma mudança nos serviços foi necessária: eles continuam chamando
-`can_request()` / `note_request()` da mesma forma; o circuit breaker é
-transparente para eles.
-
-**Motivo:** implementa o que ADR-0012 descreveu (circuit breaker, backpressure,
-retry finito, degradação para cache) com o mínimo de código novo - tudo dentro
-do `RequestOrchestrator`, que já era a porta única de saída de todos os
-requests. Nenhuma mudança de interface nos serviços ou na UI foi necessária.
-
-## ADR-0030 - Fase 9: build de produção seguro (Secure Boot v2, Flash Encryption, NVS Encryption)
-
-**Decisão:** segurança de produção implementada como **camada de build separada**
-(`firmware/sdkconfig.prod`), sem alterar o código-fonte do firmware ou o fluxo
-de desenvolvimento. O DEV continua com `idf.py build` sem atrito; PROD usa
-`idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.prod" build`.
-
-Escolhas concretas (todas dentro dos mecanismos nativos do ESP-IDF, sem cripto
-própria - ADR-0011):
-
-- **Secure Boot v2** (`CONFIG_SECURE_BOOT_V2_ENABLED=y`): assina o bootloader e
-  as partições de app com uma chave RSA-3072 gerada fora do repo e armazenada em
-  secrets manager. A chave pública fica gravada em eFuse - operação irreversível,
-  só executada nas unidades de produção. Anti-rollback habilitado
-  (`CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK=y`, versão inicial = 1).
-
-- **Flash Encryption** (`CONFIG_SECURE_FLASH_ENC_ENABLED=y`, RELEASE mode): a
-  chave de criptografia é gerada pelo próprio dispositivo no primeiro boot e
-  gravada em eFuse - sem transporte de chave pelo host. Após o primeiro boot,
-  todo o flash é cifrado; flashes subsequentes devem usar `idf.py encrypted-flash`.
-  Modo RELEASE (não DEVELOPMENT): permanente, sem possibilidade de reverter.
-
-- **NVS Encryption** (`CONFIG_NVS_ENCRYPTION=y`): as chaves NVS ficam na partição
-  `nvs_keys` (nova em `partitions.csv`, 4KB), que é ela mesma cifrada pelo Flash
-  Encryption. Wi-Fi SSID/senha e demais preferências do usuário ficam protegidos
-  em repouso - sem nenhuma mudança no código de `SetupService`/`SystemService`.
-
-- **Coredump desabilitado em PROD** (`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=n`):
-  um coredump pode conter heap com credenciais Wi-Fi e API keys em memória
-  (ADR-0011). DEV mantém coredump ativo (sdkconfig.defaults).
-
-- **Log nível WARN em PROD**: reduz verbosidade e evita vazar informação de
-  estado/timing pelo serial.
-
-- **Chave de Secure Boot fora do repo**: `secure_boot_signing_key.pem` adicionado
-  ao `.gitignore`; nunca versionado.
-
-- **Auditoria de secrets em logs**: `SetupService` não loga senha Wi-Fi em nenhum
-  ponto (auditado em Fase 9 - confirmado: nenhum `ESP_LOGx` com
-  `wifi_password`/`saved_password`). Constraint de não-log deve ser mantida em
-  qualquer código que toque credenciais.
-
-**Motivo:** ADR-0011 decidiu a estratégia desde o início (layout de partição e
-mecanismos nativos); esta ADR apenas registra as escolhas de implementação da
-Fase 9. Separar DEV/PROD em dois sdkconfig evita acidente de habilitar Secure
-Boot permanente numa placa de desenvolvimento. NVS Encryption + Flash Encryption
-juntos significam que as chaves NVS são automaticamente protegidas sem necessidade
-de gerenciamento manual adicional. Flash Encryption em RELEASE mode é a única
-opção compatível com produto real (DEVELOPMENT mode permite reflash plaintext, o
-que não é aceitável em produção).
-
-## ADR-0031 - Fase 10: buffer de display em PSRAM (quarter-height double-buffer)
-
-**Decisão:** o buffer de draw do LVGL (`bsp_display_cfg_t.flags.buff_spiram`)
-migra de `false` (RAM interna) para `true` (PSRAM, ~300KB por buffer), com
-`double_buffer=true` e tamanho de `BSP_LCD_H_RES * (BSP_LCD_V_RES / 4)` = 1024
-× 150 pixels × 2 bytes = 307.200 bytes por buffer, ~600KB total.
-
-**Contexto histórico:** essa configuração foi tentada e rejeitada na Fase 4
-porque `LV_USE_BUILTIN_MALLOC` reservava 64KB de RAM interna de forma estática
-desde o boot, deixando o pool DMA interno sem espaço suficiente para o
-FreeRTOS e o ESP-Hosted criarem as suas próprias tarefas/descritores. A
-correção (`LV_USE_CLIB_MALLOC=y`, `sdkconfig.defaults`, ADR-0018) foi feita
-antes do final da Fase 4 — mas para o buffer de display em si, adiou-se para
-a Fase 10 por cautela, sem revalidar no hardware.
-
-**Por que funciona agora:** com `LV_USE_CLIB_MALLOC`, o LVGL não reserva
-mais nada estaticamente no boot; toda alocação é on-demand via `malloc()`.
-O pool DMA interno fica livre para FreeRTOS/ESP-Hosted. Os buffers de draw
-em PSRAM não precisam ser DMA-contíguos em RAM interna — o ESP32-P4 acessa
-PSRAM via cache/bus e o driver MIPI-DSI consegue fazer DMA a partir dela
-(`buff_dma=true` continua ativo).
-
-**Ganho:** com buffer de ¼ de tela (~150 linhas), o LVGL precisa de apenas
-~4 chamadas de flush por frame completo, contra ~24 com o
-`BSP_LCD_DRAW_BUFF_SIZE` padrão do BSP (partição de ~25 linhas). O
-dirty-rect nativo do LVGL ainda funciona — se só uma região da tela mudou, o
-flush vai para as linhas da dirty region, não para o frame inteiro. O
-double-buffer elimina tearing visível que aparecia com o buffer único e a
-latência de PSRAM.
-
-**Fora de escopo desta fase:** candles incrementais e backpressure de imagem
-(JPEG/resize) seguem como pós-MVP (v1.0+), conforme notas do ROADMAP. O soak
-test de 72h foi excluído explicitamente desta entrega (Fase 10) por decisão
-do produto — a validação de estabilidade longa pertence ao processo de release.
-
-**Motivo:** o ganho de liberar ~300KB de RAM interna para FreeRTOS e
-ESP-Hosted era o objetivo original da Fase 10 de performance. O bloqueador
-foi removido em Fase 4; a Fase 10 apenas realiza a troca que ficou pendente.
-
-## ADR-0032 - Fase 11: NotificationService com fila prioritária + ClockService híbrido RTC↔NTP
-
-**NotificationService — fila prioritária com cap:**
-- Capacidade máxima de 32 itens (`kMaxItems`). Ao atingir o limite, o item
-  não-lido de menor prioridade é evicado antes de inserir o novo; se todos
-  estiverem lidos, o mais antigo (frente da fila) é removido. Prioridade
-  numérica crescente: `Silent=0 < Info=1 < Success=2 < Warning=3 < Danger=4`.
-- Novos métodos: `mark_read(id)` e `unread_count()`.
-- Parâmetro `now_ms` adicionado ao `notify()` (opcional, default 0) para
-  preencher `Notification::created_ms` — antes ficava em 0.
-- API pública backward-compatible: callers existentes compilam sem alteração.
-
-**ClockService — híbrido RTC↔NTP (ADR-0009, Fase 11):**
-- O Waveshare ESP32-P4-WIFI6-Touch-LCD-7B tem o domínio RTC interno do SoC
-  ESP32-P4 alimentado por bateria 1220 (`VBAT`, sem chip RTC I2C externo —
-  confirmado em `docs/HARDWARE.md`). Gate 14 da Fase 0 fechou a decisão de
-  clock offline: usar o RTC interno quando a época é plausível e degradar para
-  NTP-only/horário não sincronizado quando não houver hora confiável.
-- O `ClockService` já implementava a lógica híbrida correta desde a Fase 5:
-  `clock_.synced = (time() >= kMinPlausibleEpoch)`. Com a bateria viva,
-  `time()` retorna um valor plausível após reboot sem NTP → `synced=true`
-  imediatamente. Sem bateria + sem NTP → mock avança com `synced=false`.
-  Nenhuma mudança de lógica foi necessária; apenas os comentários foram
-  corrigidos para refletir o hardware confirmado.
-- Mock seed atualizado de 2026-06-14 para 2026-06-25 (mais próximo de hoje).
-
-**Multi-provider de mercado:** permanece **pós-MVP** (v1.0+), conforme
-ADR-0006 e a nota de escopo do ROADMAP. A interface `IMarketProvider` já
-permite múltiplos providers com fallback; só será ativado quando houver
-necessidade real. Nenhuma mudança de código.
-
-**Motivo:** o cap da fila de notificações é a mesma política de backpressure
-já aplicada no `RequestOrchestrator` (ADR-0012/0029) — consistência de
-design. A prioridade numérica explícita (`Silent=0 … Danger=4`) garante que
-o comparador de evicção seja simples e não quebre ao reordenar o enum. O
-`ClockService` não precisava de mudança de lógica porque a distinção
-"RTC vivo vs. NTP synced vs. sem nenhum" é toda capturada pelo
-`kMinPlausibleEpoch` check — um único bit (`synced`) é suficiente para o MVP.
-
-## ADR-0033 - NovaKeyboardManager: teclado compartilhado para inputs de texto
-
-**Decisão:** todo input de texto no sistema usa `NovaKeyboardManager`
-(`components/ui/include/common/nova_keyboard_manager.hpp`). Nenhuma tela
-cria `lv_keyboard` diretamente.
-
-**Como usar:**
-```cpp
-// 1. Declarar um membro na tela (ponteiro — forward declaration basta no .hpp)
-NovaKeyboardManager* keyboard_manager_{nullptr};
-
-// 2. Criar em build() e destruir no destrutor
-keyboard_manager_ = new NovaKeyboardManager();
-keyboard_manager_->init();
-
-// 3. Registrar cada textarea (scroll_container é opcional)
-keyboard_manager_->attach(my_textarea, scroll_container);
-
-// 4. Abrir programaticamente se necessário
-keyboard_manager_->open_for(my_textarea, scroll_container);
-
-// 5. Fechar (ex.: ao fechar o modal)
-keyboard_manager_->close();
-
-// 6. Callbacks opcionais
-keyboard_manager_->set_submit_callback([this](lv_obj_t* ta, const char* text) { … });
-keyboard_manager_->set_cancel_callback([this](lv_obj_t* ta) { … });
-keyboard_manager_->set_open_callback([this](lv_obj_t* ta) { … });
-keyboard_manager_->set_close_callback([this]() { … });
-```
-
-**Regras:**
-- O `NovaKeyboardManager` é dono do `lv_keyboard` (criado em `lv_layer_top()`
-  na primeira abertura). Cada tela instancia o seu próprio manager.
-- O `scroll_container` passado em `attach()` / `open_for()` recebe
-  `pad_bottom` automático igual à altura do teclado + gap, e é restaurado ao
-  fechar. Passar `nullptr` usa a tela raiz do textarea.
-- O manager ajusta `modal_box_` de posição via `set_open_callback` /
-  `set_close_callback` para garantir que o dialog não fique atrás do teclado.
-- Nunca incluir `nova_keyboard_manager.hpp` em headers que são compilados no
-  host check (ele inclui `lvgl.h`). Usar forward declaration +
-  ponteiro cru no `.hpp`; incluir o header completo apenas no `.cpp`.
-
-**Motivo:** o padrão anterior criava um `lv_keyboard` embutido em cada tela
-(ou painel separado), duplicando layout e lógica. O `NovaKeyboardManager`
-centraliza criação, binding (`lv_keyboard_set_textarea`), ajuste de padding
-do container e scroll do campo focado — mantendo a regra arquitetural de que
-a UI não toca inputs de outras telas.
-
-## ADR-0034 - H4/H5: schema version em NVS, cache auto-recuperavel e Wi-Fi resiliente
-
-**Decisão:** a persistência do `SetupService` deixa de depender de um layout
-"implícito" e passa a ter `schema_v` em NVS (`kCurrentNvsSchemaVersion=1`).
-Se o namespace `novapanel` vier de firmware antigo sem essa chave, o serviço
-migra o layout legado in-place e grava a versão; se encontrar uma versão mais
-nova que a do firmware atual, não tenta interpretar nem sobrescrever os dados:
-degrada com segurança para onboarding novamente. Isso evita tratar dados de
-configuração de release futura como se fossem compatíveis por acaso.
-
-O `CacheStore` continua genérico, mas passa a se auto-recuperar de arquivos
-interrompidos/corrompidos: remove `*.tmp` restantes no mount e apaga o arquivo
-final quando o header/payload vierem inválidos ou com `schema_version`
-incompatível. A política continua sendo "cache incompatível vale como ausência
-de cache", mas agora o erro não reaparece em todo boot.
-
-No Wi-Fi, `SetupService` deixa de depender apenas do callback imediato do
-driver: a conexão passa a ter timeout cooperativo via `tick(now_ms)`, retry
-limitado com atraso curto entre tentativas e reconexão também para quedas após
-já estar conectado (não só no onboarding). Desconexão pedida pelo usuário
-(SSID vazio na Settings) desarma explicitamente a auto-reconexão.
-
-**Motivo:** a Fase 6 introduziu persistência real e a Fase 5 passou a depender
-de credenciais/NTP/Wi-Fi reais, mas sem versionamento operacional da NVS e sem
-limpeza ativa de cache inválido o produto ficava sujeito a comportamentos
-ambíguos em upgrade ou corrupção por power loss. Do lado de rede, a heurística
-"tentar algumas vezes no callback de disconnect durante Connecting" resolvia o
-primeiro boot, mas não sustentava reconexão estável ao longo da vida do
-dispositivo nem detectava tentativas que simplesmente penduravam sem callback
-útil em tempo razoável.
-
-## ADR-0035 - Endurecimento da camada REST: serialização global + NetworkWorker
-
-**Contexto:** hoje cada serviço de dados (Market, Forex, Weather) roda em sua
-própria task FreeRTOS e chama `http_get` de forma síncrona. O
-`RequestOrchestrator` faz bem o papel de *gatekeeper* por domínio (intervalo,
-rate-limit, circuit breaker com backoff), mas não executa nem coordena: nada
-limita a concorrência global nem usa a `RequestPriority`. No boot os três
-serviços disparam quase juntos, abrindo ~3 handshakes TLS simultâneos (~130 KB
-de RAM interna cada). A RAM interna cai a ~173 KB (visto no boot log), gerando
-falhas → circuit breaker abre → serviços "não carregam". A mesma rajada de
-barramento (SDIO/Wi-Fi + TLS) contende com a leitura do framebuffer em PSRAM
-pelo MIPI-DSI e contribui para o flash do painel.
-
-**Decisão (fase 1 - aplicada):**
-- Serialização global no ponto único `http_get` (`utils/http_client.cpp`):
-  um `std::mutex` (`http_gate`) garante no máximo **1 requisição HTTP/TLS por
-  vez** em todo o firmware. Elimina os TLS simultâneos do boot, a pressão de
-  RAM e parte da contenção de barramento, sem reescrever o modelo de tasks.
-- `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y`: libera os buffers grandes do TLS após o
-  handshake, reduzindo o pico de RAM interna por conexão.
-
-**Decisão (fase 2 - aplicada):** introduzido o `NetworkWorker`
-(`components/services/network_worker.{hpp,cpp}`), uma única task que centraliza
-a execução. Os serviços (Market/Forex/Weather) deixaram de ter task própria;
-agora só expõem `init()` (carga de cache) + `refresh()` público, e o `app_main`
-registra cada um como *fetcher* `{DataDomain, refresh}`. O worker, em laço
-único: atualiza o relógio do orquestrador, checa Wi-Fi, e entre os domínios
-"due" (`can_request`) executa **o de maior prioridade** (menor ordinal de
-`RequestPriority`; empate pela ordem de registro), serializado, com gap de
-~400 ms entre buscas → **escalonamento natural** no boot (Market → Forex →
-Weather, um de cada vez, sem TLS simultâneo). Mantém a regra "todo request
-passa pelo RequestOrchestrator".
-
-**Keep-alive / reuso de sessão TLS: descartado (por ora).** Com os intervalos
-de produção (BTC 3 min, Dólar 60 min, Clima 30 min - ver políticas no
-`RequestOrchestrator`), conexão keep-alive não se sustenta: o servidor fecha a
-conexão ociosa em segundos, então o handshake refaz de qualquer forma. O ganho
-de RAM por conexão já vem do `CONFIG_MBEDTLS_DYNAMIC_BUFFER`. Reavaliar só se
-algum domínio voltar a ter intervalo curto (ex.: `MarketRealtime`/`focused`).
-
-**Motivo:** a fase 1 resolve o sintoma crítico (serviços não carregando por
-contenção de RAM/rede no boot) com risco mínimo e sem mudança estrutural. A
-fase 2 entrega o desenho sustentável pedido pelo AGENTS.md (escalabilidade,
-robustez, manutenção): concorrência controlada, prioridade real e menos custo
-de TLS por ciclo. Separar em duas fases permite validar a serialização em
-campo antes do refactor das tasks.
+# NovaPanel — Decisões de Arquitetura (ADRs, baseline v4)
+
+Formato curto: contexto → decisão → motivo/consequências. Numeração reinicia
+no v4; os 35 ADRs do baseline v3 permanecem no histórico git (arquivo anterior
+a 2026-07-02) e são citados como `[v3 ADR-00xx]` quando uma decisão é herdada.
+
+---
+
+## ADR-0001 — Reconstrução total (baseline v4)
+
+**Contexto:** análise arquitetural independente (2026-07-02, ver
+`ANALISE-ARQUITETURAL-2026-07-02.md`) constatou: núcleo bom, mas drift
+documental grave (CLAUDE.md descrevendo firmware inexistente), HAL abandonada,
+UI singleton com invalidação N×M no main, providers sem interface, teste
+raso, sem OTA. Decisão do dono do projeto: recomeçar docs e firmware.
+**Decisão:** baseline v4. Documentação recriada do zero como fonte única;
+firmware novo em `firmware/`; código v3 vira `reference/firmware_v3/` para
+port seletivo. Premissas provadas em campo ficam fixas (hardware, ESP-IDF +
+LVGL, offline-first, StateStore/EventBus, rede serializada, mitigação de
+barramento).
+**Consequências:** custo de reimplementação aceito conscientemente; em troca,
+os contratos estruturais (board/, ScreenSpec, interfaces, ownership) nascem
+na Fase 1 em vez de "depois". Port seletivo é permitido e incentivado onde o
+v3 era bom (core, orquestrador, cache, receitas de BSP).
+
+## ADR-0002 — STATUS.md como fonte única de estado
+
+**Contexto:** a causa-raiz da degradação do v3 foi documentação afirmando
+estados divergentes (duas numerações de fase, CLAUDE.md desatualizado) num
+repo operado por agentes.
+**Decisão:** somente `docs/STATUS.md` afirma estado. Demais docs descrevem
+alvo/política. Fechamento de fase atualiza STATUS no mesmo commit
+(Definition of Done). Divergência é tratada como bug com prioridade de crash.
+
+## ADR-0003 — Monorepo, offline-first e server opcional [herda v3 ADR-0001/0002]
+
+**Decisão:** monorepo (`firmware/`, `docs/`, `shared/`, `tools/`, `skills/`,
+`reference/`); o firmware nunca depende de `server/`. `shared/` fica
+**congelado** (sem contratos novos) até existir a segunda ponta (Fase 11).
+
+## ADR-0004 — Rede: orquestração central + execução serializada [herda v3 ADR-0004/0012/0029/0035]
+
+**Contexto:** validado em campo no v3: 3 TLS simultâneos esgotavam a SRAM
+interna (~130 KB/handshake, heap a 173 KB) e derrubavam os serviços; a
+solução em duas fases (mutex global de HTTP + NetworkWorker único por
+prioridade) resolveu.
+**Decisão:** RequestOrchestrator (política: intervalo, rate limit, circuit
+breaker Closed→Open→HalfOpen, backoff exponencial com jitter) separado do
+NetworkWorker (execução: 1 HTTPS por vez, gap de 400 ms, prioridade). Services
+de dados não têm task própria. `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y`. Keep-alive
+descartado nos intervalos atuais (servidor fecha idle antes do próximo fetch).
+
+## ADR-0005 — board/ obrigatória com locks semânticos
+
+**Contexto:** o v3 aboliu a HAL; o BSP e ~300 linhas de driver de áudio
+vazaram para o app_main, e o invariante "display lock = mutex do I2C
+compartilhado (GT911+ES8311)" ficou em comentários.
+**Decisão:** `IBoard` (+ `MockBoard`, `WaveshareBoard`) desde a Fase 1.
+`lock_ui()` e `lock_shared_i2c()` são nomes semânticos; a coincidência física
+dos dois locks é detalhe interno da WaveshareBoard. Áudio é módulo
+(`services/audio` sobre `IAudio`), nunca inline no main.
+**Consequências:** host-check e testes de service sem hardware; o main volta
+a ser wiring; o custo é uma camada a mais de indireção — aceito.
+
+## ADR-0006 — UI por registro de ScreenSpec com máscara de invalidação
+
+**Contexto:** no v3, cada evento→tela era um if/else com flags booleanas no
+app_main (mapa N×M), e telas repintavam por inteiro a cada evento.
+**Decisão:** telas se registram (`ScreenSpec{id, build, update,
+invalidation_mask, on_enter/leave}`); o shell itera o registro; o
+UiDispatcher é o único dono de coalescing; view-model puro por tela.
+Detalhes: `UI-PATTERN.md` (documento normativo).
+**Consequências:** tela nova sem tocar main/shell; testes host de view-model;
+custo de padronizar as primeiras telas — pago na Fase 2.
+
+## ADR-0007 — Providers atrás de interface, com fixtures obrigatórias
+
+**Contexto:** o v3 prometia ports-and-adapters mas services dependiam de
+providers concretos; zero teste de parsing — o ponto onde payload externo
+muda sem aviso.
+**Decisão:** `IMarketProvider`, `IWeatherProvider`, `IForexProvider` desde o
+primeiro commit de cada domínio; service recebe a interface por injeção no
+main. Todo provider tem fixtures versionadas (payload real capturado +
+variantes malformadas/truncadas) rodando no CI.
+
+## ADR-0008 — Modelo de concorrência com propriedade declarada
+
+**Contexto:** o v3 sincronizava por convenção; havia data race real com
+comentário afirmando segurança (`request_ohlc_period`), e fila de ações de
+UI com profundidade 4 e drop silencioso.
+**Decisão:** tabela de tasks e ownership no ARCHITECTURE §6 é normativa.
+Campo compartilhado = atomic, mutex ou ActionQueue — declarado no header.
+ActionQueue ≥ 16 com overflow logado e contado. EventBus síncrono mantido
+(dados pelo StateStore, evento como sinal) [herda v3 ADR-0007/0013/0019].
+
+## ADR-0009 — RESOURCE-BUDGET como contrato de plataforma
+
+**Contexto:** as mitigações físicas do v3 (SRAM para HTTP/JSON, render
+parcial, throttle de flash, 1 TLS) estavam corretas mas espalhadas em
+comentários de 4 arquivos.
+**Decisão:** `RESOURCE-BUDGET.md` é normativo: regras de alocação por tipo de
+dado, limiares de heap com ação (`ResourceWarning` com handler real),
+orçamento de escrita de flash e de rede. Feature nova declara custo antes de
+entrar no roadmap. Truncamento de corpo HTTP passa a ser falha de request.
+
+## ADR-0010 — OTA A/B antes de qualquer unidade PROD lacrada
+
+**Contexto:** o v3 tinha partição factory-only e, simultaneamente,
+`sdkconfig.prod` com Flash Encryption RELEASE (irreversível) e anti-rollback
+— combinação que produziria unidade lacrada sem caminho de atualização.
+**Decisão:** a tabela de partições nasce com `ota_0/ota_1/otadata` na Fase 1
+(evita reparticionar depois). Fluxo OTA local com assinatura + rollback
+automático por health-check é pré-requisito do provisionamento PROD (Fase 7).
+Anti-rollback só é ativado junto do fluxo OTA.
+
+## ADR-0011 — Produto pessoal: pt-BR e Brasil como default consciente
+
+**Contexto:** o v3 hardcodeava strings pt-BR nas telas, tabela de 5 timezones
+brasileiros e localização default Brasília — implícito e espalhado.
+**Decisão:** o MVP é single-locale (pt-BR/Brasil) por escolha explícita, mas:
+strings em tabela única (`strings_ptbr.hpp`), timezone/localização em
+configuração central e UserPreferences. i18n completa NÃO é requisito; barato
+de adotar depois se o produto deixar de ser pessoal.
+
+## ADR-0012 — Observabilidade e coredump em PROD
+
+**Contexto:** contradição no v3: a triagem de campo dependia de coredump, mas
+o perfil PROD desligava coredump-to-flash.
+**Decisão:** coredump para partição flash fica LIGADO em PROD; a partição é
+apagada no provisionamento; logs em nível WARN. Contadores persistidos
+mínimos: reboots, falhas por domínio, aberturas de breaker, overflows de fila,
+ResourceWarnings. Watermarks de heap amostrados continuamente e expostos na
+tela de sistema. [estende v3 ADR-0014/0028]
+
+## ADR-0013 — Persistência: NVS versionada + cache LittleFS atômico [herda v3 ADR-0027/0034]
+
+**Decisão:** NVS com `schema_v`, migração explícita, versão futura → ignora
+sem brickar, dedup de escrita. Cache em LittleFS com header
+magic/versão/tamanho, escrita tmp+rename, mismatch → descarte; persistência
+throttlada (30 min/domínio). Segredos só em NVS (cifrada em PROD); nunca em
+log. [herda v3 ADR-0008]
+
+## ADR-0014 — Clock híbrido RTC↔NTP [herda v3 ADR-0009/0021/0032]
+
+**Decisão:** RTC com bateria é a fonte de boot: hora plausível
+(epoch > limiar) aparece imediatamente sem rede; NTP refina quando disponível;
+sem hora plausível, UI mostra estado não-sincronizado — nunca inventa data.
+NTP é pré-requisito funcional de HTTPS (validação de certificado).
+
+## ADR-0015 — Validação host portátil como gate de CI
+
+**Contexto:** o `host_check.sh` do v3 dependia de `pwsh.exe` (só Windows),
+quebrando a promessa de validação portátil e impedindo CI Linux.
+**Decisão:** host_check em bash puro + g++ com shims; roda idêntico em Linux,
+WSL e CI. Testes nativos (core + view-models + fixtures de provider) são gate
+de merge. Nenhum script de validação pode depender de SO específico.

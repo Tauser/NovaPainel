@@ -36,6 +36,12 @@ private:
     EventBus&      bus_;
     SubscriptionId sub_id_{0};
     UserPreferences prefs_{};
+    // Ultimo snapshot das prefs gravado na NVS. Usado p/ dedup: evita um
+    // nvs_commit (erase de flash -> flash branco no MIPI-DSI) quando o evento
+    // PreferencesChanged nao mudou nenhum campo que save_runtime_preferences
+    // persiste (brightness/theme/time_format_24h).
+    UserPreferences runtime_saved_{};
+    bool runtime_saved_valid_{false};
     int wifi_retry_count_{0};
     bool wifi_auto_reconnect_enabled_{false};
     bool wifi_connect_pending_{false};

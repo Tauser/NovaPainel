@@ -43,7 +43,13 @@ bool MarketService::refresh(uint32_t now_ms)
     }
 
     store_.set_crypto(market);
-    cache_.save_crypto(market);
+    // Persiste so na primeira vez (popula o cache de boot logo) e depois a cada
+    // kCacheSaveIntervalMs, em vez de todo fetch (ver nota no header).
+    if (last_cache_save_ms_ == 0 ||
+        (now_ms - last_cache_save_ms_) >= kCacheSaveIntervalMs) {
+        cache_.save_crypto(market);
+        last_cache_save_ms_ = now_ms;
+    }
     orchestrator_.note_request(DataDomain::MarketSummary, now_ms, true);
 
     // Busca OHLC na primeira vez e depois a cada kOhlcIntervalMs.

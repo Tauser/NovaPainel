@@ -25,10 +25,16 @@ public:
     bool refresh(uint32_t now_ms);
 
 private:
+    // Cache so serve p/ boot offline: throttla a persistencia p/ evitar erase
+    // de flash a cada fetch (flash branco do MIPI-DSI por contencao no MSPI do
+    // P4). Ver nota detalhada em market_service.hpp.
+    static constexpr uint32_t kCacheSaveIntervalMs = 30u * 60u * 1000u;  // 30 min
+
     StateStore&          store_;
     RequestOrchestrator& orchestrator_;
     CacheStore&          cache_;
     OpenMeteoProvider&   provider_;
+    uint32_t             last_cache_save_ms_{0};
 };
 
 }  // namespace nova

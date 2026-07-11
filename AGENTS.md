@@ -1,135 +1,63 @@
-# AGENTS.md - NovaPanel
+# AGENTS.md — NovaPanel (baseline v4)
 
-## Visao do projeto
+## Visão do projeto
 
-Este repositorio constroi o **NovaPanel**, um smart display **local /
-offline-first** baseado em **ESP32-P4 + ESP32-C6**, com firmware em
-**ESP-IDF + LVGL**, arquitetura modular e expansao futura para automacao,
-sensores, midia, voz e integracao opcional com o ecossistema NoiseBot.
+Smart display **local / offline-first** em **ESP32-P4 + ESP32-C6** com firmware
+**ESP-IDF + LVGL (C++17)**. Central pessoal (hora, clima, mercado, agenda) que
+continua útil sem servidor e sem internet. Expansão futura: automação,
+sensores, mídia, voz, NoiseBot — por módulo, nunca por atalho entre camadas.
 
-O painel deve continuar util mesmo sem `server/`, sem internet e sem depender
-de um backend para as funcoes principais.
+## Ordem de leitura obrigatória (antes de qualquer mudança)
 
-## Leitura correta do estado atual
+1. `docs/STATUS.md` — **único** arquivo que diz o estado atual. Nenhum outro
+   documento (nem este) é fonte de estado. Divergência = bug de doc.
+2. `CLAUDE.md` — regras de trabalho, invariantes, Definition of Done.
+3. `docs/ARCHITECTURE.md` — desenho alvo. Para UI: `docs/UI-PATTERN.md`.
+4. `docs/ROADMAP.md` — em que fase a mudança se encaixa e o critério de saída.
+5. Se envolver hardware, memória, rede ou display: `docs/HARDWARE.md` e
+   `docs/RESOURCE-BUDGET.md` (contrato físico da placa — violar = regressão).
+6. Se envolver decisão estrutural: `docs/DECISIONS.md` (registrar ADR novo).
 
-Ao trabalhar neste repositorio, assuma sempre:
+## Leitura correta do baseline
 
-- `Fase 0` de hardware esta **concluida**
-- a trilha `H` de consolidacao tecnica/documental esta **concluida**
-- a `Fase 1` documental esta **concluida**
-- o `firmware/` ativo esta em **reconstrucao funcional controlada**
-- o `firmware_legacy_reference/` e **somente referencia para port seletivo**
+- O baseline vigente é o **v4** (reconstrução total decidida em 2026-07-02,
+  ADR-0001 v4). Código anterior é referência de port em `reference/`
+  (até a Fase 0 concluir a movimentação, pode ainda estar em `firmware/` —
+  confirme no STATUS).
+- Código de referência é **somente leitura**: portar seletivamente com crítica,
+  nunca copiar wiring, god-files ou padrões vetados (ver ADRs 0002–0012 v4).
+- Não trate documento histórico ou código v3 como se fosse o estado atual.
 
-Nao trate documentacao antiga ou implementacoes do tree legado como se ja
-estivessem reentregues no `firmware/` novo.
+## Princípios obrigatórios (resumo executável)
 
-## Fonte de verdade documental
+- UI lê estado e publica intenção; nunca faz request/persistência/hardware.
+- Toda mutação passa por `StateStore`; todo request por `RequestOrchestrator`
+  + `NetworkWorker`.
+- Só a `lvgl_task` toca LVGL; fora dela, lock via `board/`.
+- Hardware atrás de `IBoard`; API externa atrás de interface de provider;
+  tela nova via registro de `ScreenSpec`.
+- Concorrência: campo compartilhado entre tasks tem dono declarado ou é
+  atômico — comentário dizendo "seguro" não substitui análise.
+- Falha externa degrada para cache/stale com sinalização clara na UI.
+- Fechou fase ou mudou estrutura? Atualize `docs/STATUS.md` no mesmo commit.
 
-Antes de alterar firmware, documentacao, contratos ou roadmap, leia:
+## Skill routing (tarefa → skill em `skills/`)
 
-- `skills/novapanel-firmware-workflow/SKILL.md`
-- `docs/PLANEJAMENTO.md`
-- `docs/ARCHITECTURE.md`
-- `docs/ROADMAP.md`
+- Workflow padrão de mudança de firmware → `novapanel-firmware-workflow`
+- Novo service → `novapanel-add-service`
+- Novo provider (sempre com interface + fixture) → `novapanel-add-provider`
+- Novo estado/modelo → `novapanel-add-state-model`
+- Nova tela → seguir `docs/UI-PATTERN.md`
+- Registrar decisão → `novapanel-new-adr`
+- Validação host → `novapanel-host-check`
+- Fechar fase (inclui sync do STATUS) → `novapanel-close-phase`
 
-Quando relevante, leia tambem:
+> Skills herdadas do v3 podem referenciar caminhos antigos; ao usá-las,
+> verifique contra este documento e corrija a skill se divergir.
 
-- `docs/HARDWARE.md`
-- `docs/DECISIONS.md`
-- `docs/README.md`
+## Proibições que já causaram incidentes reais (v3)
 
-Para operacao e release, consulte:
-
-- `docs/SECURITY-OPERATIONS.md`
-- `docs/FIELD-OPERATIONS.md`
-- `docs/RELEASE-ROLLBACK.md`
-- `docs/SOAK-VALIDATION.md`
-
-## Principios obrigatorios
-
-- O firmware e **offline-first** e nunca depende estruturalmente de `server/`.
-- A UI **nao faz request direto**, nao persiste dados diretamente e nao toca
-  hardware/rede por fora dos fluxos definidos.
-- Toda mutacao de estado passa por `StateStore`.
-- Todo request externo passa por `RequestOrchestrator`.
-- Apenas a `lvgl_task` do BSP toca objetos LVGL; qualquer acesso externo exige
-  o lock apropriado.
-- Hardware e APIs entram por interfaces/modulos, nao por acoplamento cruzado.
-- Quando houver falha externa, o comportamento esperado e degradar com clareza
-  para cache/stale, nao travar a UX.
-
-## Arquitetura esperada
-
-Fluxo alvo:
-
-```text
-Provider -> Service -> StateStore -> EventBus -> UiDispatcher -> lvgl_task -> UI
-```
-
-Camadas esperadas:
-
-- `components/core`
-- `components/models`
-- `components/board`
-- `components/providers`
-- `components/services`
-- `components/ui`
-- `shared`
-
-Nao introduza atalhos arquiteturais que furam esse desenho sem registrar uma
-decisao em `docs/DECISIONS.md`.
-
-## Regras do baseline atual
-
-- O `firmware/` novo e a unica base ativa de evolucao.
-- O tree `firmware_legacy_reference/` serve para consulta, comparacao e port
-  seletivo de comportamento ou estrutura.
-- Nao reimporte o firmware antigo em bloco.
-- Nao marque fase funcional como concluida sem que ela exista no `firmware/`
-  ativo com validacao correspondente.
-- Nao confunda patrimonio tecnico da `Fase 0`/trilha `H` com implementacao ja
-  reentregue no reboot.
-
-## Ordem oficial das proximas fases
-
-Siga o roadmap consolidado:
-
-- `Fase 2`: estabilizacao do reboot do firmware
-- `Fase 3`: setup, conectividade e tempo
-- `Fase 4`: dados reais e cache offline
-- `Fase 5`: telas funcionais centrais do MVP
-- `Fase 6`: observabilidade e resiliencia de operacao
-- `Fase 7`: hardening de release e seguranca PROD
-
-## Skills do projeto
-
-As skills especificas do NovaPanel ficam em `skills/` e sao a fonte versionada
-para qualquer agente trabalhando neste repositorio.
-
-Use a skill especifica quando a tarefa envolver:
-
-- fechar ou auditar fase: `skills/novapanel-close-phase/SKILL.md`
-- hardware, ESP32-P4, C6 ou ESP-Hosted:
-  `skills/novapanel-hardware-risk-gate/SKILL.md`
-- build, flash, monitor, VS Code ou OpenOCD:
-  `skills/novapanel-esp-idf-build-debug/SKILL.md`
-- novo service: `skills/novapanel-add-service/SKILL.md`
-- novo provider/API adapter: `skills/novapanel-add-provider/SKILL.md`
-- novo estado/modelo: `skills/novapanel-add-state-model/SKILL.md`
-- schemas, exemplos ou protocolo em `shared/`:
-  `skills/novapanel-schema-contract-sync/SKILL.md`
-- validacao C++ no host: `skills/novapanel-host-check/SKILL.md`
-- nova decisao arquitetural: `skills/novapanel-new-adr/SKILL.md`
-
-## Criterio de qualidade
-
-Toda mudanca relevante deve buscar:
-
-- escalabilidade de arquitetura
-- robustez operacional
-- confiabilidade em campo
-- facilidade de manutencao
-- documentacao coerente com o estado real do codigo
-
-Se houver conflito entre “ser rapido” e “preservar a arquitetura”, prefira a
-opcao que mantenha o sistema mais sustentavel.
+- `static std::function` global → overflow de `__cxa_atexit` → boot freeze.
+- `bsp_audio_init(nullptr)` → crash + coredump corrompido + boot loop.
+- Mais de 1 handshake TLS simultâneo → esgotamento de SRAM interna.
+- Escrita de flash (NVS/LittleFS) em rajada durante render → glitch no DSI.

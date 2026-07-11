@@ -1,45 +1,35 @@
-# NovaPainel - Documentacao
+# NovaPanel — Documentação canônica (baseline v4)
 
-Este diretorio contem a documentacao canonica do projeto.
+Este diretório é a fonte de verdade do projeto. Regras do conjunto:
 
-## Ordem de leitura recomendada
+1. **`STATUS.md` é o único documento de estado.** Todos os demais descrevem
+   alvo, política ou decisão. Nenhum outro doc pode conter "feito",
+   "em produção" ou percentuais de progresso.
+2. Todo documento tem um dono de propósito (abaixo). Conteúdo duplicado entre
+   docs é bug — linkar, não copiar.
+3. Mudança estrutural sem ADR em `DECISIONS.md` não é aceita em review.
+4. Documento histórico do baseline v3 vive no histórico git e em
+   `reference/`; nunca é citado como estado atual.
 
-1. `PLANEJAMENTO.md`
-2. `ARCHITECTURE.md`
-3. `HARDWARE.md`
-4. `ROADMAP.md`
-5. `DECISIONS.md`
+## Mapa e ordem de leitura
 
-## Documentos centrais
-
-| Documento | Papel |
+| Doc | Propósito (dono de) |
 |---|---|
-| `PLANEJAMENTO.md` | visao do produto, escopo, principios e estrategia |
-| `ARCHITECTURE.md` | arquitetura alvo, limites entre camadas e diretrizes de system design |
-| `HARDWARE.md` | base da plataforma e achados da Fase 0 |
-| `ROADMAP.md` | fases oficiais do projeto e ordem de entrega |
-| `DECISIONS.md` | ADRs e decisoes duraveis |
-| `PROTOCOL.md` | ponte para contratos em `shared/` |
+| `STATUS.md` | Estado atual, fase corrente, dívidas abertas |
+| `PLANEJAMENTO.md` | Produto: visão, escopo, requisitos de qualidade, não-objetivos |
+| `ARCHITECTURE.md` | Arquitetura alvo: camadas, contratos, concorrência, dados |
+| `UI-PATTERN.md` | Padrão obrigatório de telas/tiles e view-model |
+| `RESOURCE-BUDGET.md` | Contrato físico: SRAM/PSRAM/MSPI/flash — limites e regras |
+| `HARDWARE.md` | Fatos da placa, pinos, gotchas validados |
+| `ROADMAP.md` | Fases, entregas e critérios de saída |
+| `DECISIONS.md` | ADRs do baseline v4 (histórico de raciocínio) |
+| `TESTING.md` | Pirâmide de testes, fixtures, CI, soak |
+| `OPERATIONS.md` | Observabilidade, release, OTA, rollback, segurança PROD |
 
-## Documentos operacionais
+Referência técnica bruta da placa (datasheet-level, herdada e ainda válida):
+`waveshare_esp32_p4_wifi6_touch_lcd_7b_hardware.md`.
 
-| Documento | Papel |
-|---|---|
-| `FASE0-CHECKLIST.md` | evidencia detalhada da validacao de hardware |
-| `SECURITY-OPERATIONS.md` | seguranca operacional DEV/PROD |
-| `FIELD-OPERATIONS.md` | operacao e triagem de campo |
-| `RELEASE-ROLLBACK.md` | estrategia de release e rollback |
-| `SOAK-VALIDATION.md` | roteiro de soak e estabilidade |
+## Ordem de leitura para quem chega agora
 
-## Regras de verdade
-
-- a documentacao canonica deve refletir o estado real do projeto
-- `Fase 0` e `trilha H` continuam valendo como patrimonio tecnico
-- o `firmware/` novo e a base ativa de evolucao
-- `firmware_legacy_reference/` e somente referencia para port seletivo
-
-## Backup dos documentos anteriores
-
-Os documentos antes desta consolidacao foram preservados em:
-
-- `docs/_backup/2026-06-26-pre-consolidation/`
+`STATUS.md` → `PLANEJAMENTO.md` → `ARCHITECTURE.md` → `ROADMAP.md` → resto
+conforme a tarefa.

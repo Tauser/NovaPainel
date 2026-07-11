@@ -1,5 +1,10 @@
 # NovaPainel - Soak and Performance Validation
 
+> **[SUPERSEDED — baseline v4, 2026-07-02]** Este documento pertence ao
+> baseline v3 e foi substituído por `OPERATIONS.md` (e `TESTING.md` para
+> soak). Mantido apenas como histórico até o arquivamento da Fase 0.
+> NÃO usar como fonte de política ou estado.
+
 Playbook da trilha H8.
 
 > Leitura correta no baseline atual:

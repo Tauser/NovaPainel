@@ -44,7 +44,11 @@ bool WeatherService::refresh(uint32_t now_ms)
     }
 
     store_.set_weather(weather);
-    cache_.save_weather(weather);
+    if (last_cache_save_ms_ == 0 ||
+        (now_ms - last_cache_save_ms_) >= kCacheSaveIntervalMs) {
+        cache_.save_weather(weather);
+        last_cache_save_ms_ = now_ms;
+    }
     orchestrator_.note_request(DataDomain::Weather, now_ms, true);
     return true;
 }

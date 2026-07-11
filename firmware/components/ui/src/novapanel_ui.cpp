@@ -38,6 +38,8 @@ static lv_obj_t *g_topbar_notification_badge = nullptr;
 static lv_obj_t *g_topbar_notification_badge_label = nullptr;
 static lv_obj_t *g_topbar_wifi_btn = nullptr;
 static lv_obj_t *g_topbar_wifi_icon = nullptr;
+static lv_obj_t *g_topbar_gear_btn = nullptr;  // oculto quando settings está aberto
+static lv_obj_t *g_topbar_back_btn = nullptr;  // visível quando settings está aberto
 static lv_obj_t *g_shell_col = nullptr;
 static lv_obj_t *g_menu_btn = nullptr;
 static lv_obj_t *g_menu_icon = nullptr;
@@ -47,6 +49,7 @@ static lv_obj_t *g_notifications_list = nullptr;
 static bool g_notifications_open = false;
 static bool g_menu_open = false;
 static ScreenId g_current_screen = ScreenId::Boot;
+static ScreenId g_prev_screen    = ScreenId::Home;  // destino do botão voltar
 static NotificationsOpenFn g_notifications_open_fn = nullptr;
 static NavigateRequestFn g_navigate_fn = nullptr;
 
@@ -333,6 +336,12 @@ static void gear_cb(lv_event_t *)
     request_navigate(ScreenId::Settings);
 }
 
+static void back_cb(lv_event_t *)
+{
+    // Sai de Settings voltando para a tela anterior.
+    request_navigate(g_prev_screen);
+}
+
 static void bell_cb(lv_event_t *)
 {
     const bool opening = !g_notifications_open;
@@ -500,8 +509,14 @@ static void build_topbar()
     lv_obj_set_style_border_width(vs, 0, 0);
     lv_obj_set_style_radius(vs, 0, 0);
 
-    lv_obj_t *gear = np_icon_btn(np_topbar, NP_I_SETTINGS);
-    lv_obj_add_event_cb(gear, gear_cb, LV_EVENT_CLICKED, nullptr);
+    // Botão voltar: visível apenas quando Settings está aberto.
+    g_topbar_back_btn = np_icon_btn(np_topbar, NP_I_ARROW_LEFT);
+    lv_obj_add_event_cb(g_topbar_back_btn, back_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_flag(g_topbar_back_btn, LV_OBJ_FLAG_HIDDEN);
+
+    // Engrenagem: oculta quando Settings está aberto (substituída pelo voltar).
+    g_topbar_gear_btn = np_icon_btn(np_topbar, NP_I_SETTINGS);
+    lv_obj_add_event_cb(g_topbar_gear_btn, gear_cb, LV_EVENT_CLICKED, nullptr);
 }
 
 static void build_dots(lv_obj_t *col)
@@ -712,11 +727,30 @@ void np_navigate_to(ScreenId screen)
     if (!np_screens[target]) return;
 
     const auto current = static_cast<std::size_t>(g_current_screen);
+    if (effective_screen == g_current_screen) {
+        if (effective_screen == ScreenId::Settings) {
+            if (g_topbar_back_btn) lv_obj_clear_flag(g_topbar_back_btn, LV_OBJ_FLAG_HIDDEN);
+            if (g_topbar_gear_btn) lv_obj_add_flag(g_topbar_gear_btn, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
+
     if (current < kUiScreenCount && np_screens[current]) {
         lv_obj_add_flag(np_screens[current], LV_OBJ_FLAG_HIDDEN);
     }
     if (current < kUiScreenCount && g_nav_buttons[current]) {
         lv_obj_clear_state(g_nav_buttons[current], LV_STATE_CHECKED);
+    }
+
+    // Gerencia o par gear↔back no topbar ao entrar/sair de Settings.
+    if (effective_screen == ScreenId::Settings) {
+        g_prev_screen = g_current_screen;  // salva para o botão voltar
+        if (g_topbar_back_btn) lv_obj_clear_flag(g_topbar_back_btn, LV_OBJ_FLAG_HIDDEN);
+        if (g_topbar_gear_btn) lv_obj_add_flag(g_topbar_gear_btn, LV_OBJ_FLAG_HIDDEN);
+    } else if (g_current_screen == ScreenId::Settings) {
+        // saindo de Settings — restaura a engrenagem
+        if (g_topbar_back_btn) lv_obj_add_flag(g_topbar_back_btn, LV_OBJ_FLAG_HIDDEN);
+        if (g_topbar_gear_btn) lv_obj_clear_flag(g_topbar_gear_btn, LV_OBJ_FLAG_HIDDEN);
     }
 
     g_current_screen = effective_screen;

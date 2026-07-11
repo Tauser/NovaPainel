@@ -1,9 +1,13 @@
 # NovaPanel hardware-first baseline.
 # ESP32-P4-WIFI6-Touch-LCD-7B, ESP-IDF 5.5.x.
 
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 CONFIG_COMPILER_CXX_RTTI=n
+# O TWDT fica habilitado, mas sem autoinscrever Idle Tasks no boot. No ESP32-P4
+# com IDF 5.5.4 essa inscricao pode duplicar durante o startup multicore.
+# CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0 is not set
+# CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1 is not set
 
 # Board flash/PSRAM baseline validated during Phase 0.
 CONFIG_IDF_TARGET="esp32p4"
@@ -24,7 +28,7 @@ CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
 # este painel EK79007 (DSI video-mode) nao gira por mirror de hardware,
 # entao a rotacao 180 precisa do PPA. O flicker observado e do backlight
 # (GPIO32), nao tearing.
-CONFIG_BSP_LCD_DPI_BUFFER_NUMS=1
+CONFIG_BSP_LCD_DPI_BUFFER_NUMS=2
 # CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR is not set
 # CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH is not set
 # CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE is not set
@@ -45,3 +49,26 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 # RAM interna). Com as requisicoes serializadas (http_gate em http_client),
 # evita a pressao de RAM do boot que abria o circuit breaker dos providers.
 CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+
+# Força mbedTLS a usar SRAM interna para handshakes TLS (fragmentos de 16 KB+).
+# Impede que a criptografia HTTPS concorra com o DMA do display na PSRAM.
+# Nota: verifique se CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC é o nome correto no
+# seu ESP-IDF 5.5.x — alternativa: CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC=y.
+CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC=y
+
+# lwIP/TCP-IP: confina o stack de rede ao Core 0 (PRO_CPU).
+# Verifique em menuconfig: Component config > LWIP > LWIP task core affinity.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY=0x0
+
+# Flash <-> PSRAM dividem o MSPI no ESP32-P4. Um erase/program de flash (NVS
+# commit OU gravacao de cache LittleFS depois de cada fetch REST) trava o
+# barramento por ms e causa underrun do DMA do MIPI-DSI lendo o framebuffer
+# em PSRAM -> flash branco. AUTO_SUSPEND deixa a leitura de cache/PSRAM
+# preemptar o erase, mas o flash desta placa e um GD25Q256 (JEDEC C8 4019)
+# que NAO esta na lista de chips com suspend validado pela Espressif (boot
+# imprime "Suspend and resume may not supported for this flash model yet").
+# Como o suspend nao-certificado pode corromper escritas (NVS/cache) em casos
+# de borda, fica DESLIGADO. A raiz comum (REST + NVS) e atacada com seguranca
+# reduzindo a frequencia de write de flash (throttle do CacheStore + dedup da
+# NVS nos services). Reativar so apos um soak de corrupcao no GD25Q256.
+# CONFIG_SPI_FLASH_AUTO_SUSPEND is not set

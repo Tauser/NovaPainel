@@ -43,7 +43,11 @@ bool ForexService::refresh(uint32_t now_ms)
     }
 
     store_.set_forex(forex);
-    cache_.save_forex(forex);
+    if (last_cache_save_ms_ == 0 ||
+        (now_ms - last_cache_save_ms_) >= kCacheSaveIntervalMs) {
+        cache_.save_forex(forex);
+        last_cache_save_ms_ = now_ms;
+    }
     orchestrator_.note_request(DataDomain::Forex, now_ms, true);
     return true;
 }

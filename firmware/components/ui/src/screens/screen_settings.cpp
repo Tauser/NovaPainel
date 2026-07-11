@@ -216,13 +216,18 @@ static void on_brightness_cb(lv_event_t* e)
 static void on_brightness_released_cb(lv_event_t* e)
 {
     // RELEASED: único ponto que salva nas prefs + NVS.
-    // Sem g_notify_fn aqui: criar notificação dispara redesenho de 4 telas +
-    // toast, causando flash visível logo após soltar o slider.
     lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
     const int32_t val = lv_slider_get_value(slider);
     if (g_brightness_fn) (*g_brightness_fn)(static_cast<int>(val));
+    if (g_notify_fn) {
+        char msg[32];
+        std::snprintf(msg, sizeof(msg), "Brilho: %ld%%", static_cast<long>(val));
+        (*g_notify_fn)(msg);
+    }
 }
 
+// VALUE_CHANGED (todo pixel de drag): só atualiza o label, sem áudio.
+// Chamar g_volume_fn aqui causaria esp_codec_dev_write (I2S) a cada pixel.
 static void on_volume_cb(lv_event_t* e)
 {
     lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
@@ -232,6 +237,15 @@ static void on_volume_cb(lv_event_t* e)
         std::snprintf(buf, sizeof(buf), "%ld%%", static_cast<long>(val));
         lv_label_set_text(g_volume_label, buf);
     }
+}
+
+// RELEASED (dedo soltou): aplica volume no codec + toca beep de feedback.
+// esp_codec_dev_set_out_vol (I2C) + esp_codec_dev_write (I2S) são chamados
+// uma única vez por gesto completo.
+static void on_volume_released_cb(lv_event_t* e)
+{
+    lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    const int32_t val = lv_slider_get_value(slider);
     if (g_volume_fn) (*g_volume_fn)(static_cast<int>(val));
 }
 
@@ -529,6 +543,8 @@ void np_screen_settings(lv_obj_t* parent)
     g_volume_slider = interactive_slider_row(disp, "Sistema", 65, &g_volume_label);
     lv_obj_add_event_cb(g_volume_slider, on_volume_cb,
                         LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(g_volume_slider, on_volume_released_cb,
+                        LV_EVENT_RELEASED, nullptr);
     slider_row(disp, "Musica", 42);
     slider_row(disp, "Alarme", 70);
     np_hsep(disp);

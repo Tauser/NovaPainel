@@ -40,7 +40,7 @@ void np_screen_focus(lv_obj_t* parent)
     lv_obj_set_height(left, lv_pct(100));
     lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(left, 9, 0);
-    lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_ON);
+    lv_obj_set_scrollbar_mode(left, LV_SCROLLBAR_MODE_OFF);
 
     for (std::size_t i = 0; i < sizeof(kAlarms) / sizeof(kAlarms[0]); ++i) {
         lv_obj_t* card = np_card(left);
@@ -61,7 +61,6 @@ void np_screen_focus(lv_obj_t* parent)
         lv_obj_set_flex_align(tr,
             LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-        const lv_color_t main_color = kAlarms[i].enabled ? NP_C_TEXT : NP_C_TEXT_DIM;
         const lv_font_t* time_font = kAlarms[i].enabled ? NP_F_TITLE_LG : NP_F_4XL;
         const lv_color_t time_color = kAlarms[i].enabled ? NP_C_ACCENT : NP_C_TEXT_DIM;
         np_label(tr, kAlarms[i].time, time_font, time_color);
@@ -94,12 +93,12 @@ void np_screen_focus(lv_obj_t* parent)
     lv_obj_set_flex_flow(nxt, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(nxt,
         LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(nxt, 10, 0);
 
     np_label(nxt, "Proximo alarme ativo", NP_F_XS, NP_C_TEXT_MUTED);
 
     lv_obj_t* na_row = np_row(nxt);
     lv_obj_set_style_pad_column(na_row, 14, 0);
-    lv_obj_set_style_margin_top(na_row, 14, 0);
 
     lv_obj_t* bell_box = lv_obj_create(na_row);
     lv_obj_set_size(bell_box, 44, 44);
@@ -114,23 +113,21 @@ void np_screen_focus(lv_obj_t* parent)
 
     lv_obj_t* na_info = np_col(na_row);
     lv_obj_set_size(na_info, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_row(na_info, 4, 0);
     np_label(na_info, "07:00", NP_F_HERO, NP_C_ACCENT);
-    lv_obj_t* na_lbl = np_label(na_info, "Acordar", NP_F_LG, NP_C_TEXT);
-    lv_obj_set_style_margin_top(na_lbl, 4, 0);
+    np_label(na_info, "Acordar", NP_F_LG, NP_C_TEXT);
 
-    lv_obj_t* na_days = np_label(nxt, "Seg-Sex", NP_F_SM, lv_color_hex(0x5A6478));
-    lv_obj_set_style_margin_top(na_days, 10, 0);
+    np_label(nxt, "Seg-Sex", NP_F_SM, lv_color_hex(0x5A6478));
 
     lv_obj_t* add = np_card(right);
     lv_obj_set_size(add, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_pad_all(add, 16, 0);
     lv_obj_set_flex_flow(add, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(add, 12, 0);
     np_label(add, "Novo alarme", NP_F_XS, NP_C_TEXT_MUTED);
 
     lv_obj_t* picker_row = np_row(add);
     lv_obj_set_style_pad_column(picker_row, 8, 0);
-    lv_obj_set_style_margin_top(picker_row, 12, 0);
-    lv_obj_set_style_margin_bottom(picker_row, 10, 0);
 
     static const struct { const char* label; const char* value; } pickers[] = {
         { "Horario", "07:00" },

@@ -34,12 +34,20 @@ public:
 
 private:
     static constexpr uint32_t kOhlcIntervalMs = 5u * 60u * 1000u;  // 5 min
+    // O cache (LittleFS) so serve para o boot offline; nao precisa refletir
+    // cada fetch. Gravar a cada refresh (cripto = 3 min) gera um erase de flash
+    // que, no MSPI compartilhado do ESP32-P4, trava a leitura do framebuffer em
+    // PSRAM pelo MIPI-DSI -> flash branco. Throttlar a persistencia reduz muito
+    // esses glitches e poupa a vida do flash; o StateStore continua atualizado
+    // a cada fetch (a UI nao perde nada).
+    static constexpr uint32_t kCacheSaveIntervalMs = 30u * 60u * 1000u;  // 30 min
 
     StateStore&          store_;
     RequestOrchestrator& orchestrator_;
     CacheStore&          cache_;
     CoinGeckoProvider&   provider_;
     uint32_t             last_ohlc_ms_{0};
+    uint32_t             last_cache_save_ms_{0};
     OhlcPeriod           pending_period_{OhlcPeriod::D1};  // period to fetch next
 };
 

@@ -183,6 +183,10 @@ bool SetupService::init()
 
     nvs_close(handle);
 
+    // Snapshot do que ja esta na NVS, p/ o dedup nao regravar valores iguais.
+    runtime_saved_ = prefs_;
+    runtime_saved_valid_ = true;
+
     store_.set_preferences(prefs_);
     store_.set_onboarding_needed(!schema_supported || onboarding_done == 0);
     store_.set_onboarding_step(onboarding_done == 0
@@ -378,6 +382,16 @@ void SetupService::handle_submission(const OnboardingSubmission& submission)
 
 void SetupService::save_runtime_preferences(const UserPreferences& prefs)
 {
+    // Dedup: se nenhum campo que esta funcao grava mudou desde o ultimo write,
+    // nao toca a NVS. Evita o erase de flash (e o flash branco no display) em
+    // republicacoes de PreferencesChanged com os mesmos valores.
+    if (runtime_saved_valid_ &&
+        runtime_saved_.brightness == prefs.brightness &&
+        runtime_saved_.theme == prefs.theme &&
+        runtime_saved_.time_format_24h == prefs.time_format_24h) {
+        return;
+    }
+
     nvs_handle_t handle{};
     if (nvs_open(kNvsNamespace, NVS_READWRITE, &handle) != ESP_OK) {
         ESP_LOGW(kTag, "nvs_open (runtime prefs) failed");
@@ -389,6 +403,9 @@ void SetupService::save_runtime_preferences(const UserPreferences& prefs)
     nvs_set_u8(handle, kKeyTimeFormat24h, prefs.time_format_24h ? 1 : 0);
     nvs_commit(handle);
     nvs_close(handle);
+
+    runtime_saved_ = prefs;
+    runtime_saved_valid_ = true;
     ESP_LOGD(kTag, "runtime prefs saved: brightness=%d", prefs.brightness);
 }
 
