@@ -12,6 +12,8 @@ const char* to_string(EventType type) {
             return "weather_changed";
         case EventType::SystemChanged:
             return "system_changed";
+        case EventType::SetupChanged:
+            return "setup_changed";
         case EventType::ScreenChanged:
             return "screen_changed";
         case EventType::ResourceWarning:

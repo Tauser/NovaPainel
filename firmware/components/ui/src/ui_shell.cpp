@@ -1,6 +1,8 @@
 #include "ui_shell.hpp"
 
+#include "shared_keyboard.hpp"
 #include "strings_ptbr.hpp"
+#include "shell_chrome_view_model.hpp"
 #include "ui_theme.hpp"
 
 #include "lvgl.h"
@@ -40,9 +42,10 @@ void UiShell::render(uint32_t pending_mask) {
         switch_screen(*spec);
     }
 
-    update_chrome(*spec);
+    update_chrome(*spec, state);
     update_dots(state.ui.active_screen);
     set_boot_mode(state.ui.active_screen == ScreenId::Boot);
+    update_toast();
 
     if (screen_changed || (pending_mask & spec->invalidation_mask) != 0u) {
         spec->update(state);
@@ -109,11 +112,11 @@ void UiShell::build_shell() {
     lv_obj_set_style_text_color(topbar_title_, ui_theme::color_text(), 0);
     lv_obj_align(topbar_title_, LV_ALIGN_LEFT_MID, 0, 0);
 
-    toast_label_ = lv_label_create(topbar_);
-    lv_obj_set_style_text_font(toast_label_, ui_theme::font_small(), 0);
-    lv_obj_set_style_text_color(toast_label_, ui_theme::color_muted(), 0);
-    lv_obj_align(toast_label_, LV_ALIGN_RIGHT_MID, 0, 0);
-    lv_label_set_text(toast_label_, "toasts e teclado entram por este shell");
+    topbar_status_label_ = lv_label_create(topbar_);
+    lv_obj_set_style_text_font(topbar_status_label_, ui_theme::font_small(), 0);
+    lv_obj_set_style_text_color(topbar_status_label_, ui_theme::color_muted(), 0);
+    lv_obj_align(topbar_status_label_, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_label_set_text(topbar_status_label_, strings_ptbr::kToastShellReady);
 
     content_ = lv_obj_create(root_);
     lv_obj_set_pos(content_, ui_theme::kRailWidth, ui_theme::kTopbarHeight);
@@ -141,6 +144,35 @@ void UiShell::build_shell() {
         lv_obj_set_style_border_width(dots_[index], 0, 0);
     }
 
+    toast_panel_ = lv_obj_create(root_);
+    lv_obj_set_size(toast_panel_, 280, LV_SIZE_CONTENT);
+    lv_obj_align(toast_panel_, LV_ALIGN_BOTTOM_RIGHT, -20, -36);
+    lv_obj_set_style_bg_color(toast_panel_, ui_theme::color_panel_alt(), 0);
+    lv_obj_set_style_border_color(toast_panel_, ui_theme::color_border(), 0);
+    lv_obj_set_style_border_width(toast_panel_, 1, 0);
+    lv_obj_set_style_radius(toast_panel_, 12, 0);
+    lv_obj_set_style_pad_hor(toast_panel_, 14, 0);
+    lv_obj_set_style_pad_ver(toast_panel_, 10, 0);
+    lv_obj_add_flag(toast_panel_, LV_OBJ_FLAG_HIDDEN);
+
+    toast_label_ = lv_label_create(toast_panel_);
+    lv_obj_set_width(toast_label_, LV_PCT(100));
+    lv_label_set_long_mode(toast_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(toast_label_, ui_theme::font_small(), 0);
+    lv_obj_set_style_text_color(toast_label_, ui_theme::color_text(), 0);
+    lv_label_set_text(toast_label_, strings_ptbr::kToastShellReady);
+
+    keyboard_panel_ = lv_obj_create(root_);
+    lv_obj_set_size(keyboard_panel_, ui_theme::kScreenWidth - ui_theme::kRailWidth, 132);
+    lv_obj_align(keyboard_panel_, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_set_style_bg_color(keyboard_panel_, ui_theme::color_panel_alt(), 0);
+    lv_obj_set_style_border_width(keyboard_panel_, 1, 0);
+    lv_obj_set_style_border_color(keyboard_panel_, ui_theme::color_border(), 0);
+    lv_obj_set_style_radius(keyboard_panel_, 0, 0);
+    lv_obj_set_style_pad_all(keyboard_panel_, 16, 0);
+    lv_obj_add_flag(keyboard_panel_, LV_OBJ_FLAG_HIDDEN);
+    bind_shared_keyboard_host(keyboard_panel_, content_, dots_row_);
+
     built_ = true;
 }
 
@@ -157,6 +189,8 @@ void UiShell::ensure_screen_built(const ScreenSpec& spec) {
 }
 
 void UiShell::switch_screen(const ScreenSpec& spec) {
+    shared_keyboard_close();
+
     const ScreenSpec* previous_spec = screen_registry_.find(active_screen_);
     ScreenSlot& previous_slot = built_screens_[static_cast<std::size_t>(active_screen_)];
     if (previous_slot.root != nullptr) {
@@ -177,12 +211,10 @@ void UiShell::switch_screen(const ScreenSpec& spec) {
     has_active_screen_ = true;
 }
 
-void UiShell::update_chrome(const ScreenSpec& spec) {
+void UiShell::update_chrome(const ScreenSpec& spec, const AppState& state) {
+    const ShellChromeViewModel chrome_vm = make_shell_chrome_view_model(state);
     set_text_if_changed(topbar_title_, spec.title);
-    set_text_if_changed(toast_label_,
-                        state_store_.ui().display_breadcrumb
-                            ? strings_ptbr::kBootDetailRetry
-                            : strings_ptbr::kAppTitle);
+    set_text_if_changed(topbar_status_label_, chrome_vm.status_line.c_str());
 }
 
 void UiShell::update_dots(ScreenId active_screen) {
@@ -204,6 +236,7 @@ void UiShell::set_boot_mode(bool boot_mode) {
         lv_obj_add_flag(rail_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(topbar_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(dots_row_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(keyboard_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(content_, 0, 0);
         lv_obj_set_size(content_, ui_theme::kScreenWidth, ui_theme::kScreenHeight);
     } else {
@@ -215,6 +248,34 @@ void UiShell::set_boot_mode(bool boot_mode) {
                         ui_theme::kScreenWidth - ui_theme::kRailWidth,
                         ui_theme::kScreenHeight - ui_theme::kTopbarHeight - 24);
     }
+}
+
+void UiShell::update_toast() {
+    const UiState ui_state = state_store_.ui();
+    if (active_screen_ == ScreenId::Boot) {
+        hide_toast();
+        return;
+    }
+
+    if (ui_state.display_breadcrumb) {
+        show_toast(strings_ptbr::kToastBootRecovered);
+    } else {
+        hide_toast();
+    }
+}
+
+void UiShell::show_toast(const char* text) {
+    set_text_if_changed(toast_label_, text);
+    lv_obj_clear_flag(toast_panel_, LV_OBJ_FLAG_HIDDEN);
+    toast_visible_ = true;
+}
+
+void UiShell::hide_toast() {
+    if (!toast_visible_) {
+        return;
+    }
+    lv_obj_add_flag(toast_panel_, LV_OBJ_FLAG_HIDDEN);
+    toast_visible_ = false;
 }
 
 void UiShell::on_nav_click(lv_event_t* event) {

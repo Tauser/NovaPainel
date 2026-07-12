@@ -4,9 +4,13 @@ idf_component_register(
         "src/builtin_screens.cpp"
         "src/home_view_model.cpp"
         "src/screen_registry.cpp"
+        "src/shared_keyboard.cpp"
+        "src/shell_chrome_view_model.cpp"
+        "src/setup_view_model.cpp"
         "src/ui_shell.cpp"
         "src/screens/boot_screen.cpp"
         "src/screens/home_screen.cpp"
+        "src/screens/setup_screen.cpp"
     INCLUDE_DIRS "include"
     REQUIRES
         core

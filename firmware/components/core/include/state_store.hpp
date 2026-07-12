@@ -16,12 +16,16 @@ public:
     MarketState market() const;
     WeatherState weather() const;
     SystemState system() const;
+    UserPreferences preferences() const;
+    SetupState setup() const;
     UiState ui() const;
 
     void set_clock(ClockState clock);
     void set_market(MarketState market);
     void set_weather(WeatherState weather);
     void set_system(SystemState system);
+    void set_preferences(UserPreferences preferences);
+    void set_setup(SetupState setup);
     void set_ui(UiState ui);
     void navigate_to(ScreenId screen_id);
     void set_action_queue_overflows(uint32_t overflow_count);

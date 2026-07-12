@@ -85,6 +85,7 @@ de áudio). No v4, `IBoard` é pequena e real:
 class IBoard {
  public:
   virtual bool init_display() = 0;          // falha NÃO aborta: ver §9 boot
+  virtual bool start_network_transport() = 0; // C6/ESP-Hosted degradável, após 1º frame
   virtual bool lock_ui(uint32_t timeout_ms) = 0;   // lock da lvgl_task
   virtual void unlock_ui() = 0;
   virtual bool lock_shared_i2c(uint32_t timeout_ms) = 0;  // ver nota abaixo

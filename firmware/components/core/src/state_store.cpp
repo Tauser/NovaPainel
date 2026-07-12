@@ -29,6 +29,16 @@ SystemState StateStore::system() const {
     return state_.system;
 }
 
+UserPreferences StateStore::preferences() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.preferences;
+}
+
+SetupState StateStore::setup() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    return state_.setup;
+}
+
 UiState StateStore::ui() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return state_.ui;
@@ -64,6 +74,24 @@ void StateStore::set_system(SystemState system) {
         state_.system = system;
     }
     event_bus_.publish(Event{EventType::SystemChanged, 0});
+}
+
+void StateStore::set_preferences(UserPreferences preferences) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.preferences = std::move(preferences);
+        state_.clock.timezone = state_.preferences.timezone;
+    }
+    event_bus_.publish(Event{EventType::SetupChanged, 0});
+    event_bus_.publish(Event{EventType::ClockChanged, 0});
+}
+
+void StateStore::set_setup(SetupState setup) {
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        state_.setup = std::move(setup);
+    }
+    event_bus_.publish(Event{EventType::SetupChanged, 0});
 }
 
 void StateStore::set_ui(UiState ui) {

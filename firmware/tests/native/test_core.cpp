@@ -1,11 +1,19 @@
 #include "action_queue.hpp"
 #include "app_state.hpp"
+#include "boot_breadcrumb_store.hpp"
+#include "boot_recovery_policy.hpp"
+#include "clock_service.hpp"
 #include "event_bus.hpp"
 #include "http_client.hpp"
 #include "mock_board.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
+#include "setup_service.hpp"
+#include "setup_storage_logic.hpp"
+#include "setup_view_model.hpp"
+#include "shell_chrome_view_model.hpp"
 #include "state_store.hpp"
+#include "timezone_catalog.hpp"
 #include "boot_view_model.hpp"
 #include "home_view_model.hpp"
 #include "ui_dispatcher.hpp"
@@ -112,6 +120,93 @@ int main() {
     assert(board.lock_shared_i2c(10));
     board.unlock_shared_i2c();
 
+    nova::ClockService clock_service(state_store, board, nova::DataSource::Mock);
+    clock_service.tick();
+    assert(!state_store.clock().valid);
+    board.set_rtc_unix_time_s(1704067200ULL + 60ULL);
+    clock_service.tick();
+    assert(state_store.clock().valid);
+    assert(state_store.clock().source == nova::DataSource::Mock);
+    assert(state_store.clock().unix_time_s == 1704067260ULL);
+
+    nova::SetupService setup_service(state_store, board);
+    setup_service.tick();
+    assert(state_store.setup().valid);
+    assert(state_store.setup().onboarding_required);
+    assert(!state_store.setup().wifi_configured);
+    assert(!state_store.setup().transport_ready);
+    assert(state_store.setup().wifi_connect_status == nova::WifiConnectStatus::Idle);
+    assert(state_store.setup().wifi_scan_status == nova::WifiScanStatus::Idle);
+    assert(state_store.preferences().brightness_pct == board.brightness_pct());
+    setup_service.request_wifi_scan();
+    assert(state_store.setup().wifi_scan_status == nova::WifiScanStatus::Failed);
+    assert(!state_store.setup().scan_in_progress);
+
+    const nova::SetupStorageLoadResult empty_storage =
+        nova::resolve_persisted_setup(false, 0, nova::PersistedSetupData{});
+    assert(empty_storage.schema_supported);
+    assert(empty_storage.should_initialize_schema);
+    assert(empty_storage.setup.onboarding_required);
+
+    nova::PersistedSetupData persisted_setup{};
+    persisted_setup.has_onboarding_done = true;
+    persisted_setup.onboarding_done = true;
+    persisted_setup.has_brightness_pct = true;
+    persisted_setup.brightness_pct = 35;
+    persisted_setup.has_use_24h = true;
+    persisted_setup.use_24h = false;
+    persisted_setup.has_timezone = true;
+    persisted_setup.timezone = "UTC";
+    persisted_setup.has_wifi_ssid = true;
+    persisted_setup.wifi_ssid = "NovaNet";
+    persisted_setup.has_wifi_password = true;
+    persisted_setup.wifi_password = "segredo";
+    const nova::SetupStorageLoadResult supported_storage =
+        nova::resolve_persisted_setup(true, nova::kCurrentSetupSchemaVersion, persisted_setup);
+    assert(supported_storage.schema_supported);
+    assert(!supported_storage.should_initialize_schema);
+    assert(!supported_storage.setup.onboarding_required);
+    assert(supported_storage.setup.wifi_configured);
+    assert(supported_storage.preferences.brightness_pct == 35);
+    assert(!supported_storage.preferences.use_24h);
+    assert(supported_storage.preferences.timezone == "UTC");
+    assert(supported_storage.saved_wifi_ssid == "NovaNet");
+    assert(supported_storage.saved_wifi_password == "segredo");
+
+    const nova::SetupStorageLoadResult future_schema =
+        nova::resolve_persisted_setup(true, nova::kCurrentSetupSchemaVersion + 1, persisted_setup);
+    assert(!future_schema.schema_supported);
+    assert(future_schema.setup.onboarding_required);
+    assert(future_schema.preferences.timezone == "America/Sao_Paulo");
+    assert(nova::timezone_option_count() == 5);
+    assert(std::string(nova::timezone_option_at(0).name) == "America/Sao_Paulo");
+    assert(nova::find_timezone_option_index("America/Rio_Branco") == 2);
+    assert(nova::find_timezone_option_index("Mars/Olympus") ==
+           nova::default_timezone_option_index());
+
+    nova::BootBreadcrumbStore breadcrumb_store;
+    assert(breadcrumb_store.init().ok());
+    assert(breadcrumb_store.save(nova::BootBreadcrumb{true, 3}).ok());
+    const auto breadcrumb = breadcrumb_store.load();
+    assert(breadcrumb.ok());
+    assert(breadcrumb.value().display_breadcrumb);
+    assert(breadcrumb.value().display_retry_count == 3);
+    assert(breadcrumb_store.clear().ok());
+
+    const nova::DisplayFailureDecision first_failure =
+        nova::on_display_failure(nova::UiState{}, 1);
+    assert(first_failure.next_ui_state.display_breadcrumb);
+    assert(first_failure.next_ui_state.display_retry_count == 1);
+    assert(first_failure.delay_ms == 2000);
+    assert(!first_failure.restart_required);
+
+    nova::UiState second_state = first_failure.next_ui_state;
+    const nova::DisplayFailureDecision third_failure =
+        nova::on_display_failure(second_state, 3);
+    assert(third_failure.next_ui_state.display_retry_count == 2);
+    assert(third_failure.delay_ms == 4000);
+    assert(third_failure.restart_required);
+
     nova::ScreenRegistry registry;
     const auto build_stub = +[](lv_obj_t*) -> lv_obj_t* { return nullptr; };
     const auto update_stub = +[](const nova::AppState&) {};
@@ -119,7 +214,9 @@ int main() {
         nova::ScreenId::Boot, "Boot", 1u, build_stub, update_stub, nullptr, nullptr}));
     assert(registry.register_screen(nova::ScreenSpec{
         nova::ScreenId::Home, "Home", 2u, build_stub, update_stub, nullptr, nullptr}));
-    assert(registry.size() == 2);
+    assert(registry.register_screen(nova::ScreenSpec{
+        nova::ScreenId::Setup, "Setup", 4u, build_stub, update_stub, nullptr, nullptr}));
+    assert(registry.size() == 3);
     assert(registry.find(nova::ScreenId::Home) != nullptr);
     assert(!registry.register_screen(nova::ScreenSpec{
         nova::ScreenId::Home, "Dup", 2u, build_stub, update_stub, nullptr, nullptr}));
@@ -131,6 +228,40 @@ int main() {
     const nova::HomeViewModel home_vm = nova::make_home_view_model(state_store.snapshot());
     assert(std::string(home_vm.title) == "Inicio");
     assert(std::string(home_vm.status) == "Display ativo");
+
+    state_store.set_clock(nova::ClockState{});
+    const nova::ShellChromeViewModel chrome_without_clock =
+        nova::make_shell_chrome_view_model(state_store.snapshot());
+    assert(chrome_without_clock.status_line.find("sem hora") != std::string::npos);
+    assert(chrome_without_clock.status_line.find("sem rede") != std::string::npos);
+
+    nova::ClockState clock{};
+    clock.valid = true;
+    clock.unix_time_s = 13 * 3600 + 45 * 60;
+    state_store.set_clock(clock);
+    system.network_ready = true;
+    state_store.set_system(system);
+
+    nova::UserPreferences utc_preferences = state_store.preferences();
+    utc_preferences.timezone = "UTC";
+    state_store.set_preferences(utc_preferences);
+    const nova::ShellChromeViewModel chrome_utc =
+        nova::make_shell_chrome_view_model(state_store.snapshot());
+    assert(chrome_utc.status_line.find("13:45") != std::string::npos);
+    assert(chrome_utc.status_line.find("rede ok") != std::string::npos);
+
+    // America/Sao_Paulo is UTC-3, so 13:45 UTC must render as 10:45 local --
+    // the topbar clock has to respect preferences.timezone, not raw UTC.
+    nova::UserPreferences sp_preferences = state_store.preferences();
+    sp_preferences.timezone = "America/Sao_Paulo";
+    state_store.set_preferences(sp_preferences);
+    const nova::ShellChromeViewModel chrome_with_clock =
+        nova::make_shell_chrome_view_model(state_store.snapshot());
+    assert(chrome_with_clock.status_line.find("10:45") != std::string::npos);
+    assert(chrome_with_clock.status_line.find("rede ok") != std::string::npos);
+
+    const nova::SetupViewModel setup_vm = nova::make_setup_view_model(state_store.snapshot());
+    assert(std::string(setup_vm.title) == "Setup");
 
     return 0;
 }

@@ -8,10 +8,14 @@ bool MockBoard::init_display() {
     return true;
 }
 
+bool MockBoard::start_network_transport() {
+    status_.network_ready = false;
+    return status_.network_ready;
+}
+
 BoardStatus MockBoard::bring_up() {
     status_ = BoardStatus{};
     init_display();
-    status_.network_ready = false;
     status_.sd_ready = false;
     status_.board_ready = status_.display_ready;
     return status_;
@@ -44,6 +48,33 @@ void MockBoard::set_brightness(int pct) {
     } else {
         brightness_pct_ = pct;
     }
+}
+
+bool MockBoard::wifi_scan_start() {
+    if (!status_.network_ready) {
+        return false;
+    }
+    wifi_scan_status_ = WifiScanStatus::Done;
+    return true;
+}
+
+std::vector<WifiNetwork> MockBoard::wifi_take_scan_results() {
+    wifi_scan_status_ = WifiScanStatus::Idle;
+    return mock_scan_results_;
+}
+
+bool MockBoard::wifi_connect(const std::string& ssid, const std::string& /*password*/) {
+    if (!status_.network_ready || ssid.empty() || wifi_connect_should_fail_) {
+        return false;
+    }
+    pending_connect_event_ = WifiLinkEvent::Connected;
+    return true;
+}
+
+WifiLinkEvent MockBoard::wifi_take_connect_event() {
+    const WifiLinkEvent event = pending_connect_event_;
+    pending_connect_event_ = WifiLinkEvent::None;
+    return event;
 }
 
 }  // namespace nova

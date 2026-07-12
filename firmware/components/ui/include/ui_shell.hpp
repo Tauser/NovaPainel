@@ -32,9 +32,12 @@ private:
     void build_shell();
     void ensure_screen_built(const ScreenSpec& spec);
     void switch_screen(const ScreenSpec& spec);
-    void update_chrome(const ScreenSpec& spec);
+    void update_chrome(const ScreenSpec& spec, const AppState& state);
     void update_dots(ScreenId active_screen);
     void set_boot_mode(bool boot_mode);
+    void update_toast();
+    void show_toast(const char* text);
+    void hide_toast();
     static void on_nav_click(lv_event_t* event);
 
     StateStore& state_store_;
@@ -48,10 +51,14 @@ private:
     lv_obj_t* topbar_title_{nullptr};
     lv_obj_t* content_{nullptr};
     lv_obj_t* dots_row_{nullptr};
+    lv_obj_t* topbar_status_label_{nullptr};
+    lv_obj_t* toast_panel_{nullptr};
     lv_obj_t* toast_label_{nullptr};
+    lv_obj_t* keyboard_panel_{nullptr};
     std::array<lv_obj_t*, 12> dots_{};
     std::array<NavTarget, 12> nav_targets_{};
     std::array<ScreenSlot, 12> built_screens_{};
+    bool toast_visible_{false};
 };
 
 }  // namespace nova

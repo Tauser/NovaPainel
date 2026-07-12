@@ -11,6 +11,7 @@ enum class EventType : uint8_t {
     MarketChanged,
     WeatherChanged,
     SystemChanged,
+    SetupChanged,
     ScreenChanged,
     ResourceWarning,
     UiAction,

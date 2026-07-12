@@ -3,9 +3,11 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         board
+        cache
         core
         models
         providers
+        services
         ui
         utils
 )

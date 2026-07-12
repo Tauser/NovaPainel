@@ -11,6 +11,7 @@ pelo `UiDispatcher` para a futura `lvgl_task` (ADR-0007).
 | `MarketChanged`  | StateStore              | Snapshot de mercado/câmbio mudou             | sim             |
 | `WeatherChanged` | StateStore              | Snapshot de clima mudou                      | sim             |
 | `SystemChanged`  | StateStore              | Flags de sistema/board/rede/cache mudaram    | sim             |
+| `SetupChanged`   | StateStore              | Preferências/setup/onboarding mudaram        | sim             |
 | `ResourceWarning`| SystemService futuro    | Memória/recurso abaixo do limiar operacional | sim             |
 | `UiAction`       | UI/ActionQueue futura   | Intenção do usuário para services/store      | não             |
 

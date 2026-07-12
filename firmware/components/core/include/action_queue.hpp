@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app_state.hpp"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -12,11 +14,23 @@ enum class ActionType : uint8_t {
     Navigate,
     Refresh,
     SetBrightness,
+    SetupRequestWifiScan,
+    SetupSetStep,
+    SetupSubmit,
+};
+
+struct SetupSubmissionActionPayload {
+    OnboardingStep step{OnboardingStep::Wifi};
+    bool use_24h{true};
+    char wifi_ssid[33]{};
+    char wifi_password[65]{};
+    char timezone[48]{};
 };
 
 struct Action {
     ActionType type{ActionType::None};
     int32_t value{0};
+    SetupSubmissionActionPayload setup_submission{};
 };
 
 class ActionQueue {
