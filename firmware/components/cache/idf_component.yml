@@ -1,0 +1,4 @@
+# Managed dep for CacheStore (LittleFS), herdado do baseline v3.
+dependencies:
+  idf: ">=5.5.0"
+  joltwallet/littlefs: "*"

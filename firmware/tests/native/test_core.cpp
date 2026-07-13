@@ -2,6 +2,7 @@
 #include "app_state.hpp"
 #include "boot_breadcrumb_store.hpp"
 #include "boot_recovery_policy.hpp"
+#include "cache_store.hpp"
 #include "clock_service.hpp"
 #include "event_bus.hpp"
 #include "http_client.hpp"
@@ -21,6 +22,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <string>
 
 namespace {
@@ -337,6 +339,60 @@ int main() {
     // exercised above); after finishing, Ohlc's min_interval_ms=0 keeps it
     // eligible again immediately, so it still wins on priority.
     assert(network_worker.select_fetcher_index(0) == 2);
+
+    struct TestPayload {
+        double value_a;
+        double value_b;
+        uint32_t updated_ms;
+    };
+
+    nova::CacheStore cache_store;
+    const TestPayload not_mounted{1.0, 2.0, 100};
+    assert(!cache_store.save("market", &not_mounted, sizeof(not_mounted), 0).ok());
+    assert(cache_store.mount().ok());
+    assert(cache_store.ready());
+
+    const auto missing = cache_store.load("market", sizeof(TestPayload));
+    assert(!missing.ok());
+    assert(missing.status().code() == nova::StatusCode::Unavailable);
+    assert(!cache_store.would_throttle("market", 0));
+
+    const TestPayload market_payload{42.5, -1.5, 1000};
+    assert(cache_store.save("market", &market_payload, sizeof(market_payload), 1000).ok());
+    assert(cache_store.would_throttle("market", 1000 + 60000));  // < 30 min later
+    assert(!cache_store.would_throttle("market", 1000 + 30 * 60 * 1000));  // exactly at window
+
+    const auto throttled = cache_store.save("market", &market_payload, sizeof(market_payload), 1000 + 60000);
+    assert(!throttled.ok());
+    assert(throttled.code() == nova::StatusCode::RateLimited);
+
+    const auto loaded = cache_store.load("market", sizeof(TestPayload));
+    assert(loaded.ok());
+    assert(loaded.value().size() == sizeof(TestPayload));
+    TestPayload roundtrip{};
+    std::memcpy(&roundtrip, loaded.value().data(), sizeof(TestPayload));
+    assert(roundtrip.value_a == 42.5);
+    assert(roundtrip.value_b == -1.5);
+    assert(roundtrip.updated_ms == 1000);
+
+    // Weather is a distinct domain: its own throttle window, doesn't share
+    // storage with "market".
+    const TestPayload weather_payload{18.0, 0.0, 2000};
+    assert(cache_store.save("weather", &weather_payload, sizeof(weather_payload), 2000).ok());
+    const auto weather_loaded = cache_store.load("weather", sizeof(TestPayload));
+    assert(weather_loaded.ok());
+
+    // Schema mismatch (wrong expected_size) is rejected, not interpreted.
+    struct WrongSizePayload {
+        double only_one_field;
+    };
+    const auto mismatched = cache_store.load("market", sizeof(WrongSizePayload));
+    assert(!mismatched.ok());
+    assert(mismatched.status().code() == nova::StatusCode::InvalidArgument);
+
+    // After the 30 min throttle window, a write goes through again.
+    assert(cache_store.save("market", &market_payload, sizeof(market_payload),
+                             1000 + 30 * 60 * 1000).ok());
 
     return 0;
 }

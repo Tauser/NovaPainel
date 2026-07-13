@@ -8,6 +8,7 @@ components/core/src/state_store.cpp
 components/core/src/ui_dispatcher.cpp
 components/board/src/mock_board.cpp
 components/cache/src/boot_breadcrumb_store.cpp
+components/cache/src/cache_store.cpp
 components/providers/src/provider_interfaces.cpp
 components/services/src/clock_service.cpp
 components/services/src/network_worker.cpp

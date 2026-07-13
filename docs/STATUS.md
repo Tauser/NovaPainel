@@ -81,11 +81,13 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
 - Nenhuma dívida conhecida bloqueia o encerramento da Fase 3.
-- O `NetworkWorker` da Fase 4 entrou no tree só com a task/escalonamento
-  (nenhum fetcher registrado ainda); providers reais, `CacheStore` e
-  degradação/cache offline continuam pendentes.
-- O `NetworkWorker` só foi validado por `host_check.sh --app --tests` nesta
-  sessão; `idf.py build`/bancada ainda não confirmaram a task subindo no
+- O `NetworkWorker` e o `CacheStore` da Fase 4 entraram no tree, mas sem
+  nenhum consumidor real ainda (nenhum fetcher registrado, nenhum service
+  gravando blob); providers reais e degradação/cache offline ponta a ponta
+  continuam pendentes.
+- `NetworkWorker` e `CacheStore` só foram validados por
+  `host_check.sh --app --tests` nesta sessão; `idf.py build`/bancada ainda
+  não confirmaram a task subindo nem a partição LittleFS montando no
   ESP32-P4 real.
 
 ## Evidência de encerramento da Fase 2
@@ -317,3 +319,31 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `tools/scripts/ci_hygiene.sh`. `idf.py build` e validação em bancada
   (task realmente sobe no ESP32-P4, stack de 8 K words não estoura) ainda
   não foram feitos nesta sessão — sem toolchain ESP-IDF disponível aqui.
+- `cache/CacheStore` entrou no tree como a persistência LittleFS prevista
+  no ARCHITECTURE.md (blobs versionados, escrita atômica via tmp+rename).
+  Blobs são bytes opacos (`save`/`load` recebem ponteiro+tamanho) para
+  manter `cache/` desacoplado de `models/`; quem serializa é o chamador
+  em `services/`, que ainda não existe (nenhum service grava blob nesta
+  sessão).
+- O throttle de no máximo 1 escrita a cada 30 min por domínio
+  (RESOURCE-BUDGET.md §4: erase de flash compete com o refresh do
+  display) vive dentro do `CacheStore`, não no chamador — mesma regra de
+  "invariante mora em UM lugar" já usada no `WaveshareBoard` para o lock
+  de I2C compartilhado. Escrita fora da janela retorna `RateLimited` sem
+  tocar a flash; a janela é por sessão (reinicia a cada boot), não
+  persistida em NVS.
+- `load()` rejeita blob com header incompatível (magic/versão/tamanho
+  esperado) em vez de interpretar bytes às cegas — mesma postura do
+  `SetupStorageLogic` para schema desconhecido.
+- Depende do componente gerenciado `joltwallet/littlefs` (herdado do
+  `reference/firmware_v3`, já provado em campo) e da partição `storage`
+  (subtype `spiffs`, 10 MB) já reservada em `partitions.csv` desde a
+  Fase 1.
+- `CacheStore` é montado em `app_main` (`cache_store.mount()`) só para
+  provar que a partição sobe; nenhum service grava/lê ainda.
+- Validado com `tools/scripts/host_check.sh --app --tests`,
+  `tools/scripts/architecture_check.sh`, `tools/scripts/ci_hygiene.sh`
+  (mount/save/load simulados em memória no host, sem LittleFS real).
+  `idf.py build` e validação em bancada (partição `storage` monta de
+  fato, escrita sobrevive a reboot) ainda não foram feitos nesta sessão
+  — sem toolchain ESP-IDF disponível aqui.

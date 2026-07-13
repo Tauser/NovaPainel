@@ -2,6 +2,7 @@
 #include "app_state.hpp"
 #include "boot_breadcrumb_store.hpp"
 #include "builtin_screens.hpp"
+#include "cache_store.hpp"
 #include "event_bus.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
@@ -127,6 +128,7 @@ extern "C" void app_main(void) {
     static nova::EventBus event_bus;
     static nova::StateStore state_store(event_bus);
     static nova::BootBreadcrumbStore breadcrumb_store;
+    static nova::CacheStore cache_store;
     static nova::ActionQueue action_queue;
     static nova::RequestOrchestrator request_orchestrator;
     static nova::UiDispatcher ui_dispatcher(event_bus);
@@ -148,6 +150,12 @@ extern "C" void app_main(void) {
     const auto breadcrumb_init = breadcrumb_store.init();
     if (!breadcrumb_init.ok()) {
         ESP_LOGW(kTag, "boot breadcrumb init failed");
+    }
+
+    // Sem consumidor ainda (providers/services entram em seguida na Fase 4);
+    // montar cedo só prova que a partição LittleFS sobe em hardware real.
+    if (!cache_store.mount().ok()) {
+        ESP_LOGW(kTag, "cache store mount failed");
     }
 
     const auto persisted_breadcrumb = breadcrumb_store.load();
