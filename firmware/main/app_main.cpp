@@ -235,7 +235,9 @@ extern "C" void app_main(void) {
         if (!state_store.ui().boot_complete &&
             state_store.system().display_ready &&
             current_ms >= boot_started_ms + kBootSplashMs) {
-            state_store.navigate_to(nova::ScreenId::Home);
+            const nova::ScreenId first_screen =
+                state_store.setup().onboarding_required ? nova::ScreenId::Setup : nova::ScreenId::Home;
+            state_store.navigate_to(first_screen);
         }
 
         const bool board_network_ready = board.status().network_ready;

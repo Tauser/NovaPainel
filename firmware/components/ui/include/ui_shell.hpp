@@ -34,11 +34,15 @@ private:
     void switch_screen(const ScreenSpec& spec);
     void update_chrome(const ScreenSpec& spec, const AppState& state);
     void update_dots(ScreenId active_screen);
-    void set_boot_mode(bool boot_mode);
+    void set_chrome_hidden(bool hidden);
+    bool is_slider_screen(ScreenId screen_id) const;
+    std::size_t slider_index_for(ScreenId screen_id) const;
+    void navigate_by_delta(int delta);
     void update_toast();
     void show_toast(const char* text);
     void hide_toast();
     static void on_nav_click(lv_event_t* event);
+    static void on_content_gesture(lv_event_t* event);
 
     StateStore& state_store_;
     const ScreenRegistry& screen_registry_;
@@ -56,6 +60,10 @@ private:
     lv_obj_t* toast_label_{nullptr};
     lv_obj_t* keyboard_panel_{nullptr};
     std::array<lv_obj_t*, 12> dots_{};
+    std::array<lv_obj_t*, 12> nav_buttons_{};
+    std::array<lv_obj_t*, 12> nav_labels_{};
+    std::array<ScreenId, 12> slider_screens_{};
+    std::size_t slider_screen_count_{0};
     std::array<NavTarget, 12> nav_targets_{};
     std::array<ScreenSlot, 12> built_screens_{};
     bool toast_visible_{false};

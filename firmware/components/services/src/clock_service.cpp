@@ -3,7 +3,10 @@
 #include "esp_log.h"
 
 #if defined(ESP_PLATFORM)
+#include "esp_err.h"
+#include "esp_netif_sntp.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
 #endif
 
 namespace nova {
@@ -31,7 +34,63 @@ uint64_t monotonic_now_ms() {
 ClockService::ClockService(StateStore& state_store, const IBoard& board, DataSource source_when_valid)
     : state_store_(state_store), board_(board), source_when_valid_(source_when_valid) {}
 
+void ClockService::maybe_start_sntp() {
+#if defined(ESP_PLATFORM)
+    if (sntp_synced_ || sntp_start_failed_) {
+        return;
+    }
+
+    const SetupState setup = state_store_.setup();
+    if (setup.wifi_connect_status != WifiConnectStatus::Connected) {
+        return;
+    }
+
+    if (!sntp_initialized_) {
+        esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+        config.start = false;
+        config.wait_for_sync = true;
+        const esp_err_t init_err = esp_netif_sntp_init(&config);
+        if (init_err != ESP_OK && init_err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(kTag, "SNTP init failed: %s", esp_err_to_name(init_err));
+            sntp_start_failed_ = true;
+            return;
+        }
+        sntp_initialized_ = true;
+    }
+
+    if (!sntp_started_) {
+        const esp_err_t start_err = esp_netif_sntp_start();
+        if (start_err != ESP_OK) {
+            ESP_LOGW(kTag, "SNTP start failed: %s", esp_err_to_name(start_err));
+            sntp_start_failed_ = true;
+            return;
+        }
+        sntp_started_ = true;
+        ESP_LOGI(kTag, "SNTP started after Wi-Fi got IP");
+    }
+#endif
+}
+
+void ClockService::poll_sntp_sync() {
+#if defined(ESP_PLATFORM)
+    if (!sntp_started_ || sntp_synced_) {
+        return;
+    }
+
+    const esp_err_t sync_err = esp_netif_sntp_sync_wait(0);
+    if (sync_err == ESP_OK || is_plausible_time(board_.rtc_unix_time_s())) {
+        sntp_synced_ = true;
+        ESP_LOGI(kTag, "SNTP time synchronized");
+    } else if (sync_err != ESP_ERR_TIMEOUT && sync_err != ESP_ERR_NOT_FINISHED) {
+        ESP_LOGW(kTag, "SNTP sync wait failed: %s", esp_err_to_name(sync_err));
+    }
+#endif
+}
+
 void ClockService::tick() {
+    maybe_start_sntp();
+    poll_sntp_sync();
+
     const uint64_t rtc_unix_time_s = board_.rtc_unix_time_s();
     ClockState clock = state_store_.clock();
 

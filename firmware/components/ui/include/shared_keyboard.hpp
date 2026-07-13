@@ -14,6 +14,7 @@ void bind_shared_keyboard_host(lv_obj_t* panel, lv_obj_t* content, lv_obj_t* dot
 void shared_keyboard_attach(lv_obj_t* textarea,
                             lv_obj_t* scroll_container,
                             SharedKeyboardCallbacks callbacks = {});
+void shared_keyboard_set_fullscreen(bool fullscreen);
 void shared_keyboard_open_for(lv_obj_t* textarea);
 void shared_keyboard_close();
 bool shared_keyboard_visible();

@@ -11,6 +11,7 @@
 #define NOVA_HAS_WIFI_TRANSPORT 1
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
@@ -24,6 +25,7 @@ namespace {
 constexpr const char* kTag = "WaveshareBoard";
 constexpr uint32_t kPartialRenderRows = BSP_LCD_V_RES / 10;
 constexpr uint16_t kMaxScanResults = 12;
+constexpr uint32_t kScanPollFallbackMs = 2500;
 
 #if NOVA_HAS_WIFI_TRANSPORT
 void network_transport_task(void* context) {
@@ -255,12 +257,13 @@ bool WaveshareBoard::wifi_scan_start() {
     if (wifi_scan_status_ == WifiScanStatus::Scanning) {
         return true;
     }
+    wifi_scan_done_pending_.store(false);
     const esp_err_t scan_err = esp_wifi_scan_start(nullptr, false);
     if (scan_err != ESP_OK) {
         ESP_LOGW(kTag, "esp_wifi_scan_start failed: %s", esp_err_to_name(scan_err));
         return false;
     }
-    wifi_scan_done_pending_.store(false);
+    wifi_scan_started_ms_ = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
     wifi_scan_status_ = WifiScanStatus::Scanning;
     ESP_LOGI(kTag, "wifi scan started");
     return true;
@@ -274,7 +277,9 @@ WifiScanStatus WaveshareBoard::wifi_scan_poll() {
     if (wifi_scan_status_ != WifiScanStatus::Scanning) {
         return wifi_scan_status_;
     }
-    if (!wifi_scan_done_pending_.exchange(false)) {
+    const uint32_t now_ms = static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
+    const bool fallback_due = (now_ms - wifi_scan_started_ms_) >= kScanPollFallbackMs;
+    if (!wifi_scan_done_pending_.exchange(false) && !fallback_due) {
         return wifi_scan_status_;
     }
 
@@ -315,6 +320,8 @@ WifiScanStatus WaveshareBoard::wifi_scan_poll() {
     std::sort(networks.begin(), networks.end(),
               [](const WifiNetwork& a, const WifiNetwork& b) { return a.rssi > b.rssi; });
 
+    ESP_LOGI(kTag, "wifi scan collected %u network(s)",
+             static_cast<unsigned>(networks.size()));
     wifi_scan_results_ = std::move(networks);
     wifi_scan_status_ = WifiScanStatus::Done;
     return wifi_scan_status_;

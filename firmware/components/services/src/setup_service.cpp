@@ -131,14 +131,15 @@ void SetupService::load_from_storage() {
     saved_wifi_ssid_ = resolved.saved_wifi_ssid;
     saved_wifi_password_ = resolved.saved_wifi_password;
     wifi_auto_reconnect_enabled_ = !saved_wifi_ssid_.empty();
-    board_.set_brightness(resolved.preferences.brightness_pct);
     state_store_.set_preferences(resolved.preferences);
     state_store_.set_setup(resolved.setup);
 }
 
 void SetupService::sync_transport_state() {
     SetupState setup = state_store_.setup();
-    const bool transport_ready = state_store_.system().network_ready;
+    const bool transport_ready = state_store_.system().network_ready ||
+                                 setup.wifi_scan_status == WifiScanStatus::Done ||
+                                 !setup.wifi_networks.empty();
     if (setup.transport_ready == transport_ready) {
         return;
     }
@@ -250,6 +251,7 @@ void SetupService::submit_onboarding(const OnboardingSubmission& submission) {
                 // ready, so onboarding never gets stuck if the wizard is
                 // finished before the transport link comes up.
                 begin_wifi_connect();
+                publish_step(OnboardingStep::TimezoneAndFormat);
             }
             break;
         }
@@ -400,14 +402,18 @@ void SetupService::poll_wifi_scan(uint32_t now_ms) {
 void SetupService::complete_wifi_scan(std::vector<WifiNetwork> networks) {
     wifi_scan_in_progress_ = false;
     SetupState setup = state_store_.setup();
-    setup.transport_ready = state_store_.system().network_ready;
+    // A completed scan is stronger evidence than a possibly stale SystemState
+    // snapshot: the ESP-Hosted transport is up enough to serve Wi-Fi results.
+    setup.transport_ready = true;
     setup.wifi_scan_status = WifiScanStatus::Done;
     setup.scan_in_progress = false;
     setup.wifi_networks = std::move(networks);
     setup.last_update_ms = current_time_ms();
-    if (setup.transport_ready) {
-        setup.source = DataSource::Live;
-    }
+    setup.source = DataSource::Live;
+#if defined(ESP_PLATFORM)
+    ESP_LOGI(kTag, "wifi scan published %u network(s)",
+             static_cast<unsigned>(setup.wifi_networks.size()));
+#endif
     state_store_.set_setup(std::move(setup));
 }
 

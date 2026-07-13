@@ -46,6 +46,7 @@ private:
     std::atomic<bool> wifi_scan_done_pending_{false};
     WifiScanStatus wifi_scan_status_{WifiScanStatus::Idle};
     std::vector<WifiNetwork> wifi_scan_results_{};
+    uint32_t wifi_scan_started_ms_{0};
     std::atomic<uint8_t> wifi_link_event_{0};
 };
 

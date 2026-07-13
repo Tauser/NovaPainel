@@ -7,6 +7,7 @@ UiDispatcher::UiDispatcher(EventBus& event_bus) {
     event_bus.subscribe(EventType::MarketChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::WeatherChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::SystemChanged, &UiDispatcher::on_event, this);
+    event_bus.subscribe(EventType::SetupChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::ScreenChanged, &UiDispatcher::on_event, this);
     event_bus.subscribe(EventType::ResourceWarning, &UiDispatcher::on_event, this);
 }
