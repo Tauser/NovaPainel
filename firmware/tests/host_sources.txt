@@ -10,6 +10,7 @@ components/board/src/mock_board.cpp
 components/cache/src/boot_breadcrumb_store.cpp
 components/providers/src/provider_interfaces.cpp
 components/services/src/clock_service.cpp
+components/services/src/network_worker.cpp
 components/services/src/setup_service.cpp
 components/services/src/setup_storage_logic.cpp
 components/utils/src/boot_recovery_policy.cpp

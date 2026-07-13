@@ -138,6 +138,14 @@ uint32_t RequestOrchestrator::consecutive_failures(RequestDomain domain) const {
     return state->consecutive_failures;
 }
 
+RequestPriority RequestOrchestrator::priority_for(RequestDomain domain) const {
+    const DomainState* state = find(domain);
+    if (state == nullptr) {
+        return RequestPriority::Normal;
+    }
+    return state->policy.priority;
+}
+
 RequestOrchestrator::DomainState* RequestOrchestrator::find(RequestDomain domain) {
     for (DomainState& state : domains_) {
         if (state.configured && state.policy.domain == domain) {

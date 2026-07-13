@@ -6,6 +6,7 @@
 #include "event_bus.hpp"
 #include "http_client.hpp"
 #include "mock_board.hpp"
+#include "network_worker.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "setup_service.hpp"
@@ -45,6 +46,20 @@ void count_render() {
     ++renders;
 }
 
+struct FetchCounter {
+    int calls{0};
+};
+
+bool succeed_fetch(void* context, uint64_t /*now_ms*/) {
+    static_cast<FetchCounter*>(context)->calls++;
+    return true;
+}
+
+bool fail_fetch(void* context, uint64_t /*now_ms*/) {
+    static_cast<FetchCounter*>(context)->calls++;
+    return false;
+}
+
 }  // namespace
 
 int main() {
@@ -71,6 +86,13 @@ int main() {
     assert(dispatcher.pending_mask() == 0);
     state_store.set_action_queue_overflows(4);
     assert(dispatcher.pending_mask() != 0);
+    dispatcher.take_pending_mask();
+    nova::SetupState setup_for_dispatch{};
+    setup_for_dispatch.valid = true;
+    setup_for_dispatch.wifi_scan_status = nova::WifiScanStatus::Done;
+    setup_for_dispatch.wifi_networks.push_back(nova::WifiNetwork{"NovaNet", -42, true});
+    state_store.set_setup(setup_for_dispatch);
+    assert((dispatcher.pending_mask() & nova::ui_event_bit(nova::EventType::SetupChanged)) != 0);
 
     nova::ActionQueue queue;
     for (int i = 0; i < 16; ++i) {
@@ -141,6 +163,13 @@ int main() {
     setup_service.request_wifi_scan();
     assert(state_store.setup().wifi_scan_status == nova::WifiScanStatus::Failed);
     assert(!state_store.setup().scan_in_progress);
+    nova::OnboardingSubmission wifi_submission{};
+    wifi_submission.step = nova::OnboardingStep::Wifi;
+    wifi_submission.wifi_ssid = "NovaNet";
+    wifi_submission.wifi_password = "segredo";
+    setup_service.submit_onboarding(wifi_submission);
+    assert(state_store.setup().wifi_configured);
+    assert(state_store.setup().onboarding_step == nova::OnboardingStep::TimezoneAndFormat);
 
     const nova::SetupStorageLoadResult empty_storage =
         nova::resolve_persisted_setup(false, 0, nova::PersistedSetupData{});
@@ -262,6 +291,52 @@ int main() {
 
     const nova::SetupViewModel setup_vm = nova::make_setup_view_model(state_store.snapshot());
     assert(std::string(setup_vm.title) == "Setup");
+
+    nova::RequestOrchestrator net_orchestrator;
+    nova::NetworkWorker network_worker(state_store, net_orchestrator);
+    assert(network_worker.fetcher_count() == 0);
+    assert(!network_worker.network_available());
+    assert(network_worker.select_fetcher_index(0) == -1);
+
+    FetchCounter weather_counter{};
+    FetchCounter market_counter{};
+    network_worker.register_fetcher(nova::RequestDomain::Weather, &succeed_fetch, &weather_counter);
+    network_worker.register_fetcher(nova::RequestDomain::MarketSpot, &fail_fetch, &market_counter);
+    assert(network_worker.fetcher_count() == 2);
+    // select_fetcher_index() only decides among "due" domains; it does not
+    // gate on network_available() itself -- that's a separate check run()
+    // makes before ever calling select_fetcher_index (single responsibility,
+    // and it keeps the priority logic host-testable without a live link).
+    assert(!network_worker.network_available());
+
+    nova::SetupState connected_setup{};
+    connected_setup.wifi_connect_status = nova::WifiConnectStatus::Connected;
+    state_store.set_setup(connected_setup);
+    assert(network_worker.network_available());
+
+    // Both Weather and MarketSpot come from RequestOrchestrator's default
+    // policies (Normal priority, never started yet) and are due at t=0.
+    // Equal priority: registration order wins (Weather registered first),
+    // matching the ADR-0004 boot-scheduling rule.
+    assert(net_orchestrator.priority_for(nova::RequestDomain::Weather) ==
+           net_orchestrator.priority_for(nova::RequestDomain::MarketSpot));
+    assert(network_worker.select_fetcher_index(0) == 0);
+
+    FetchCounter ohlc_counter{};
+    network_worker.register_fetcher(nova::RequestDomain::Ohlc, &succeed_fetch, &ohlc_counter);
+    assert(net_orchestrator.configure(nova::RequestPolicy{
+        nova::RequestDomain::Ohlc, nova::RequestPriority::Critical, 0, 6, 3, 30000, 30000, true}).ok());
+    // Critical outranks the tied Normal fetchers even though it was
+    // registered last.
+    assert(network_worker.select_fetcher_index(0) == 2);
+
+    assert(net_orchestrator.mark_started(nova::RequestDomain::Ohlc, 0).ok());
+    assert(ohlc_counter.calls == 0);  // NetworkWorker::run() drives the call, not selection alone
+    net_orchestrator.mark_finished(nova::RequestDomain::Ohlc, true, 0);
+    // In-flight gate: nothing else can start until mark_finished runs (already
+    // exercised above); after finishing, Ohlc's min_interval_ms=0 keeps it
+    // eligible again immediately, so it still wins on priority.
+    assert(network_worker.select_fetcher_index(0) == 2);
 
     return 0;
 }

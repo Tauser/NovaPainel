@@ -6,6 +6,7 @@
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "clock_service.hpp"
+#include "network_worker.hpp"
 #include "setup_service.hpp"
 #include "setup_screen.hpp"
 #include "service_manager.hpp"
@@ -132,6 +133,7 @@ extern "C" void app_main(void) {
     static nova::ServiceManager service_manager;
     static nova::ClockService clock_service(state_store, board, kClockSource);
     static nova::SetupService setup_service(state_store, board);
+    static nova::NetworkWorker network_worker(state_store, request_orchestrator);
     static nova::ScreenRegistry screen_registry;
     g_setup_service = &setup_service;
     g_state_store = &state_store;
@@ -140,6 +142,9 @@ extern "C" void app_main(void) {
     static nova::UiShell ui_shell(state_store, screen_registry);
     (void)service_manager.add(&nova::ClockService::tick_adapter, &clock_service);
     (void)service_manager.add(&nova::SetupService::tick_adapter, &setup_service);
+    // Sem fetchers registrados ainda (providers entram em seguida na Fase 4);
+    // o worker sobe e fica ocioso, provando task/gate de rede sem custo.
+    network_worker.start();
     const auto breadcrumb_init = breadcrumb_store.init();
     if (!breadcrumb_init.ok()) {
         ESP_LOGW(kTag, "boot breadcrumb init failed");
@@ -218,7 +223,10 @@ extern "C" void app_main(void) {
         }
 
         service_manager.tick();
-        request_orchestrator.tick(current_ms);
+        // request_orchestrator.tick() is NOT called here: NetworkWorker's own
+        // task is the sole owner/caller of RequestOrchestrator once it starts
+        // (ADR-0004), so main_loop touching it too would be an unsynchronized
+        // concurrent access (ARCHITECTURE.md Secao 6, regra 1).
         action_queue.drain(&handle_action);
 #if defined(ESP_PLATFORM)
         vTaskDelay(pdMS_TO_TICKS(50));

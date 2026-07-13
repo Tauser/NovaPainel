@@ -50,6 +50,7 @@ public:
     void tick(uint64_t now_ms);
     CircuitState circuit_state(RequestDomain domain) const;
     uint32_t consecutive_failures(RequestDomain domain) const;
+    RequestPriority priority_for(RequestDomain domain) const;
     bool in_flight() const { return in_flight_; }
 
 private:

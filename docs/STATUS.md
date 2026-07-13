@@ -13,7 +13,7 @@
 | Item | Estado | Desde |
 |---|---|---|
 | Baseline vigente | **v4 (reconstrução total)** | 2026-07-02 |
-| Fase atual | **Fase 3 — Conectividade, tempo e onboarding** | 2026-07-11 |
+| Fase atual | **Fase 4 — Dados reais, cache offline e degradação** | 2026-07-12 |
 | Firmware ativo | esqueleto v4 criado em `firmware/` (Fase 1) | 2026-07-11 |
 | Hardware | validado (herdado da Fase 0 do baseline v3) | 2026 |
 | Build PROD validado em bancada | não | — |
@@ -26,8 +26,8 @@
 Fase 0  - Preparação do repositório e tooling            [concluída em 2026-07-11]
 Fase 1  - Esqueleto arquitetural + board/ + CI host      [concluída em 2026-07-11]
 Fase 2  - Boot, display, shell de UI registrável         [concluída em 2026-07-11]
-Fase 3  - Conectividade, tempo e onboarding              [em andamento]
-Fase 4  - Dados reais, cache offline e degradação        [pendente]
+Fase 3  - Conectividade, tempo e onboarding              [concluída em 2026-07-12]
+Fase 4  - Dados reais, cache offline e degradação        [em andamento]
 Fase 5  - Telas funcionais do MVP                        [pendente]
 Fase 6  - Observabilidade, soak e resiliência provada    [pendente]
 Fase 7  - OTA + release PROD seguro                      [pendente]
@@ -80,15 +80,13 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 ## Dívidas conhecidas / riscos abertos
 
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
-- O shell entregue na Fase 2 ainda é baseline de navegação/estado; os
-  consumidores funcionais de teclado, tempo e onboarding entram na Fase 3.
-- O ClockService da Fase 3 já entrou no tree, mas a leitura real do RTC da
-  Waveshare ainda depende de o relógio do sistema já estar seeded; na unidade
-  atual validada em bancada o RTC continua não-plausível no boot.
-- O SetupService da Fase 3 ainda não cobre o wizard completo de onboarding,
-  mas agora já possui scan real de Wi-Fi, auto-scan em unidade sem rede
-  configurada e reconexão automática limitada por boot quando há credenciais
-  persistidas.
+- Nenhuma dívida conhecida bloqueia o encerramento da Fase 3.
+- O `NetworkWorker` da Fase 4 entrou no tree só com a task/escalonamento
+  (nenhum fetcher registrado ainda); providers reais, `CacheStore` e
+  degradação/cache offline continuam pendentes.
+- O `NetworkWorker` só foi validado por `host_check.sh --app --tests` nesta
+  sessão; `idf.py build`/bancada ainda não confirmaram a task subindo no
+  ESP32-P4 real.
 
 ## Evidência de encerramento da Fase 2
 
@@ -136,7 +134,7 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `tools/scripts/architecture_check.sh`,
   `idf.py build`.
 
-## Evidência parcial da Fase 3
+## Evidência de encerramento da Fase 3
 
 - O componente `services/` foi criado no baseline v4, com `ClockService`
   isolado de UI e mutando relógio apenas via `StateStore`.
@@ -209,10 +207,19 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   produto (`America/Sao_Paulo`, `America/Manaus`, `America/Rio_Branco`,
   `America/Noronha`, `UTC`) e um toggle explícito de 12h/24h antes da etapa de
   confirmação.
-- O wizard ainda é parcial: a tela já cobre seleção real de SSID, senha,
-  timezone, formato e resumo final, mas ainda não há evidência de bancada do
-  onboarding completo em unidade zerada nem do fluxo pós-conexão/NTP exigido
-  pelo critério de saída da fase.
+- O wizard foi validado em bancada pelo usuário em unidade zerada: após flash
+  e limpeza de NVS, o setup inicia uma vez, lista redes, aceita rede protegida
+  com senha, avança fuso/formato, confirma, entra na Home e não reaparece no
+  reboot seguinte.
+- A reconexão automática pós-setup também foi validada em bancada pelo
+  usuário: após concluir o onboarding e reiniciar, o firmware permanece fora
+  da tela Setup e reconecta usando as credenciais salvas.
+- O `ClockService` agora inicia SNTP somente depois de o Wi-Fi chegar a
+  `WifiConnectStatus::Connected`, preservando a publicação imediata de RTC
+  plausível e refinando a hora via `pool.ntp.org` sem bloquear o fluxo offline.
+- A validação final em bancada foi executada pelo usuário após novo flash em
+  2026-07-12: RTC/NTP/timezone passaram no hardware, incluindo hora correta na
+  topbar com o timezone escolhido no wizard.
 - O build do alvo voltou a passar com o transporte ESP-Hosted habilitado no
   tree (`idf.py build`), confirmando o baseline de dependências/`sdkconfig`
   necessário para o host ESP32-P4 conversar com o C6 via SDIO.
@@ -280,3 +287,33 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `idf.py build` ainda não foi confirmado nesta sessão (sem toolchain
   ESP-IDF disponível aqui) — pendente de validação em bancada antes do
   próximo flash.
+
+## Evidência parcial da Fase 4
+
+- `services/NetworkWorker` entrou no tree como a task única de execução
+  HTTP prevista no ADR-0004: services de dados registram
+  `{RequestDomain, RefreshFn, contexto}` (ponteiro de função + contexto, sem
+  `std::function`) em vez de subirem task própria.
+- A escolha de qual domínio "devido" rodar (`select_fetcher_index`) e o
+  gate de rede (`network_available`, baseado em
+  `SetupState.wifi_connect_status == Connected`) são funções puras
+  host-testáveis, separadas do loop da task real (`run()`, só compilado sob
+  `ESP_PLATFORM`) — cobertas por teste nativo incluindo empate de
+  prioridade por ordem de registro e prioridade `Critical` vencendo
+  `Normal`.
+- `RequestOrchestrator` ganhou `priority_for()` para o worker consultar a
+  prioridade configurada por domínio sem duplicar a política.
+- Ownership resolvido conforme a Seção 6 do `ARCHITECTURE.md`: a partir de
+  agora só a task do `NetworkWorker` chama `RequestOrchestrator::tick()` /
+  `mark_started()` / `mark_finished()`; a chamada que o `main_loop` fazia a
+  cada 50 ms foi removida para não haver acesso concorrente sem lock ao
+  mesmo objeto (o `RequestOrchestrator` não é thread-safe, ao contrário do
+  `StateStore`).
+- `NetworkWorker` já é instanciado e iniciado em `app_main`, mas sem
+  nenhum fetcher registrado ainda (providers reais entram em seguida);
+  a task sobe e fica ociosa aguardando `wifi_connect_status == Connected`.
+- Validações verdes deste avanço: `tools/scripts/host_check.sh --app
+  --tests`, `tools/scripts/architecture_check.sh`,
+  `tools/scripts/ci_hygiene.sh`. `idf.py build` e validação em bancada
+  (task realmente sobe no ESP32-P4, stack de 8 K words não estoura) ainda
+  não foram feitos nesta sessão — sem toolchain ESP-IDF disponível aqui.
