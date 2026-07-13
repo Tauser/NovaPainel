@@ -11,12 +11,14 @@ components/cache/src/boot_breadcrumb_store.cpp
 components/cache/src/cache_store.cpp
 components/providers/src/awesomeapi_provider.cpp
 components/providers/src/coingecko_provider.cpp
+components/providers/src/open_meteo_provider.cpp
 components/providers/src/provider_interfaces.cpp
 components/services/src/clock_service.cpp
 components/services/src/market_service.cpp
 components/services/src/network_worker.cpp
 components/services/src/setup_service.cpp
 components/services/src/setup_storage_logic.cpp
+components/services/src/weather_service.cpp
 components/utils/src/boot_recovery_policy.cpp
 components/utils/src/http_client.cpp
 components/utils/src/json_value.cpp

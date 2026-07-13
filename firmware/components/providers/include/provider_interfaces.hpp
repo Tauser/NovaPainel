@@ -14,7 +14,9 @@ public:
 class IWeatherProvider {
 public:
     virtual ~IWeatherProvider() = default;
-    virtual Result<WeatherState> fetch_weather() = 0;
+    // Localização faz parte do contrato (não só de um provider específico):
+    // qualquer fonte de clima precisa de coordenadas para responder.
+    virtual Result<WeatherState> fetch_weather(double latitude, double longitude) = 0;
 };
 
 class IForexProvider {

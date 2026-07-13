@@ -7,11 +7,13 @@
 #include "coingecko_provider.hpp"
 #include "event_bus.hpp"
 #include "market_service.hpp"
+#include "open_meteo_provider.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "clock_service.hpp"
 #include "network_worker.hpp"
 #include "setup_service.hpp"
+#include "weather_service.hpp"
 #include "setup_screen.hpp"
 #include "service_manager.hpp"
 #include "state_store.hpp"
@@ -142,6 +144,8 @@ extern "C" void app_main(void) {
     static nova::CoinGeckoProvider crypto_provider;
     static nova::AwesomeApiProvider forex_provider;
     static nova::MarketService market_service(state_store, cache_store, crypto_provider, forex_provider);
+    static nova::OpenMeteoProvider weather_provider;
+    static nova::WeatherService weather_service(state_store, cache_store, weather_provider);
     static nova::ScreenRegistry screen_registry;
     g_setup_service = &setup_service;
     g_state_store = &state_store;
@@ -163,6 +167,7 @@ extern "C" void app_main(void) {
         ESP_LOGW(kTag, "cache store mount failed");
     }
     market_service.load_from_cache(now_ms());
+    weather_service.load_from_cache(now_ms());
 
     // register_fetcher() precisa rodar antes de start() (contrato do
     // NetworkWorker); o worker só executa cada um quando o Wi-Fi estiver
@@ -172,6 +177,8 @@ extern "C" void app_main(void) {
                                      &nova::MarketService::refresh_crypto, &market_service);
     network_worker.register_fetcher(nova::RequestDomain::Forex,
                                      &nova::MarketService::refresh_forex, &market_service);
+    network_worker.register_fetcher(nova::RequestDomain::Weather,
+                                     &nova::WeatherService::refresh, &weather_service);
     network_worker.start();
 
     const auto persisted_breadcrumb = breadcrumb_store.load();

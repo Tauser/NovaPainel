@@ -81,10 +81,11 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
 - Nenhuma dívida conhecida bloqueia o encerramento da Fase 3.
-- `NetworkWorker` e `CacheStore` agora têm um consumidor real: `MarketService`
-  (BTC via CoinGecko, USD/BRL via AwesomeAPI). Weather/Open-Meteo ainda não
-  entrou -- precisa de latitude/longitude em `UserPreferences`, que não
-  existe no modelo hoje (mudança pequena, mas ainda não feita).
+- `NetworkWorker` e `CacheStore` agora têm três consumidores reais:
+  `MarketService` (BTC via CoinGecko, USD/BRL via AwesomeAPI) e
+  `WeatherService` (Open-Meteo). `UserPreferences` ganhou
+  `latitude`/`longitude` com default São Paulo -- ainda sem seleção de
+  local no onboarding (fica para quando o wizard aprender a coletar isso).
 - Nada disso foi validado em rede real nesta sessão: `HttpClient` real só
   compila sob `ESP_PLATFORM` (não há ESP-IDF neste ambiente); o circuit
   breaker do `RequestOrchestrator` e o watermark de heap sob fetch real
@@ -415,3 +416,39 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   isso hoje (parsing/merge/cache testados com fixtures e providers fake,
   rede real não). `idf.py build` e bancada continuam pendentes nesta
   sessão -- sem toolchain ESP-IDF disponível aqui.
+- Weather/Open-Meteo entrou nesta sessão: `UserPreferences` ganhou
+  `latitude`/`longitude` (default São Paulo, `-23.5505`/`-46.6333`) --
+  sem persistência nem seleção no onboarding ainda, propositalmente fora
+  de escopo aqui para não colidir com o wizard de onboarding em
+  desenvolvimento em paralelo.
+- `IWeatherProvider::fetch_weather()` passou a receber `latitude`/
+  `longitude` como parâmetros (era só `()`): localização é parte do
+  contrato de qualquer fonte de clima, não um detalhe do Open-Meteo --
+  decisão para manter `WeatherService` dependendo só da interface
+  (nunca do adaptador concreto, regra do `ARCHITECTURE.md` §4), já que
+  a alternativa (`set_location()` só no `OpenMeteoProvider`) obrigaria o
+  service a conhecer o tipo concreto.
+- `OpenMeteoProvider` pede só `current=temperature_2m,precipitation,
+  weather_code&timezone=auto` -- nada de hourly/daily (isso é Fase 5,
+  tela Weather real); payload minúsculo, bem abaixo do cap de 48 KB.
+  `weather_code` vira um resumo curto em pt-BR (`summary_for_code`),
+  mesma tabela de códigos do WMO que a v3 usava.
+- `services/WeatherService` segue o mesmo padrão do `MarketService`:
+  `load_from_cache()` repõe stale=true/source=Cache no boot antes do
+  primeiro fetch; falha de fetch preserva o último valor bom; cada
+  refresh lê `latitude`/`longitude` de `StateStore.preferences()` (não
+  fixa no construtor), então já funciona quando o onboarding aprender a
+  mudar essas coordenadas.
+- `WeatherState.summary` é `std::string`, que não pode ser gravado cru em
+  flash e relido como válido (ponteiro/buffer interno não sobrevive ao
+  round-trip). `WeatherService` serializa para um blob de tamanho fixo
+  (`char summary[32]`, trunca com folga -- o maior valor de
+  `summary_for_code` tem 10 caracteres) antes de `CacheStore::save()`.
+- Registrado como fetcher `RequestDomain::Weather` no `NetworkWorker`
+  (30 min, Normal, conforme RESOURCE-BUDGET.md §5), instanciado e
+  conectado em `app_main` do mesmo jeito que o `MarketService`.
+- Validado com `tools/scripts/host_check.sh --app --tests` (URL builder,
+  parsing com fixtures reais/malformadas, merge/cache round-trip com
+  provider fake), `tools/scripts/architecture_check.sh`,
+  `tools/scripts/ci_hygiene.sh`. `idf.py build`/bancada continuam
+  pendentes -- sem toolchain ESP-IDF nesta sessão.

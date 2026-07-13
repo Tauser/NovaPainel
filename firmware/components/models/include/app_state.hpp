@@ -98,6 +98,12 @@ struct UserPreferences {
     std::string timezone{"America/Sao_Paulo"};
     int brightness_pct{80};
     bool use_24h{true};
+    // Sem seleção de local no onboarding ainda: default São Paulo, mesma
+    // cidade do timezone default acima. WeatherService usa isto para
+    // montar a query do Open-Meteo; persistência/UI de local ficam para
+    // quando o onboarding aprender a coletar essa informação.
+    double latitude{-23.5505};
+    double longitude{-46.6333};
 };
 
 struct SetupState : DataStatus {

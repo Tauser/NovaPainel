@@ -12,6 +12,7 @@
 #include "market_service.hpp"
 #include "mock_board.hpp"
 #include "network_worker.hpp"
+#include "open_meteo_provider.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "setup_service.hpp"
@@ -19,6 +20,7 @@
 #include "setup_view_model.hpp"
 #include "shell_chrome_view_model.hpp"
 #include "state_store.hpp"
+#include "weather_service.hpp"
 #include "timezone_catalog.hpp"
 #include "boot_view_model.hpp"
 #include "home_view_model.hpp"
@@ -77,6 +79,22 @@ public:
     int calls{0};
     nova::Result<nova::MarketState> result{
         nova::Result<nova::MarketState>::failure(
+            nova::Status::error(nova::StatusCode::Unavailable, "not configured"))};
+};
+
+class FakeWeatherProvider final : public nova::IWeatherProvider {
+public:
+    nova::Result<nova::WeatherState> fetch_weather(double latitude, double longitude) override {
+        ++calls;
+        last_latitude = latitude;
+        last_longitude = longitude;
+        return result;
+    }
+    int calls{0};
+    double last_latitude{0.0};
+    double last_longitude{0.0};
+    nova::Result<nova::WeatherState> result{
+        nova::Result<nova::WeatherState>::failure(
             nova::Status::error(nova::StatusCode::Unavailable, "not configured"))};
 };
 
@@ -546,6 +564,78 @@ int main() {
     assert(fresh_state_store.market().source == nova::DataSource::Cache);
     assert(fresh_state_store.market().btc_usd == 50000.0);
     assert(fresh_state_store.market().usd_brl == 5.5);
+
+    // OpenMeteoProvider: URL builder + fixtures (ADR-0007).
+    const std::string weather_url = nova::OpenMeteoProvider::build_url(-23.5505, -46.6333);
+    assert(weather_url.find("latitude=-23.5505") != std::string::npos);
+    assert(weather_url.find("longitude=-46.6333") != std::string::npos);
+    assert(weather_url.find("current=temperature_2m,precipitation,weather_code") != std::string::npos);
+
+    const auto weather_real = nova::OpenMeteoProvider::parse_weather_payload(R"({
+        "latitude": -23.5, "longitude": -46.62,
+        "current": {"time": "2024-01-01T12:00", "interval": 900,
+                     "temperature_2m": 23.4, "precipitation": 0.0, "weather_code": 3}
+    })");
+    assert(weather_real.ok());
+    assert(weather_real.value().temperature_c == 23.4);
+    assert(weather_real.value().precipitation_mm == 0.0);
+    assert(weather_real.value().summary == "Nublado");
+    assert(weather_real.value().valid);
+
+    const auto weather_rain = nova::OpenMeteoProvider::parse_weather_payload(
+        R"({"current": {"temperature_2m": 19.0, "precipitation": 4.2, "weather_code": 61}})");
+    assert(weather_rain.ok());
+    assert(weather_rain.value().summary == "Chuva");
+
+    assert(!nova::OpenMeteoProvider::parse_weather_payload("{}").ok());
+    assert(!nova::OpenMeteoProvider::parse_weather_payload(R"({"current": {}})").ok());
+    assert(!nova::OpenMeteoProvider::parse_weather_payload(
+        R"({"current": {"temperature_2m": 19.0}})").ok());  // missing precipitation/code
+    assert(!nova::OpenMeteoProvider::parse_weather_payload("[]").ok());
+    assert(!nova::OpenMeteoProvider::parse_weather_payload("").ok());
+
+    // WeatherService: reads location from StateStore.preferences() on every
+    // refresh, merges into StateStore.weather, persists/restores via cache.
+    nova::CacheStore weather_cache;
+    assert(weather_cache.mount().ok());
+    FakeWeatherProvider fake_weather;
+    nova::StateStore weather_state_store(event_bus);
+    nova::UserPreferences custom_prefs = weather_state_store.preferences();
+    custom_prefs.latitude = 10.0;
+    custom_prefs.longitude = 20.0;
+    weather_state_store.set_preferences(custom_prefs);
+    nova::WeatherService weather_service(weather_state_store, weather_cache, fake_weather);
+
+    weather_service.load_from_cache(1000);  // nothing cached yet: no-op
+    assert(!weather_state_store.weather().valid);
+
+    nova::WeatherState fresh_weather{};
+    fresh_weather.temperature_c = 28.0;
+    fresh_weather.precipitation_mm = 1.5;
+    fresh_weather.summary = "Chuva";
+    fake_weather.result = nova::Result<nova::WeatherState>::success(fresh_weather);
+    assert(nova::WeatherService::refresh(&weather_service, 2000));
+    assert(fake_weather.last_latitude == 10.0);
+    assert(fake_weather.last_longitude == 20.0);
+    assert(weather_state_store.weather().temperature_c == 28.0);
+    assert(weather_state_store.weather().summary == "Chuva");
+    assert(weather_state_store.weather().valid);
+    assert(!weather_state_store.weather().stale);
+    assert(weather_state_store.weather().source == nova::DataSource::Live);
+
+    fake_weather.result = nova::Result<nova::WeatherState>::failure(
+        nova::Status::error(nova::StatusCode::Unavailable, "network down"));
+    assert(!nova::WeatherService::refresh(&weather_service, 3000));
+    assert(weather_state_store.weather().temperature_c == 28.0);  // last good value kept
+
+    nova::StateStore fresh_weather_store(event_bus);
+    nova::WeatherService cache_reader_weather_service(fresh_weather_store, weather_cache, fake_weather);
+    cache_reader_weather_service.load_from_cache(4000);
+    assert(fresh_weather_store.weather().valid);
+    assert(fresh_weather_store.weather().stale);
+    assert(fresh_weather_store.weather().source == nova::DataSource::Cache);
+    assert(fresh_weather_store.weather().temperature_c == 28.0);
+    assert(fresh_weather_store.weather().summary == "Chuva");
 
     return 0;
 }

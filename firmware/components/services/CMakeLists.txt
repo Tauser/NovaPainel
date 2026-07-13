@@ -5,6 +5,7 @@ idf_component_register(
         "src/network_worker.cpp"
         "src/setup_service.cpp"
         "src/setup_storage_logic.cpp"
+        "src/weather_service.cpp"
     INCLUDE_DIRS "include"
     REQUIRES
         board
