@@ -86,15 +86,19 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `WeatherService` (Open-Meteo). `UserPreferences` ganhou
   `latitude`/`longitude` com default São Paulo -- ainda sem seleção de
   local no onboarding (fica para quando o wizard aprender a coletar isso).
-- Nada disso foi validado em rede real nesta sessão: `HttpClient` real só
-  compila sob `ESP_PLATFORM` (não há ESP-IDF neste ambiente); o circuit
-  breaker do `RequestOrchestrator` e o watermark de heap sob fetch real
-  continuam sem evidência de bancada.
-- `NetworkWorker`, `CacheStore`, os providers e o `MarketService` só foram
-  validados por `host_check.sh --app --tests` (parsing coberto por fixtures
-  reais/malformadas, sem rede) nesta sessão; `idf.py build`/bancada ainda
-  não confirmaram a task subindo, a partição LittleFS montando, nem um
-  fetch HTTPS de verdade no ESP32-P4.
+- Validado em bancada pelo usuário na COM8 (build `205c5fb-dirty`, ESP-IDF
+  v5.5.4): boot limpo, `CacheStore` monta `/littlefs`, `NetworkWorker`
+  sobe com 3 fetchers, Wi-Fi conecta via ESP-Hosted/SDIO
+  (`192.168.1.16`), SNTP sincroniza, e os três fetches completam com
+  certificado TLS validado -- `CacheStore` salvou `market_btc` (8 B),
+  `market_forex` (8 B) e `weather` (48 B), do tamanho exato dos blobs.
+  O segundo ciclo de BTC disparou ~180 s depois do primeiro, confirmando
+  o `min_interval_ms` de 3 min do `RequestOrchestrator` na prática. Build
+  era árvore suja (inclui trabalho de UI/onboarding de outra sessão ainda
+  não commitado), então isto valida a integração, não um commit isolado.
+- Ainda sem evidência de bancada: circuit breaker abrindo sob falha real
+  (nenhum fetch falhou nesta corrida) e watermark de heap sob 24 h de
+  fetches contínuos.
 
 ## Evidência de encerramento da Fase 2
 
@@ -325,6 +329,9 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `tools/scripts/ci_hygiene.sh`. `idf.py build` e validação em bancada
   (task realmente sobe no ESP32-P4, stack de 8 K words não estoura) ainda
   não foram feitos nesta sessão — sem toolchain ESP-IDF disponível aqui.
+- Atualização (sessão seguinte, com providers reais registrados): validado
+  em bancada na COM8 -- log mostra `NetworkWorker: started: 3 fetcher(s),
+  serialized 1 HTTPS per vez` e nenhum reboot/estouro de stack observado.
 - `cache/CacheStore` entrou no tree como a persistência LittleFS prevista
   no ARCHITECTURE.md (blobs versionados, escrita atômica via tmp+rename).
   Blobs são bytes opacos (`save`/`load` recebem ponteiro+tamanho) para
@@ -350,9 +357,13 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - Validado com `tools/scripts/host_check.sh --app --tests`,
   `tools/scripts/architecture_check.sh`, `tools/scripts/ci_hygiene.sh`
   (mount/save/load simulados em memória no host, sem LittleFS real).
-  `idf.py build` e validação em bancada (partição `storage` monta de
-  fato, escrita sobrevive a reboot) ainda não foram feitos nesta sessão
-  — sem toolchain ESP-IDF disponível aqui.
+- Atualização (sessão seguinte): validado em bancada na COM8 -- log
+  mostra `CacheStore: littlefs ready at /littlefs` e, mais tarde,
+  `CacheStore: saved market_btc (8 B)` / `saved market_forex (8 B)` /
+  `saved weather (48 B)`, tamanhos batendo exatamente com os blobs
+  (`BtcBlobV1`/`ForexBlobV1` = 1 double = 8 B; `WeatherBlobV1` = 2
+  double + `char[32]` = 48 B). Sobrevivência a reboot ainda não
+  confirmada (precisa reiniciar e checar se os valores persistem).
 - `utils/json_value.hpp` traz um parser JSON próprio e mínimo (objeto,
   array, número, string, bool, null; limite de profundidade 32 contra
   stack overflow em payload malicioso/aninhado demais). Existe porque nem
@@ -411,11 +422,14 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   chega no onboarding.
 - Validado com `tools/scripts/host_check.sh --app --tests`,
   `tools/scripts/architecture_check.sh`, `tools/scripts/ci_hygiene.sh`.
-  Nenhum fetch HTTPS real, nenhuma medição de heap sob carga e nenhuma
-  abertura real do circuit breaker foram exercitados -- só o host permite
-  isso hoje (parsing/merge/cache testados com fixtures e providers fake,
-  rede real não). `idf.py build` e bancada continuam pendentes nesta
-  sessão -- sem toolchain ESP-IDF disponível aqui.
+- Atualização (sessão seguinte): validado em bancada na COM8 com fetch
+  HTTPS real -- CoinGecko e AwesomeAPI completaram com certificado TLS
+  validado (`esp-x509-crt-bundle: Certificate validated`) e o
+  `MarketService` persistiu os dois blobs no `CacheStore`. O segundo
+  ciclo de BTC disparou ~180 s após o primeiro, confirmando o
+  `min_interval_ms` de 3 min na prática. Nenhuma falha de fetch ocorreu
+  nesta corrida, então o circuit breaker abrindo/recuperando e o
+  watermark de heap sob carga continuam sem evidência.
 - Weather/Open-Meteo entrou nesta sessão: `UserPreferences` ganhou
   `latitude`/`longitude` (default São Paulo, `-23.5505`/`-46.6333`) --
   sem persistência nem seleção no onboarding ainda, propositalmente fora
@@ -450,5 +464,9 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 - Validado com `tools/scripts/host_check.sh --app --tests` (URL builder,
   parsing com fixtures reais/malformadas, merge/cache round-trip com
   provider fake), `tools/scripts/architecture_check.sh`,
-  `tools/scripts/ci_hygiene.sh`. `idf.py build`/bancada continuam
-  pendentes -- sem toolchain ESP-IDF nesta sessão.
+  `tools/scripts/ci_hygiene.sh`.
+- Atualização (sessão seguinte): validado em bancada na COM8 -- fetch do
+  Open-Meteo completou com certificado TLS validado e o `WeatherService`
+  persistiu o blob de 48 B no `CacheStore` (`saved weather (48 B)`).
+  Latitude/longitude default de São Paulo usadas (sem seleção de local no
+  onboarding ainda). Nenhuma tela consome esse dado ainda (Fase 5).
