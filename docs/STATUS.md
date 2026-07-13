@@ -81,14 +81,19 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
 
 - Nenhuma evidência de estabilidade de longa duração em nenhum tree.
 - Nenhuma dívida conhecida bloqueia o encerramento da Fase 3.
-- O `NetworkWorker` e o `CacheStore` da Fase 4 entraram no tree, mas sem
-  nenhum consumidor real ainda (nenhum fetcher registrado, nenhum service
-  gravando blob); providers reais e degradação/cache offline ponta a ponta
-  continuam pendentes.
-- `NetworkWorker` e `CacheStore` só foram validados por
-  `host_check.sh --app --tests` nesta sessão; `idf.py build`/bancada ainda
-  não confirmaram a task subindo nem a partição LittleFS montando no
-  ESP32-P4 real.
+- `NetworkWorker` e `CacheStore` agora têm um consumidor real: `MarketService`
+  (BTC via CoinGecko, USD/BRL via AwesomeAPI). Weather/Open-Meteo ainda não
+  entrou -- precisa de latitude/longitude em `UserPreferences`, que não
+  existe no modelo hoje (mudança pequena, mas ainda não feita).
+- Nada disso foi validado em rede real nesta sessão: `HttpClient` real só
+  compila sob `ESP_PLATFORM` (não há ESP-IDF neste ambiente); o circuit
+  breaker do `RequestOrchestrator` e o watermark de heap sob fetch real
+  continuam sem evidência de bancada.
+- `NetworkWorker`, `CacheStore`, os providers e o `MarketService` só foram
+  validados por `host_check.sh --app --tests` (parsing coberto por fixtures
+  reais/malformadas, sem rede) nesta sessão; `idf.py build`/bancada ainda
+  não confirmaram a task subindo, a partição LittleFS montando, nem um
+  fetch HTTPS de verdade no ESP32-P4.
 
 ## Evidência de encerramento da Fase 2
 
@@ -347,3 +352,66 @@ Fase 8+ - v1.0 e extensões (ver ROADMAP)                 [futuro]
   `idf.py build` e validação em bancada (partição `storage` monta de
   fato, escrita sobrevive a reboot) ainda não foram feitos nesta sessão
   — sem toolchain ESP-IDF disponível aqui.
+- `utils/json_value.hpp` traz um parser JSON próprio e mínimo (objeto,
+  array, número, string, bool, null; limite de profundidade 32 contra
+  stack overflow em payload malicioso/aninhado demais). Existe porque nem
+  o host (`host_check.sh`) nem este ambiente de sessão têm `cJSON`
+  disponível sem um `idf.py build` real, e o ADR-0007 exige parsing
+  coberto por fixtures no CI, não só no alvo -- decisão tomada com o
+  usuário (alternativas descartadas: vendorizar `cJSON` sem poder validar
+  o arquivo real, ou deixar o parsing sem cobertura de host).
+- `utils/http_client.hpp` deixou de ser stub: `HttpClient::get()` agora
+  usa `esp_http_client` de verdade sob `ESP_PLATFORM`, com mutex próprio
+  serializando todo GET do firmware (RESOURCE-BUDGET.md §1 regra 1 --
+  além da serialização de política que o `NetworkWorker` já fazia, esta é
+  a garantia estrutural citada no documento), corpo alocado em SRAM
+  interna (`MALLOC_CAP_INTERNAL`) com o cap de 48 KB já existente, e
+  `esp_crt_bundle_attach` para validação TLS. Resposta maior que o cap
+  vira falha (`Truncated`), nunca truncamento silencioso. No host
+  continua um stub (`Unavailable`) -- não há stack de rede para simular
+  com segurança num teste unitário.
+- Dois providers reais entraram em `providers/`: `CoinGeckoProvider`
+  (BTC spot) e `AwesomeApiProvider` (USD/BRL). Cada um separa parsing
+  puro (`parse_market_payload`/`parse_forex_payload`, sem IO, testado com
+  fixtures reais e malformadas) do `fetch_*()` que efetivamente chama
+  `HttpClient` -- mesma técnica de isolar lógica pura de IO já usada em
+  `BootRecoveryPolicy`/`SetupStorageLogic`/`NetworkWorker`.
+- `AwesomeApiProvider` trata campos numéricos vindos como string (formato
+  real da AwesomeAPI, ex. `"bid": "5.4321"`), com fallback para número
+  JSON puro por robustez a mudança de schema.
+- `services/MarketService` virou o dono do domínio `market` do
+  `StateStore`: funde as duas fontes (BTC e USD/BRL) num único
+  `MarketState` sem uma zerar o campo da outra, já que o modelo atual
+  trata os dois como um domínio de dado só (`AppState.market` não separa
+  cripto de câmbio -- possível candidato a ADR futuro se isso continuar
+  incomodando quando o Market real da Fase 5 chegar).
+- `MarketService::load_from_cache()` repõe o `StateStore` a partir do
+  `CacheStore` antes do primeiro fetch de rede (`stale=true`,
+  `source=Cache`), cobrindo o critério de saída "boot offline mostra
+  cache com stale sinalizado" -- validado por teste nativo (grava via
+  `refresh_crypto`/`refresh_forex` simulado, contrói um `MarketService`
+  novo por cima do mesmo `CacheStore` e confere que o boot restaura os
+  dois valores com o source certo).
+- Falha de fetch (provider retornando erro) preserva o último valor bom
+  no `StateStore` em vez de zerar -- só o retorno `false` para o
+  `NetworkWorker`/`RequestOrchestrator` contam a falha para o circuit
+  breaker.
+- `CoinGeckoProvider`/`AwesomeApiProvider`/`MarketService` são
+  instanciados e conectados em `app_main`: `market_service.load_from_cache()`
+  roda logo após `cache_store.mount()` (antes de qualquer fetcher
+  registrado, para o primeiro frame já poder mostrar cache stale), depois
+  os dois fetchers são registrados no `NetworkWorker`
+  (`RequestDomain::MarketSpot`/`RequestDomain::Forex`) antes de
+  `network_worker.start()` (contrato do `NetworkWorker`: registrar antes
+  de iniciar).
+- Weather/Open-Meteo **não** entrou nesta sessão: o provider da v3 depende
+  de latitude/longitude, que não existe em `UserPreferences` hoje --
+  fica para uma próxima entrega, junto com a decisão de como esse campo
+  chega no onboarding.
+- Validado com `tools/scripts/host_check.sh --app --tests`,
+  `tools/scripts/architecture_check.sh`, `tools/scripts/ci_hygiene.sh`.
+  Nenhum fetch HTTPS real, nenhuma medição de heap sob carga e nenhuma
+  abertura real do circuit breaker foram exercitados -- só o host permite
+  isso hoje (parsing/merge/cache testados com fixtures e providers fake,
+  rede real não). `idf.py build` e bancada continuam pendentes nesta
+  sessão -- sem toolchain ESP-IDF disponível aqui.

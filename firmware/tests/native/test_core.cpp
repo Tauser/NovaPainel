@@ -1,11 +1,15 @@
 #include "action_queue.hpp"
 #include "app_state.hpp"
+#include "awesomeapi_provider.hpp"
 #include "boot_breadcrumb_store.hpp"
 #include "boot_recovery_policy.hpp"
 #include "cache_store.hpp"
 #include "clock_service.hpp"
+#include "coingecko_provider.hpp"
 #include "event_bus.hpp"
 #include "http_client.hpp"
+#include "json_value.hpp"
+#include "market_service.hpp"
 #include "mock_board.hpp"
 #include "network_worker.hpp"
 #include "request_orchestrator.hpp"
@@ -50,6 +54,30 @@ void count_render() {
 
 struct FetchCounter {
     int calls{0};
+};
+
+class FakeMarketProvider final : public nova::IMarketProvider {
+public:
+    nova::Result<nova::MarketState> fetch_market() override {
+        ++calls;
+        return result;
+    }
+    int calls{0};
+    nova::Result<nova::MarketState> result{
+        nova::Result<nova::MarketState>::failure(
+            nova::Status::error(nova::StatusCode::Unavailable, "not configured"))};
+};
+
+class FakeForexProvider final : public nova::IForexProvider {
+public:
+    nova::Result<nova::MarketState> fetch_forex() override {
+        ++calls;
+        return result;
+    }
+    int calls{0};
+    nova::Result<nova::MarketState> result{
+        nova::Result<nova::MarketState>::failure(
+            nova::Status::error(nova::StatusCode::Unavailable, "not configured"))};
 };
 
 bool succeed_fetch(void* context, uint64_t /*now_ms*/) {
@@ -133,10 +161,12 @@ int main() {
     orchestrator.tick(63010);
     assert(orchestrator.circuit_state(nova::RequestDomain::MarketSpot) == nova::CircuitState::HalfOpen);
 
+    // Real HTTP only exists under ESP_PLATFORM; on host this is always the
+    // stub failure (no network stack to fake safely in a unit test).
     nova::HttpClient http_client;
-    const auto too_large = http_client.get("https://example.invalid/data", nova::kHttpBodyCapBytes + 1);
-    assert(!too_large.ok());
-    assert(too_large.status().code() == nova::StatusCode::Truncated);
+    const auto unavailable_on_host = http_client.get("https://example.invalid/data");
+    assert(!unavailable_on_host.ok());
+    assert(unavailable_on_host.status().code() == nova::StatusCode::Unavailable);
 
     nova::MockBoard board;
     const nova::BoardStatus status = board.bring_up();
@@ -393,6 +423,129 @@ int main() {
     // After the 30 min throttle window, a write goes through again.
     assert(cache_store.save("market", &market_payload, sizeof(market_payload),
                              1000 + 30 * 60 * 1000).ok());
+
+    // JsonValue: shape used by real providers (array of objects, nested
+    // object, string-typed numeric field), plus malformed/truncated fixtures.
+    const auto coingecko_shaped = nova::parse_json(
+        R"([{"current_price": 68000.5, "id": "bitcoin", "nested": {"a": 1}}])");
+    assert(coingecko_shaped.ok());
+    assert(coingecko_shaped.value().is_array());
+    assert(coingecko_shaped.value().size() == 1);
+    const nova::JsonValue* first = coingecko_shaped.value().at(0);
+    assert(first != nullptr && first->is_object());
+    const nova::JsonValue* price = first->find("current_price");
+    assert(price != nullptr && price->is_number());
+    assert(price->as_number() == 68000.5);
+    assert(first->find("missing") == nullptr);
+    const nova::JsonValue* nested = first->find("nested");
+    assert(nested != nullptr && nested->is_object());
+    assert(nested->find("a")->as_number() == 1.0);
+
+    const auto awesomeapi_shaped = nova::parse_json(
+        R"({"USDBRL": {"bid": "5.4321", "high": "5.50", "pctChange": "-0.42"}})");
+    assert(awesomeapi_shaped.ok());
+    const nova::JsonValue* pair = awesomeapi_shaped.value().find("USDBRL");
+    assert(pair != nullptr && pair->is_object());
+    const nova::JsonValue* bid = pair->find("bid");
+    assert(bid != nullptr && bid->is_string());
+    assert(bid->as_string() == "5.4321");
+
+    assert(!nova::parse_json("{\"unterminated\": ").ok());
+    assert(!nova::parse_json("{not json at all}").ok());
+    assert(!nova::parse_json("[1, 2,]").ok());  // trailing comma: not valid JSON
+    assert(!nova::parse_json("").ok());
+    assert(!nova::parse_json("42 43").ok());  // trailing garbage after value
+    assert(nova::parse_json("[]").ok());
+    assert(nova::parse_json("{}").ok());
+    assert(nova::parse_json("null").ok());
+    assert(nova::parse_json("true").ok());
+    assert(nova::parse_json("\"escaped \\\"quote\\\" and \\u00e9\"").ok());
+    assert(nova::parse_json("\"escaped \\\"quote\\\" and \\u00e9\"").value().as_string() ==
+           "escaped \"quote\" and \xc3\xa9");
+
+    // Deeply nested array beyond the depth guard must fail, not overflow the
+    // stack (embedded safety: recursive descent parser).
+    std::string deeply_nested(40, '[');
+    deeply_nested.append(40, ']');
+    assert(!nova::parse_json(deeply_nested).ok());
+
+    // CoinGeckoProvider: fixtures (ADR-0007) -- real-shaped payload and
+    // malformed variants, exercised without any network access.
+    const auto coingecko_real = nova::CoinGeckoProvider::parse_market_payload(R"([
+        {"id":"bitcoin","symbol":"btc","name":"Bitcoin","current_price":67890.12,
+         "market_cap":1234567890,"price_change_percentage_24h":1.23}
+    ])");
+    assert(coingecko_real.ok());
+    assert(coingecko_real.value().btc_usd == 67890.12);
+    assert(coingecko_real.value().valid);
+
+    assert(!nova::CoinGeckoProvider::parse_market_payload("[]").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload("{}").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload(R"([{"id":"bitcoin"}])").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload(R"([{"current_price":"not a number"}])").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload(R"([{"current_price":-5}])").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload("not json").ok());
+    assert(!nova::CoinGeckoProvider::parse_market_payload("").ok());
+
+    // AwesomeApiProvider: fixtures -- real payload has string-typed numbers.
+    const auto awesomeapi_real = nova::AwesomeApiProvider::parse_forex_payload(R"({
+        "USDBRL":{"code":"USD","codein":"BRL","high":"5.45","low":"5.40",
+                   "varBid":"0.0123","pctChange":"0.23","bid":"5.4321","ask":"5.4325",
+                   "timestamp":"1700000000"}
+    })");
+    assert(awesomeapi_real.ok());
+    assert(awesomeapi_real.value().usd_brl == 5.4321);
+    assert(awesomeapi_real.value().valid);
+
+    assert(!nova::AwesomeApiProvider::parse_forex_payload("{}").ok());
+    assert(!nova::AwesomeApiProvider::parse_forex_payload(R"({"USDBRL":{}})").ok());
+    assert(!nova::AwesomeApiProvider::parse_forex_payload(R"({"USDBRL":{"bid":"N/A"}})").ok());
+    assert(!nova::AwesomeApiProvider::parse_forex_payload(R"({"USDBRL":{"bid":"0"}})").ok());
+    assert(!nova::AwesomeApiProvider::parse_forex_payload("[]").ok());
+    assert(!nova::AwesomeApiProvider::parse_forex_payload("").ok());
+
+    // MarketService: merges partial fetches without clobbering the other
+    // currency, persists to CacheStore, and restores stale-flagged cache on
+    // boot -- the Fase 4 exit criterion ("boot offline mostra cache com
+    // stale sinalizado").
+    nova::CacheStore market_cache;
+    assert(market_cache.mount().ok());
+    FakeMarketProvider fake_crypto;
+    FakeForexProvider fake_forex;
+    nova::StateStore market_state_store(event_bus);
+    nova::MarketService market_service(market_state_store, market_cache, fake_crypto, fake_forex);
+
+    market_service.load_from_cache(1000);  // nothing cached yet: no-op
+    assert(!market_state_store.market().valid);
+
+    fake_crypto.result = nova::Result<nova::MarketState>::success(nova::MarketState{});
+    fake_crypto.result.value().btc_usd = 50000.0;
+    assert(nova::MarketService::refresh_crypto(&market_service, 2000));
+    assert(market_state_store.market().btc_usd == 50000.0);
+    assert(market_state_store.market().usd_brl == 0.0);  // untouched: forex never ran
+    assert(market_state_store.market().valid);
+    assert(!market_state_store.market().stale);
+    assert(market_state_store.market().source == nova::DataSource::Live);
+
+    fake_forex.result = nova::Result<nova::MarketState>::success(nova::MarketState{});
+    fake_forex.result.value().usd_brl = 5.5;
+    assert(nova::MarketService::refresh_forex(&market_service, 3000));
+    assert(market_state_store.market().usd_brl == 5.5);
+    assert(market_state_store.market().btc_usd == 50000.0);  // crypto preserved
+
+    fake_crypto.result = nova::Result<nova::MarketState>::failure(
+        nova::Status::error(nova::StatusCode::Unavailable, "network down"));
+    assert(!nova::MarketService::refresh_crypto(&market_service, 4000));
+    assert(market_state_store.market().btc_usd == 50000.0);  // last good value kept on failure
+
+    nova::StateStore fresh_state_store(event_bus);
+    nova::MarketService cache_reader_service(fresh_state_store, market_cache, fake_crypto, fake_forex);
+    cache_reader_service.load_from_cache(5000);
+    assert(fresh_state_store.market().valid);
+    assert(fresh_state_store.market().stale);
+    assert(fresh_state_store.market().source == nova::DataSource::Cache);
+    assert(fresh_state_store.market().btc_usd == 50000.0);
+    assert(fresh_state_store.market().usd_brl == 5.5);
 
     return 0;
 }

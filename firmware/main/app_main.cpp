@@ -1,9 +1,12 @@
 #include "action_queue.hpp"
 #include "app_state.hpp"
+#include "awesomeapi_provider.hpp"
 #include "boot_breadcrumb_store.hpp"
 #include "builtin_screens.hpp"
 #include "cache_store.hpp"
+#include "coingecko_provider.hpp"
 #include "event_bus.hpp"
+#include "market_service.hpp"
 #include "request_orchestrator.hpp"
 #include "screen_registry.hpp"
 #include "clock_service.hpp"
@@ -136,6 +139,9 @@ extern "C" void app_main(void) {
     static nova::ClockService clock_service(state_store, board, kClockSource);
     static nova::SetupService setup_service(state_store, board);
     static nova::NetworkWorker network_worker(state_store, request_orchestrator);
+    static nova::CoinGeckoProvider crypto_provider;
+    static nova::AwesomeApiProvider forex_provider;
+    static nova::MarketService market_service(state_store, cache_store, crypto_provider, forex_provider);
     static nova::ScreenRegistry screen_registry;
     g_setup_service = &setup_service;
     g_state_store = &state_store;
@@ -144,19 +150,29 @@ extern "C" void app_main(void) {
     static nova::UiShell ui_shell(state_store, screen_registry);
     (void)service_manager.add(&nova::ClockService::tick_adapter, &clock_service);
     (void)service_manager.add(&nova::SetupService::tick_adapter, &setup_service);
-    // Sem fetchers registrados ainda (providers entram em seguida na Fase 4);
-    // o worker sobe e fica ocioso, provando task/gate de rede sem custo.
-    network_worker.start();
     const auto breadcrumb_init = breadcrumb_store.init();
     if (!breadcrumb_init.ok()) {
         ESP_LOGW(kTag, "boot breadcrumb init failed");
     }
 
-    // Sem consumidor ainda (providers/services entram em seguida na Fase 4);
-    // montar cedo só prova que a partição LittleFS sobe em hardware real.
+    // Precisa montar e repor o cache ANTES de registrar os fetchers: o
+    // primeiro frame já deve mostrar dado velho sinalizado (stale=true,
+    // source=Cache) em vez de vazio, se houver algo persistido de um boot
+    // anterior (critério de saída da Fase 4).
     if (!cache_store.mount().ok()) {
         ESP_LOGW(kTag, "cache store mount failed");
     }
+    market_service.load_from_cache(now_ms());
+
+    // register_fetcher() precisa rodar antes de start() (contrato do
+    // NetworkWorker); o worker só executa cada um quando o Wi-Fi estiver
+    // conectado (RequestOrchestrator decide o intervalo/prioridade de cada
+    // um, RESOURCE-BUDGET.md §5).
+    network_worker.register_fetcher(nova::RequestDomain::MarketSpot,
+                                     &nova::MarketService::refresh_crypto, &market_service);
+    network_worker.register_fetcher(nova::RequestDomain::Forex,
+                                     &nova::MarketService::refresh_forex, &market_service);
+    network_worker.start();
 
     const auto persisted_breadcrumb = breadcrumb_store.load();
     if (persisted_breadcrumb.ok()) {
